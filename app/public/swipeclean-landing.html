@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SwipeClean — Clean your camera roll</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;800&family=Cormorant+Garamond:ital@0;1&display=swap" rel="stylesheet" />
+  <style>
+    :root { --ease-rise: cubic-bezier(0.22, 1, 0.36, 1); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; color: #f8fafc; background: #04101f; min-height: 100vh; overflow-x: hidden; }
+    .bg { position: fixed; inset: 0; z-index: 0; background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(14,165,233,0.45), transparent), linear-gradient(165deg, #0ea5e9 0%, #0369a1 42%, #04101f 100%); }
+    .grid { position: fixed; inset: 0; z-index: 1; opacity: 0.35; background-image: linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent); }
+    .particles { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+    .particle { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.55); animation: float 8s ease-in-out infinite; }
+    @keyframes float { 0%,100%{transform:translateY(0);opacity:.25} 50%{transform:translateY(-22px);opacity:.9} }
+    main { position: relative; z-index: 3; max-width: 1120px; margin: 0 auto; padding: 48px 24px 80px; }
+    .hero { text-align: center; padding: 24px 0 40px; }
+    .logo-wrap { display: inline-flex; margin-bottom: 24px; position: relative; }
+    .logo-wrap::before { content: ''; position: absolute; inset: -24px; border-radius: 50%; background: radial-gradient(circle, rgba(52,211,153,0.3), transparent 70%); animation: pulse 3s ease-in-out infinite; }
+    @keyframes pulse { 50% { transform: scale(1.06); } }
+    .logo { width: 148px; height: 148px; border-radius: 36px; object-fit: cover; position: relative; z-index: 1; filter: drop-shadow(0 18px 36px rgba(0,0,0,0.35)); }
+    .title-wrap { overflow: hidden; margin-bottom: 12px; }
+    .title { font-size: clamp(2.6rem, 8vw, 4.2rem); font-weight: 800; letter-spacing: -0.04em; background: linear-gradient(180deg, #fff, #e0f2fe); -webkit-background-clip: text; background-clip: text; color: transparent; animation: rise 1.1s var(--ease-rise) both; position: relative; display: inline-block; }
+    @keyframes rise { from { opacity: 0; transform: translateY(48px); } to { opacity: 1; transform: translateY(0); } }
+    .title::after { content: ''; position: absolute; top: 0; left: -120%; width: 55%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); transform: skewX(-18deg); animation: shimmer 4s ease-in-out infinite; }
+    @keyframes shimmer { 0%,20%{left:-120%} 45%,100%{left:140%} }
+    .tagline { font-size: 1.1rem; color: rgba(248,250,252,0.72); max-width: 520px; margin: 0 auto 24px; line-height: 1.55; animation: rise 1.1s var(--ease-rise) 0.1s both; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; animation: rise 1.1s var(--ease-rise) 0.2s both; }
+    .btn { padding: 15px 26px; border-radius: 999px; font-weight: 800; font-size: 0.92rem; text-decoration: none; border: 1px solid rgba(255,255,255,0.22); backdrop-filter: blur(16px); }
+    .btn-primary { background: linear-gradient(135deg, rgba(255,255,255,0.95), #e0f2fe); color: #0c4a6e; }
+    .btn-glass { background: rgba(255,255,255,0.08); color: #f8fafc; }
+    .mega-cta { margin: 48px 0 36px; text-align: center; padding: 36px 20px; border-radius: 24px; background: linear-gradient(135deg, rgba(255,0,85,0.18), rgba(191,90,242,0.12), rgba(52,211,153,0.1)); border: 1px solid rgba(255,255,255,0.18); backdrop-filter: blur(12px); }
+    .mega-cta h2 { font-size: clamp(1.75rem, 5vw, 2.85rem); font-weight: 800; letter-spacing: -0.03em; background: linear-gradient(90deg, #fff, #a5f3fc, #34d399, #f472b6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .mega-cta p { margin-top: 10px; color: rgba(248,250,252,0.7); }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 40px; }
+    .card { padding: 22px; border-radius: 18px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.18); backdrop-filter: blur(12px); }
+    .card h3 { font-size: 1.05rem; margin: 10px 0 6px; }
+    .card p { font-size: 0.88rem; color: rgba(248,250,252,0.68); line-height: 1.5; }
+    .card .icon { font-size: 1.5rem; }
+    .social { text-align: center; padding: 28px 12px; border-top: 1px solid rgba(255,255,255,0.12); }
+    .stars { color: #fde68a; letter-spacing: 3px; margin-bottom: 6px; }
+    .social p { color: rgba(248,250,252,0.65); font-size: 0.92rem; }
+    .signature { text-align: center; margin-top: 40px; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 0.95rem; font-style: italic; color: rgba(255,255,255,0.26); letter-spacing: 0.14em; }
+    .signature span { display: block; font-size: 0.72rem; margin-top: 4px; letter-spacing: 0.22em; font-style: normal; }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="grid"></div>
+  <div class="particles" id="particles"></div>
+  <main>
+    <section class="hero">
+      <div class="logo-wrap">
+        <img class="logo" src="../assets/brand/swipeclean-ai-logo.png" alt="SwipeClean" width="148" height="148" />
+      </div>
+      <div class="title-wrap"><h1 class="title">SwipeClean</h1></div>
+      <p class="tagline">One calm swipe. A lighter camera roll. AI cleanup that stays on your device until you confirm.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#">Get the app</a>
+        <a class="btn btn-glass" href="#features">Explore features</a>
+      </div>
+    </section>
+    <section class="mega-cta">
+      <h2>Reclaim gigabytes in minutes</h2>
+      <p>Turn swipe guilt into free storage — no ads, no uploading your whole library.</p>
+    </section>
+    <section class="features" id="features">
+      <article class="card"><div class="icon">👆</div><h3>Swipe to decide</h3><p>Trash left, keep right. Nothing deletes until you confirm.</p></article>
+      <article class="card"><div class="icon">⚡</div><h3>Supercut batch AI</h3><p>Clear screenshots and duplicate stacks in one run.</p></article>
+      <article class="card"><div class="icon">📊</div><h3>Real stats</h3><p>Items deleted and space cleared — session and all-time.</p></article>
+      <article class="card"><div class="icon">🎨</div><h3>Pro themes & tools</h3><p>Six signature skins, languages, photobooth, trim, and more.</p></article>
+      <article class="card"><div class="icon">🔔</div><h3>Gentle reminders</h3><p>Notifications on Hobby — you control every toggle.</p></article>
+      <article class="card"><div class="icon">🔒</div><h3>Privacy first</h3><p>On-device review by default. Your gallery stays yours.</p></article>
+    </section>
+    <section class="social">
+      <div class="stars">★★★★★</div>
+      <p><strong>4.9</strong> average · 12,400+ ratings</p>
+      <p style="margin-top:8px">“Finally deleted 8GB without fear.”</p>
+    </section>
+    <p class="signature">made with love<span>EGN</span></p>
+  </main>
+  <script>
+    const box = document.getElementById('particles');
+    for (let i = 0; i < 42; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = Math.random() * 100 + '%';
+      p.style.top = Math.random() * 100 + '%';
+      p.style.animationDelay = Math.random() * 8 + 's';
+      box.appendChild(p);
+    }
+  </script>
+</body>
+</html>

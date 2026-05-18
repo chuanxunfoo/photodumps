@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>photodumps — dump what's perfect. keep what's real.</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; background: #fff; font-family: system-ui, sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 40px 20px 60px; position: relative; overflow: hidden;
+    }
+    .land-bg {
+      position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 70% 60% at 50% -10%, rgba(59,91,252,0.07) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 80% 80%, rgba(0,214,143,0.05) 0%, transparent 60%);
+    }
+    .logo { width: 110px; height: 110px; border-radius: 28px; margin-bottom: 28px; box-shadow: 0 0 60px rgba(59,91,252,0.25); }
+    h1 {
+      font-family: 'Syne', sans-serif; font-size: clamp(42px, 8vw, 72px); font-weight: 800;
+      color: #3B5BFC; letter-spacing: -2px;
+    }
+    .slogan { font-size: 18px; color: rgba(59,91,252,0.65); margin-top: 10px; text-align: center; max-width: 320px; }
+    .divider { width: 40px; height: 2px; margin: 18px auto 0; border-radius: 2px; background: linear-gradient(90deg, #3B5BFC, #00D68F); }
+    .sig { position: absolute; bottom: 22px; text-align: center; }
+    .sig span { font-family: 'Dancing Script', cursive; font-size: 17px; color: rgba(59,91,252,0.3); display: block; }
+    .sig small { font-size: 14px; color: rgba(59,91,252,0.2); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="land-bg"></div>
+  <img class="logo" src="../assets/brand/photodumps-logo.png" alt="photodumps" />
+  <h1>photodumps</h1>
+  <p class="slogan">dump what's perfect. keep what's real.</p>
+  <div class="divider"></div>
+  <div class="sig">
+    <span>made with love</span>
+    <small>EGN</small>
+  </div>
+</body>
+</html>
