@@ -5,6 +5,8 @@
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { MinimalBackButton } from '../components/MinimalBackButton';
+import { useExploreAwareBack } from '../_lib/exploreBack';
 import { ChevronLeft, Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -43,9 +45,9 @@ const TIERS = [
     myr: 'MYR 3.99', usd: 'USD 0.99',
     accentColor: '#00C2FF',
     prizes: [
-      { swipes: 80,  label: '80 Swipes',  color: '#00C2FF', symbolLine1: '80',  symbolLine2: 'SWIPES', prob: 0.94 },
-      { swipes: 120, label: '120 Swipes', color: '#BF5AF2', symbolLine1: '120', symbolLine2: 'SWIPES', prob: 0.05 },
-      { swipes: 200, label: '200 Swipes', color: '#FFD600', symbolLine1: '200', symbolLine2: 'SWIPES', prob: 0.01 },
+      { swipes: 300,  label: '200 Swipes',  color: '#00C2FF', symbolLine1: '200',  symbolLine2: 'SWIPES', prob: 0.92 },
+      { swipes: 400, label: '300 Swipes', color: '#BF5AF2', symbolLine1: '300', symbolLine2: 'SWIPES', prob: 0.07 },
+      { swipes: 500, label: '500 Swipes', color: '#FFD600', symbolLine1: '500', symbolLine2: 'SWIPES', prob: 0.01 },
     ] as Prize[],
   },
   {
@@ -54,9 +56,9 @@ const TIERS = [
     myr: 'MYR 7.99', usd: 'USD 1.99',
     accentColor: '#BF5AF2',
     prizes: [
-      { swipes: 280, label: '280 Swipes', color: '#BF5AF2', symbolLine1: '280', symbolLine2: 'SWIPES', prob: 0.97  },
-      { swipes: 380, label: '380 Swipes', color: '#FF8C00', symbolLine1: '380', symbolLine2: 'SWIPES', prob: 0.025 },
-      { swipes: 500, label: '500 Swipes', color: '#FFD600', symbolLine1: '500', symbolLine2: 'SWIPES', prob: 0.005 },
+      { swipes: 800, label: '800 Swipes', color: '#BF5AF2', symbolLine1: '800', symbolLine2: 'SWIPES', prob: 0.92  },
+      { swipes: 1000, label: '1000 Swipes', color: '#FF8C00', symbolLine1: '1000', symbolLine2: 'SWIPES', prob: 0.07 },
+      { swipes: 1500, label: '1400 Swipes', color: '#FFD600', symbolLine1: '1400', symbolLine2: 'SWIPES', prob: 0.01 },
     ] as Prize[],
   },
   {
@@ -65,9 +67,9 @@ const TIERS = [
     myr: 'MYR 11.99', usd: 'USD 2.99',
     accentColor: '#FFD600',
     prizes: [
-      { swipes: 560,  label: '560 Swipes',  color: '#FFD600', symbolLine1: '560',  symbolLine2: 'SWIPES', prob: 0.985  },
-      { swipes: 720,  label: '720 Swipes',  color: '#FF8C00', symbolLine1: '720',  symbolLine2: 'SWIPES', prob: 0.01   },
-      { swipes: 1000, label: '1000 Swipes', color: '#FF0055', symbolLine1: '1000', symbolLine2: 'SWIPES', prob: 0.005  },
+      { swipes: 2000,  label: '2000 Swipes',  color: '#FFD600', symbolLine1: '2000',  symbolLine2: 'SWIPES', prob: 0.92  },
+      { swipes: 2500,  label: '2500 Swipes',  color: '#FF8C00', symbolLine1: '2500',  symbolLine2: 'SWIPES', prob: 0.075   },
+      { swipes: 5000, label: '5000 Swipes', color: '#FF0055', symbolLine1: '5000', symbolLine2: 'SWIPES', prob: 0.005  },
     ] as Prize[],
   },
 ] as const;
@@ -379,6 +381,7 @@ function CashNote({ i, burstKey }: { i: number; burstKey: number }) {
 }
 
 export default function SpinWheelScreen() {
+  const goBack = useExploreAwareBack('generals');
   const insets = useSafeAreaInsets();
   const scrollBottomPad = TAB_BAR_HEIGHT + insets.bottom + 36;
   const { addBonusSwipes } = useTheme();
@@ -516,9 +519,7 @@ export default function SpinWheelScreen() {
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={s.nav}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <ChevronLeft size={22} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
+          <MinimalBackButton onPress={goBack} color="rgba(255,255,255,0.72)" size={26} />
           <Text style={s.navTitle}>SWIPE WHEEL</Text>
           <View style={{ width: 44 }} />
         </View>

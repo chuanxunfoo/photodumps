@@ -1,26 +1,63 @@
-import * as FileSystem from 'expo-file-system';
 import { Image, Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { removeBgImage, BackgroundRemovalError } from 'rn-remove-image-bg';
+import {
+  CUTOUT_LIVE_DIMENSION,
+  normalizePhotoForCutout,
+  readPhotoBase64,
+  resolveReadableFileUri,
+  writePngBase64,
+} from '../photoFile';
+import { isExpoGo, nativeCutoutBundled } from './runtime';
 import type { CutoutResult, CutoutMethod } from './types';
 
 export class CutoutError extends Error {
   constructor(
     message: string,
-    readonly code: 'NATIVE_UNAVAILABLE' | 'CLOUD_FAILED' | 'INVALID_IMAGE' = 'NATIVE_UNAVAILABLE',
+    readonly code:
+      | 'NATIVE_UNAVAILABLE'
+      | 'CLOUD_FAILED'
+      | 'RATE_LIMITED'
+      | 'INVALID_IMAGE' = 'NATIVE_UNAVAILABLE',
   ) {
     super(message);
     this.name = 'CutoutError';
   }
 }
 
+/** User-facing alert body (no raw API dumps). */
+export function cutoutErrorMessage(err: unknown): string {
+  if (err instanceof CutoutError) {
+    if (err.message === 'EXPO_GO_WASM') {
+      return 'Use on-device cutout in Expo Go.';
+    }
+    if (err.code === 'RATE_LIMITED') {
+      return 'Cloud cutout is temporarily busy. We switched to on-device AI — try again, or wait a minute and retry.';
+    }
+    if (err.code === 'CLOUD_FAILED') {
+      if (err.message.toLowerCase().includes('credit')) {
+        return 'Cloud cutout credits are used up. Use a dev build (npm run ios / android) for free on-device cutout, or add remove.bg credits.';
+      }
+      return err.message.replace(/^Cloud cutout failed:\s*/i, '') || 'Cloud cutout failed. Try again with Wi‑Fi.';
+    }
+    return err.message;
+  }
+  return 'Use one clear subject with contrast against the background.';
+}
+
 export type CutoutProgress = (percent: number, stage: string) => void;
+
+export function hasRemoveBgApiKey(): boolean {
+  return Boolean(removeBgApiKey());
+}
 
 function removeBgApiKey(): string | undefined {
   const extra = Constants.expoConfig?.extra as Record<string, string | undefined> | undefined;
-  return (
+  const key =
     extra?.EXPO_PUBLIC_REMOVE_BG_API_KEY ??
-    process.env.EXPO_PUBLIC_REMOVE_BG_API_KEY
-  );
+    process.env.EXPO_PUBLIC_REMOVE_BG_API_KEY;
+  if (!key || key === 'your_key_here' || key.includes('paste_your')) return undefined;
+  return key.trim();
 }
 
 async function imageSize(uri: string): Promise<{ width: number; height: number }> {
@@ -29,52 +66,33 @@ async function imageSize(uri: string): Promise<{ width: number; height: number }
   });
 }
 
-/** Ensure a local file:// URI for native ML (camera / picker paths). */
-async function ensureFileUri(uri: string): Promise<string> {
-  if (uri.startsWith('file://')) return uri;
-  if (uri.startsWith('content://') || uri.startsWith('ph://')) {
-    const dest = `${FileSystem.cacheDirectory}cutout_src_${Date.now()}.jpg`;
-    await FileSystem.copyAsync({ from: uri, to: dest });
-    return dest;
-  }
-  if (uri.startsWith('/')) return `file://${uri}`;
-  return uri;
-}
-
-/**
- * On-device subject segmentation — iOS Vision / Android ML Kit.
- * Isolates food, drinks, people, objects (not the full frame).
- */
 async function nativeSubjectCutout(
   uri: string,
   onProgress?: (pct: number) => void,
 ): Promise<string> {
-  const mod = await import('rn-remove-image-bg');
-
   try {
-    const out = await mod.removeBgImage(uri, {
-      maxDimension: 1536,
+    return await removeBgImage(uri, {
+      maxDimension: 1024,
       format: 'PNG',
       quality: 100,
       useCache: false,
       onProgress: n => onProgress?.(Math.round(n)),
     });
-    return out;
   } catch (err) {
-    if (err instanceof mod.BackgroundRemovalError) {
+    if (err instanceof BackgroundRemovalError) {
       throw new CutoutError(err.toUserMessage(), 'NATIVE_UNAVAILABLE');
     }
     throw err;
   }
 }
 
-async function removeBackgroundCloud(uri: string, apiKey: string): Promise<CutoutResult> {
+async function removeBackgroundCloud(fileUri: string, apiKey: string): Promise<CutoutResult> {
   const form = new FormData();
   form.append('size', 'auto');
   form.append('format', 'png');
   form.append('type', 'auto');
   form.append('image_file', {
-    uri,
+    uri: fileUri,
     name: 'photo.jpg',
     type: 'image/jpeg',
   } as unknown as Blob);
@@ -86,7 +104,17 @@ async function removeBackgroundCloud(uri: string, apiKey: string): Promise<Cutou
   });
 
   if (!res.ok) {
-    throw new CutoutError(`Background removal failed (${res.status})`, 'CLOUD_FAILED');
+    const detail = await res.text().catch(() => '');
+    if (res.status === 429) {
+      throw new CutoutError('Cloud cutout rate limit reached. Try again in a minute.', 'RATE_LIMITED');
+    }
+    const hint =
+      res.status === 403
+        ? 'Invalid remove.bg API key.'
+        : res.status === 402
+          ? 'remove.bg credits used up.'
+          : detail.slice(0, 80) || `HTTP ${res.status}`;
+    throw new CutoutError(`Cloud cutout failed: ${hint}`, 'CLOUD_FAILED');
   }
 
   const arrayBuffer = await res.arrayBuffer();
@@ -108,52 +136,81 @@ async function removeBackgroundCloud(uri: string, apiKey: string): Promise<Cutou
     }
   }
 
-  const outPath = `${FileSystem.cacheDirectory}cutout_${Date.now()}.png`;
-  await FileSystem.writeAsStringAsync(outPath, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
+  const outPath = await writePngBase64(base64);
   const { width, height } = await imageSize(outPath);
   return { uri: outPath, width, height, method: 'removebg' };
 }
 
-const METHOD_LABEL: Record<CutoutMethod, string> = {
-  native: 'On-device AI · subject traced',
-  removebg: 'Cloud AI · subject traced',
-};
+/** Fast cloud path when API key is set (~5–15s). Throws on rate limit / auth errors. */
+export async function tryCloudCutoutOnly(
+  fileUri: string,
+  onProgress?: CutoutProgress,
+): Promise<CutoutResult | null> {
+  const key = removeBgApiKey();
+  if (!key) return null;
+  onProgress?.(15, 'Cloud cutout (fast)…');
+  return tryCloudCutout(fileUri, onProgress);
+}
 
-export function cutoutMethodLabel(method: CutoutMethod): string {
-  return METHOD_LABEL[method];
+async function tryCloudCutout(fileUri: string, onProgress?: CutoutProgress): Promise<CutoutResult | null> {
+  const key = removeBgApiKey();
+  if (!key) return null;
+  try {
+    onProgress?.(30, 'Tracing your subject…');
+    const cloud = await removeBackgroundCloud(fileUri, key);
+    onProgress?.(100, 'Done');
+    return cloud;
+  } catch (err) {
+    if (err instanceof CutoutError) throw err;
+    return null;
+  }
+}
+
+export function cutoutMethodLabel(_method: CutoutMethod): string {
+  return '';
+}
+
+/** Prepare picker/camera URI for any cutout backend. */
+export async function preparePhotoUri(uri: string, maxDimension?: number): Promise<string> {
+  return normalizePhotoForCutout(uri, maxDimension);
+}
+
+export async function prepareLiveScanPhoto(uri: string): Promise<string> {
+  return normalizePhotoForCutout(uri, CUTOUT_LIVE_DIMENSION);
 }
 
 /**
  * Detect and cut the main subject (transparent PNG).
- * Uses native ML first; optional remove.bg fallback when keyed.
  */
 export async function extractSubject(uri: string, onProgress?: CutoutProgress): Promise<CutoutResult> {
   onProgress?.(2, 'Preparing photo');
   let fileUri: string;
   try {
-    fileUri = await ensureFileUri(uri);
+    fileUri = await normalizePhotoForCutout(uri);
     await imageSize(fileUri);
   } catch {
-    throw new CutoutError('Could not read this image.', 'INVALID_IMAGE');
+    throw new CutoutError(
+      'Could not read the photo. Try Gallery instead of Camera, or pick the image again.',
+      'INVALID_IMAGE',
+    );
   }
 
   onProgress?.(8, 'Finding main subject');
 
-  if (Platform.OS === 'web') {
-    const key = removeBgApiKey();
-    if (!key) {
-      throw new CutoutError(
-        'Subject cutout needs a development build on your phone, or add EXPO_PUBLIC_REMOVE_BG_API_KEY for web.',
-        'NATIVE_UNAVAILABLE',
-      );
+  const useNative = nativeCutoutBundled() && Platform.OS !== 'web';
+
+  if (!useNative) {
+    if (isExpoGo()) {
+      throw new CutoutError('EXPO_GO_WASM', 'NATIVE_UNAVAILABLE');
     }
-    onProgress?.(30, 'Cloud cutout');
-    const cloud = await removeBackgroundCloud(fileUri, key);
-    onProgress?.(100, 'Done');
-    return cloud;
+
+    const cloud = await tryCloudCutout(fileUri, onProgress);
+    if (cloud) return cloud;
+
+    throw new CutoutError(
+      'Cutout unavailable. Add EXPO_PUBLIC_REMOVE_BG_API_KEY to app/.env or use npm run android.',
+      'NATIVE_UNAVAILABLE',
+    );
   }
 
   try {
@@ -165,24 +222,21 @@ export async function extractSubject(uri: string, onProgress?: CutoutProgress): 
     onProgress?.(100, 'Done');
     return { uri: outUri, width, height, method: 'native' };
   } catch (nativeErr) {
-    const key = removeBgApiKey();
-    if (key) {
-      try {
-        onProgress?.(25, 'Trying cloud cutout');
-        const cloud = await removeBackgroundCloud(fileUri, key);
-        onProgress?.(100, 'Done');
-        return cloud;
-      } catch {
-        /* fall through */
+    try {
+      const cloud = await tryCloudCutout(fileUri, onProgress);
+      if (cloud) return cloud;
+    } catch (cloudErr) {
+      if (cloudErr instanceof CutoutError && cloudErr.code === 'RATE_LIMITED' && isExpoGo()) {
+        throw new CutoutError('EXPO_GO_WASM', 'NATIVE_UNAVAILABLE');
       }
+      if (cloudErr instanceof CutoutError) throw cloudErr;
     }
 
-    const isExpoGo = Constants.appOwnership === 'expo';
+    if (nativeErr instanceof CutoutError) throw nativeErr;
+
     throw new CutoutError(
-      isExpoGo
-        ? 'Accurate cutouts need a development build (not Expo Go). Run: npx expo run:ios or npx expo run:android'
-        : 'Could not isolate the subject. Use one clear item (food, drink, person) with contrast against the background, then try again.',
-      nativeErr instanceof CutoutError ? nativeErr.code : 'NATIVE_UNAVAILABLE',
+      'Could not isolate the subject. Use one clear item with contrast against the background.',
+      'NATIVE_UNAVAILABLE',
     );
   }
 }

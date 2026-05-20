@@ -2,7 +2,8 @@
  * FAQ — expandable cards, gradients, motion.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, ChevronLeft, HelpCircle, Sparkles } from 'lucide-react-native';
+import { ChevronDown, HelpCircle, Sparkles } from 'lucide-react-native';
+import { MinimalBackButton } from '../components/MinimalBackButton';
 import React, { useRef, useState } from 'react';
 import {
   Animated,
@@ -92,11 +93,9 @@ export default function ExploreFaqScreen() {
       <LinearGradient colors={[theme.bg, '#1a0a2e', theme.bg]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={s.top}>
-          <TouchableOpacity onPress={goBack} style={[s.back, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
-            <ChevronLeft size={22} color={theme.textSub} />
-          </TouchableOpacity>
+          <MinimalBackButton onPress={goBack} color={theme.textSub} style={s.backSlot} />
           <Text style={[s.title, { color: theme.text }]}>{u.faqScreenTitle}</Text>
-          <View style={{ width: 44 }} />
+          <View style={s.backSlot} />
         </View>
 
         <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -130,7 +129,7 @@ export default function ExploreFaqScreen() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
-  back: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  backSlot: { width: 36 },
   title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: 4 },
   hero: {
     borderRadius: 24,

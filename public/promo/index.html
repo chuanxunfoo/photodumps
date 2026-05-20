@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#021824" />
+  <meta name="description" content="photodumps — swipe your camera roll clean. Sticker studio, photobooth, supercut & more." />
+  <meta property="og:title" content="photodumps" />
+  <meta property="og:description" content="dump what's perfect. keep what's real." />
+  <meta property="og:type" content="website" />
+  <title>photodumps — photo cleaner & creative tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --abyss: #010c14;
+      --deep: #021824;
+      --reef: #043048;
+      --glow: #2dd4bf;
+      --foam: #5eead4;
+      --sky: #7dd3fc;
+      --mist: #a5f3fc;
+      --pearl: #e0f7fa;
+      --ink: #94a3b8;
+    }
+    html, body {
+      height: 100%;
+      background: var(--abyss);
+      color: var(--pearl);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+    .scroll {
+      height: 100dvh;
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+    .page {
+      min-height: 100dvh;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: max(20px, env(safe-area-inset-top)) 28px max(32px, env(safe-area-inset-bottom));
+      background: linear-gradient(165deg, var(--deep) 0%, var(--reef) 45%, var(--abyss) 100%);
+      overflow: hidden;
+    }
+    .bg-glow {
+      position: absolute;
+      inset: -40%;
+      background: conic-gradient(from 0deg, rgba(45,212,191,0.15), transparent, rgba(125,211,252,0.12), transparent);
+      animation: spin 18s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .bubbles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .bubble {
+      position: absolute;
+      bottom: -20px;
+      border-radius: 50%;
+      border: 1px solid rgba(165,243,252,0.35);
+      background: rgba(94,234,212,0.12);
+      animation: rise var(--dur) linear infinite;
+      animation-delay: var(--delay);
+      left: var(--x);
+      width: var(--sz);
+      height: var(--sz);
+    }
+    @keyframes rise {
+      0% { transform: translateY(0) translateX(0); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 0.6; }
+      100% { transform: translateY(-110vh) translateX(12px); opacity: 0; }
+    }
+    .inner { position: relative; z-index: 2; max-width: 400px; width: 100%; margin: 0 auto; }
+    .kicker {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.28em;
+      color: var(--glow);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2rem, 9vw, 2.6rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 14px;
+    }
+    .lead {
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--ink);
+      margin-bottom: 22px;
+    }
+    .logo-box {
+      width: 96px;
+      height: 96px;
+      border-radius: 26px;
+      background: linear-gradient(145deg, #1a9bb8, #2dd4bf);
+      border: 2px solid rgba(165,243,252,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--deep);
+      margin: 0 auto 24px;
+      box-shadow: 0 0 48px rgba(45,212,191,0.35);
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 40px rgba(45,212,191,0.3); transform: scale(1); }
+      50% { box-shadow: 0 0 64px rgba(45,212,191,0.55); transform: scale(1.03); }
+    }
+    .brand {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.4rem, 10vw, 3rem);
+      font-weight: 800;
+      text-align: center;
+      background: linear-gradient(90deg, var(--sky), var(--foam), var(--sky));
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s linear infinite;
+    }
+    @keyframes shimmer { to { background-position: 200% center; } }
+    .tagline { text-align: center; margin-top: 12px; font-size: 1.1rem; line-height: 1.5; color: var(--pearl); opacity: 0.9; }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 20px; }
+    .pill {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--deep);
+      background: var(--foam);
+      padding: 6px 12px;
+      border-radius: 20px;
+    }
+    .card {
+      background: linear-gradient(135deg, rgba(45,212,191,0.2), rgba(26,155,184,0.08));
+      border: 1px solid rgba(94,234,212,0.25);
+      border-radius: 20px;
+      padding: 20px;
+    }
+    .card-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: var(--foam);
+      background: rgba(45,212,191,0.2);
+      padding: 4px 10px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .card h2 { font-size: 1.25rem; font-weight: 800; margin-bottom: 8px; }
+    .card p { font-size: 0.9rem; line-height: 1.5; color: var(--ink); }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .mini {
+      background: rgba(4,48,72,0.55);
+      border: 1px solid rgba(45,212,191,0.2);
+      border-radius: 14px;
+      padding: 12px 8px;
+      text-align: center;
+    }
+    .mini strong { display: block; font-size: 0.72rem; margin-top: 6px; }
+    .mini span { font-size: 0.62rem; color: var(--ink); line-height: 1.3; }
+    .pro-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .pro-list li { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 0.95rem; }
+    .pro-list li::before { content: '✦'; color: var(--glow); font-size: 0.75rem; }
+    .cta {
+      display: block;
+      width: 100%;
+      max-width: 320px;
+      margin: 16px auto 0;
+      padding: 16px;
+      text-align: center;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 1.05rem;
+      color: var(--deep);
+      background: linear-gradient(90deg, #1a9bb8, var(--glow));
+      border-radius: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .cta:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(45,212,191,0.35); }
+    .store { text-align: center; margin-top: 14px; font-size: 0.85rem; color: var(--ink); }
+    .sig { text-align: center; margin-top: 28px; font-style: italic; color: rgba(165,243,252,0.35); font-size: 0.9rem; }
+    .hero-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .cue {
+      position: absolute;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      color: var(--ink);
+      z-index: 3;
+      animation: bob 1.8s ease-in-out infinite;
+    }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+    .dots {
+      position: fixed;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 100;
+    }
+    .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 3px;
+      background: rgba(125,211,252,0.25);
+      transition: height 0.25s, background 0.25s;
+    }
+    .dot.on { height: 18px; background: var(--glow); }
+    .counter {
+      position: fixed;
+      left: 16px;
+      bottom: max(16px, env(safe-area-inset-bottom));
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: rgba(125,211,252,0.45);
+      z-index: 100;
+    }
+    .page-hero { justify-content: space-between; }
+  </style>
+</head>
+<body>
+  <nav class="dots" id="dots" aria-hidden="true"></nav>
+  <div class="counter" id="counter">01 / 08</div>
+
+  <main class="scroll" id="scroll">
+    <section class="page page-hero" data-i="0">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="bubbles" aria-hidden="true">
+        <span class="bubble" style="--x:8%;--sz:10px;--dur:7s;--delay:0s"></span>
+        <span class="bubble" style="--x:22%;--sz:16px;--dur:9s;--delay:1s"></span>
+        <span class="bubble" style="--x:45%;--sz:8px;--dur:6s;--delay:2s"></span>
+        <span class="bubble" style="--x:68%;--sz:14px;--dur:8s;--delay:0.5s"></span>
+        <span class="bubble" style="--x:85%;--sz:12px;--dur:10s;--delay:1.5s"></span>
+      </div>
+      <div class="hero-center inner">
+        <div class="logo-box">p</div>
+        <p class="brand">photodumps</p>
+        <p class="tagline">dump what's perfect.<br />keep what's real.</p>
+        <div class="pills">
+          <span class="pill">photo cleaner</span>
+          <span class="pill">creative tools</span>
+        </div>
+      </div>
+      <p class="cue">SWIPE UP ↑</p>
+    </section>
+
+    <section class="page" data-i="1">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner">
+        <p class="kicker">01 · CORE</p>
+        <h1>Swipe your camera roll clean</h1>
+        <p class="lead">One gesture to keep the memories that matter. One gesture to queue the rest. Fast, tactile, oddly satisfying.</p>
+        <article class="card">
+          <span class="card-tag">FREE</span>
+          <h2>Swipe to keep or dump</h2>
+          <p>Bookmarks, streaks, and a spin wheel when your week needs a boost.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" data-i="2">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner">
+        <p class="kicker">02 · CREATE</p>
+        <h1>Sticker studio</h1>
+        <p class="lead">Point your camera at any object. AI cuts it out — chalk, glow, or toon outlines — then collage it.</p>
+        <article class="card">
+          <span class="card-tag">PRO</span>
+          <h2>AI cutouts &amp; collages</h2>
+          <p>Live scan, tap-to-focus, cute frames, and a gallery of stickers you made.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" data-i="3">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner">
+        <p class="kicker">03 · VIBES</p>
+        <h1>Digi photobooth</h1>
+        <p class="lead">Y2K camera bodies, date stamps, and strip energy — shoot, preview, save to your gallery.</p>
+        <article class="card">
+          <span class="card-tag">PRO</span>
+          <h2>Digital camera mood</h2>
+          <p>Pick a body, dial the look, capture moments that feel like a night out.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" data-i="4">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner">
+        <p class="kicker">04 · POWER</p>
+        <h1>Supercut</h1>
+        <p class="lead">Batch-clean stacks of similar shots with AI-assisted picks — more space on your phone.</p>
+        <article class="card">
+          <span class="card-tag">PRO</span>
+          <h2>AI batch cleaning</h2>
+          <p>Queue a set, review keepers, dump the noise — built for camera-roll chaos.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" data-i="5">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner">
+        <p class="kicker">05 · TOOLKIT</p>
+        <h1>Smart extras</h1>
+        <p class="lead">Pro unlocks duplicates, trims, and stats that respect your time.</p>
+        <div class="grid">
+          <div class="mini"><span aria-hidden="true">📑</span><strong>Duplicates</strong><span>Burst stacks</span></div>
+          <div class="mini"><span aria-hidden="true">✂️</span><strong>Video trim</strong><span>Clean export</span></div>
+          <div class="mini"><span aria-hidden="true">📊</span><strong>My stats</strong><span>Insights</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" data-i="6">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner">
+        <p class="kicker">06 · PRO</p>
+        <h1>Go unlimited</h1>
+        <p class="lead">Six signature themes, extra icons, languages — and every Pro tool above the waterline.</p>
+        <ul class="pro-list">
+          <li>Unlimited swipes</li>
+          <li>Sticker studio &amp; photobooth</li>
+          <li>Supercut + duplicates</li>
+          <li>Y2K · Cyber · Noir themes</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="page" data-i="7">
+      <div class="bg-glow" aria-hidden="true"></div>
+      <div class="inner" style="text-align:center">
+        <p class="kicker">DIVE IN</p>
+        <h1>Get photodumps</h1>
+        <p class="lead" style="margin-left:auto;margin-right:auto">Free on iOS &amp; Android. Follow for drops, tips, and new features.</p>
+        <a class="cta" href="https://instagram.com/photodumps.app" target="_blank" rel="noopener noreferrer">@photodumps.app</a>
+        <p class="store">Search “photodumps” on the App Store &amp; Google Play</p>
+        <p class="sig">made with love · EGN</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var scroll = document.getElementById('scroll');
+      var dotsEl = document.getElementById('dots');
+      var counter = document.getElementById('counter');
+      var pages = scroll.querySelectorAll('.page');
+      var n = pages.length;
+
+      for (var i = 0; i < n; i++) {
+        var d = document.createElement('span');
+        d.className = 'dot' + (i === 0 ? ' on' : '');
+        dotsEl.appendChild(d);
+      }
+      var dots = dotsEl.querySelectorAll('.dot');
+
+      function update() {
+        var h = window.innerHeight;
+        var idx = Math.round(scroll.scrollTop / h);
+        idx = Math.max(0, Math.min(n - 1, idx));
+        counter.textContent = String(idx + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0');
+        dots.forEach(function (dot, j) {
+          dot.classList.toggle('on', j === idx);
+        });
+      }
+      scroll.addEventListener('scroll', update, { passive: true });
+      update();
+    })();
+  </script>
+</body>
+</html>

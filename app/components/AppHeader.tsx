@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Flame } from 'lucide-react-native';
+import { Flame } from 'lucide-react-native';
+import { MinimalBackButton } from './MinimalBackButton';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -44,14 +45,7 @@ export function AppHeader({ variant, onBack, endSlot, subtitle, onTitlePress }: 
       />
       <View style={[styles.row, isTabs && styles.rowTabs]}>
         {variant === 'detail' && onBack ? (
-          <TouchableOpacity
-            onPress={onBack}
-            style={[styles.iconBtn, { backgroundColor: theme.bg2, borderColor: theme.border }]}
-            accessibilityLabel="Go back"
-            activeOpacity={0.85}
-          >
-            <ArrowLeft size={20} color={theme.text} />
-          </TouchableOpacity>
+          <MinimalBackButton onPress={onBack} color={theme.text} size={26} />
         ) : null}
 
         <View style={[styles.titleBlock, isTabs && styles.titleBlockTabs, variant === 'detail' && styles.titleBlockDetail]}>

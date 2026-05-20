@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import { Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { X } from 'lucide-react-native';
-import { FramedCutout } from './FramedCutout';
-import type { FrameId, PlacedCutout } from '../../_lib/stickerStudio/types';
+import type { PlacedCutout } from '../../_lib/stickerStudio/types';
 
 type Props = {
   item: PlacedCutout;
@@ -15,8 +14,11 @@ type Props = {
   onChange: (key: string, patch: Partial<PlacedCutout>) => void;
   selected?: boolean;
   onSelect?: () => void;
+  /** Hide delete button (e.g. while exporting collage screenshot). */
+  hideChrome?: boolean;
 };
 
+/** Saved stickers are already rendered PNGs — show as-is (no second trace / checkerboard). */
 export function DraggableCutout({
   item,
   boundW,
@@ -26,6 +28,7 @@ export function DraggableCutout({
   onChange,
   selected,
   onSelect,
+  hideChrome = false,
 }: Props) {
   const tx = useSharedValue(item.x);
   const ty = useSharedValue(item.y);
@@ -101,15 +104,16 @@ export function DraggableCutout({
   return (
     <GestureDetector gesture={composed}>
       <Reanimated.View style={aStyle}>
-        <FramedCutout
-          uri={item.uri}
-          frameId={item.frameId as FrameId}
-          width={baseSize}
-          height={baseSize}
+        <Image
+          source={{ uri: item.uri }}
+          style={{ width: baseSize, height: baseSize, backgroundColor: 'transparent' }}
+          resizeMode="contain"
         />
-        <TouchableOpacity onPress={onRemove} style={styles.del} hitSlop={10}>
-          <X size={11} color="#FFF" strokeWidth={3} />
-        </TouchableOpacity>
+        {!hideChrome && selected && (
+          <TouchableOpacity onPress={onRemove} style={styles.del} hitSlop={10}>
+            <X size={11} color="#FFF" strokeWidth={3} />
+          </TouchableOpacity>
+        )}
       </Reanimated.View>
     </GestureDetector>
   );

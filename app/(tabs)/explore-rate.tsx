@@ -4,7 +4,7 @@
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useExploreAwareBack } from '../_lib/exploreBack';
-import { ChevronLeft } from 'lucide-react-native';
+import { MinimalBackButton } from '../components/MinimalBackButton';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -154,11 +154,9 @@ export default function ExploreRateScreen() {
       <View style={[s.root, { backgroundColor: theme.bg }]}>
         <SafeAreaView style={{ flex: 1 }} edges={['top']}>
           <View style={s.top}>
-            <TouchableOpacity onPress={goBack} style={[s.back, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
-              <ChevronLeft size={22} color={theme.textSub} />
-            </TouchableOpacity>
+            <MinimalBackButton onPress={goBack} color={theme.textSub} style={s.backSlot} />
             <Text style={[s.title, { color: theme.text }]}>Rate photodumps</Text>
-            <View style={{ width: 44 }} />
+            <View style={s.backSlot} />
           </View>
 
           <ScrollView
@@ -230,7 +228,7 @@ export default function ExploreRateScreen() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
-  back: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  backSlot: { width: 36 },
   title: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '900', letterSpacing: 1 },
   sub: { fontSize: 14, lineHeight: 21, fontWeight: '600', marginBottom: 20 },
   faceCard: { alignItems: 'center', paddingVertical: 22, borderRadius: 22, borderWidth: 1, marginBottom: 24 },

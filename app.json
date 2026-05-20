@@ -16,7 +16,8 @@
     "ios": {
       "bundleIdentifier": "com.yourname.dumplt",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow Dumplt to access photos."
+        "NSPhotoLibraryUsageDescription": "Allow Dumplt to access photos.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

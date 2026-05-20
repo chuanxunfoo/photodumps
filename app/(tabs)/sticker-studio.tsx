@@ -8,24 +8,37 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { useExploreAwareBack } from '../_lib/exploreBack';
-import { CutoutError, cutoutMethodLabel, extractSubject } from '../_lib/stickerStudio/cutoutEngine';
-import { FRAME_OPTIONS } from '../_lib/stickerStudio/frameStyles';
+import { cropPhotoAroundViewportPoint, normalizePhotoForCollage } from '../_lib/photoFile';
+import {
+  CutoutError,
+  cutoutErrorMessage,
+  extractSubject,
+  prepareLiveScanPhoto,
+  preparePhotoUri,
+  tryCloudCutoutOnly,
+} from '../_lib/stickerStudio/cutoutEngine';
+import type { CutoutPipeline } from '../_lib/stickerStudio/cutoutProgress';
+import { isExpoGo, nativeCutoutBundled } from '../_lib/stickerStudio/runtime';
+import { LiveStickerCamera } from '../components/sticker-studio/LiveStickerCamera';
+import { StickerStepBar } from '../components/sticker-studio/StickerStepBar';
+import { StickerCutoutLoading } from '../components/sticker-studio/StickerCutoutLoading';
+import { StickerEditorScreen } from '../components/sticker-studio/StickerEditorScreen';
+import { StickerPreviewModal } from '../components/sticker-studio/StickerPreviewModal';
+import { StickerSaveCelebration } from '../components/sticker-studio/StickerSaveCelebration';
+import { StickerStudioHub } from '../components/sticker-studio/StickerStudioHub';
+import { WasmCutoutEngine, type WasmCutoutJob } from '../components/sticker-studio/WasmCutoutEngine';
+import { loadCutouts, saveCutout } from '../_lib/stickerStudio/cutoutStorage';
+import type { SavedCutout } from '../_lib/stickerStudio/cutoutStorage';
 import { deleteSticker, loadStickers, saveSticker } from '../_lib/stickerStudio/storage';
-import type { CutoutResult, FrameId, PlacedCutout, SavedSticker } from '../_lib/stickerStudio/types';
+import type { CutoutResult, PlacedCutout, SavedSticker, TraceSettings } from '../_lib/stickerStudio/types';
+import { DEFAULT_TRACE } from '../_lib/stickerStudio/types';
 import { AppHeader } from '../components/AppHeader';
 import { DraggableCutout } from '../components/sticker-studio/DraggableCutout';
-import { FramedCutout } from '../components/sticker-studio/FramedCutout';
 import {
-  Camera,
   Download,
   Image as ImageIcon,
-  Layers,
   Plus,
-  Scan,
-  Sparkles,
-  Sticker,
   Trash2,
-  Wand2,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -34,6 +47,7 @@ import {
   Dimensions,
   Image,
   ImageBackground,
+  InteractionManager,
   ScrollView,
   StyleSheet,
   Text,
@@ -50,7 +64,12 @@ const CANVAS_W = SCREEN_W - 28;
 const CANVAS_H = Math.round(Math.min(SCREEN_H * 0.52, CANVAS_W * 1.28));
 const PREVIEW_SIZE = Math.min(SCREEN_W - 48, 320);
 
-type Phase = 'hub' | 'camera' | 'processing' | 'frame' | 'collage';
+type Phase = 'hub' | 'live' | 'camera' | 'processing' | 'frame' | 'collage-loading' | 'collage';
+
+const yieldToUi = () =>
+  new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 
 export default function StickerStudioScreen() {
   const goBack = useExploreAwareBack();
@@ -59,70 +78,372 @@ export default function StickerStudioScreen() {
 
   const [phase, setPhase] = useState<Phase>('hub');
   const [library, setLibrary] = useState<SavedSticker[]>([]);
+  const [cutouts, setCutouts] = useState<SavedCutout[]>([]);
   const [sourceUri, setSourceUri] = useState<string | null>(null);
   const [cutout, setCutout] = useState<CutoutResult | null>(null);
-  const [frameId, setFrameId] = useState<FrameId>('solid-white');
+  const [trace, setTrace] = useState<TraceSettings>(DEFAULT_TRACE);
   const [cutoutMethod, setCutoutMethod] = useState<string>('');
   const [bgUri, setBgUri] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedCutout[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [captureClean, setCaptureClean] = useState(false);
   const [processPct, setProcessPct] = useState(0);
   const [processStage, setProcessStage] = useState('');
+  const [cutoutPipeline, setCutoutPipeline] = useState<CutoutPipeline>('prepare');
+  const [wasmCutoutUri, setWasmCutoutUri] = useState<string | null>(null);
+  const [wasmModelsReady, setWasmModelsReady] = useState(false);
+  const [previewSticker, setPreviewSticker] = useState<SavedSticker | null>(null);
+  const [showSaveCelebration, setShowSaveCelebration] = useState(false);
+  const [liveStillUri, setLiveStillUri] = useState<string | null>(null);
+  const [liveScanning, setLiveScanning] = useState(false);
+  const [liveScanError, setLiveScanError] = useState<string | null>(null);
 
   const previewRef = useRef<View>(null);
+  const liveScanLock = useRef(false);
+  const liveScanGen = useRef(0);
+  const cutoutRef = useRef<CutoutResult | null>(null);
+  const wasmBusyRef = useRef(false);
+  cutoutRef.current = cutout;
   const collageRef = useRef<View>(null);
   const cameraRef = useRef<CameraView>(null);
   const [camPerm, requestCamPerm] = useCameraPermissions();
 
   const refreshLibrary = useCallback(async () => {
     setLibrary(await loadStickers());
+    setCutouts(await loadCutouts());
   }, []);
 
   useEffect(() => {
     void refreshLibrary();
   }, [refreshLibrary]);
 
-  const pickFromGallery = async () => {
+  useEffect(() => {
+    if (phase === 'frame' || phase === 'collage') void refreshLibrary();
+  }, [phase, refreshLibrary]);
+
+  const beginProcessing = useCallback((stage = 'Starting…') => {
+    setPhase('processing');
+    setCutout(null);
+    setProcessPct(4);
+    setProcessStage(stage);
+    setCutoutPipeline('prepare');
+    setWasmCutoutUri(null);
+  }, []);
+
+  const finishCutout = async (
+    outUri: string,
+    method: 'native' | 'removebg' | 'wasm',
+    stayOnLive = false,
+  ) => {
+    const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      Image.getSize(outUri, (w, h) => resolve({ width: w, height: h }), reject);
+    });
+    setCutout({ uri: outUri, width, height, method });
+    setWasmCutoutUri(null);
+    setLiveScanning(false);
+    await saveCutout({ uri: outUri, width, height });
+    await refreshLibrary();
+    if (stayOnLive) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      setPhase('frame');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const startWasmCutout = (fileUri: string) => {
+    setCutoutPipeline('wasm');
+    setProcessPct(wasmModelsReady ? 16 : 8);
+    setProcessStage(
+      wasmModelsReady ? 'Tracing subject on device…' : 'Loading on-device AI (Wi‑Fi — first time only)',
+    );
+    setWasmCutoutUri(fileUri);
+  };
+
+  const wasmExpoGo = isExpoGo() && !nativeCutoutBundled();
+
+  const wasmJob: WasmCutoutJob | null =
+    wasmCutoutUri && (phase === 'processing' || phase === 'live')
+      ? {
+          uri: wasmCutoutUri,
+          onProgress: (p, stage) => {
+            setCutoutPipeline('wasm');
+            if (phase === 'live') {
+              setProcessStage(stage);
+            } else {
+              setProcessPct(p);
+              setProcessStage(stage);
+            }
+          },
+          onComplete: outUri => {
+            wasmBusyRef.current = false;
+            void finishCutout(outUri, 'wasm', phase === 'live');
+            if (phase === 'live') setLiveScanError(null);
+          },
+          onError: msg => {
+            wasmBusyRef.current = false;
+            setWasmCutoutUri(null);
+            setLiveScanning(false);
+            if (phase === 'live') {
+              setLiveScanError(msg || 'Cutout failed — tap the object on screen to retry.');
+            } else {
+              Alert.alert('Could not cut out subject', msg, [{ text: 'OK', style: 'cancel' }]);
+              setPhase('hub');
+            }
+          },
+        }
+      : null;
+
+  const wasmEngineEl = (
+    <WasmCutoutEngine
+      enabled={wasmExpoGo}
+      onReady={() => setWasmModelsReady(true)}
+      job={wasmJob}
+    />
+  );
+
+  const runCutout = async (uri: string, stayOnLive = false): Promise<boolean> => {
+    let fileUri: string;
+    try {
+      if (!stayOnLive) {
+        setProcessPct(10);
+        setProcessStage('Resizing photo…');
+        await yieldToUi();
+      } else {
+        setProcessStage('Preparing…');
+      }
+      fileUri = stayOnLive ? await prepareLiveScanPhoto(uri) : await preparePhotoUri(uri);
+      setSourceUri(fileUri);
+      if (!stayOnLive) setProcessPct(18);
+    } catch {
+      if (stayOnLive) {
+        setLiveScanning(false);
+        return false;
+      }
+      Alert.alert(
+        'Could not read photo',
+        'Try picking the image from Gallery, or take another photo with good lighting.',
+      );
+      setPhase('hub');
+      return false;
+    }
+
+    if (isExpoGo() && !nativeCutoutBundled()) {
+      try {
+        const cloud = await tryCloudCutoutOnly(fileUri, (pct, stage) => {
+          if (stayOnLive) setProcessStage(stage || 'Cutting out…');
+          else {
+            setProcessPct(pct);
+            setProcessStage(stage);
+          }
+        });
+        if (cloud) {
+          await finishCutout(cloud.uri, 'removebg', stayOnLive);
+          if (stayOnLive) setLiveScanError(null);
+          return true;
+        }
+      } catch (e) {
+        if (e instanceof CutoutError && e.code !== 'RATE_LIMITED' && e.code !== 'CLOUD_FAILED') {
+          if (stayOnLive) {
+            setLiveScanning(false);
+            setLiveScanError(cutoutErrorMessage(e));
+            return false;
+          }
+          Alert.alert('Could not cut out subject', cutoutErrorMessage(e));
+          setPhase('hub');
+          return false;
+        }
+        if (stayOnLive && e instanceof CutoutError && e.code === 'RATE_LIMITED') {
+          setProcessStage('Retrying on device…');
+        }
+      }
+      if (stayOnLive) {
+        setProcessStage('Cutting out…');
+        wasmBusyRef.current = true;
+        setWasmCutoutUri(fileUri);
+        return false;
+      }
+      await yieldToUi();
+      startWasmCutout(fileUri);
+      return false;
+    }
+
+    const pipeline: CutoutPipeline = nativeCutoutBundled() ? 'native' : 'cloud';
+    setCutoutPipeline(pipeline);
+
+    try {
+      const result = await extractSubject(fileUri, (pct, stage) => {
+        if (stayOnLive) setProcessStage(stage);
+        else {
+          setProcessPct(pct);
+          setProcessStage(stage);
+        }
+      });
+      const method = result.method === 'imported' ? 'wasm' : result.method;
+      await finishCutout(result.uri, method, stayOnLive);
+      if (stayOnLive) setLiveScanError(null);
+      return true;
+    } catch (e) {
+      if (e instanceof CutoutError && e.message === 'EXPO_GO_WASM') {
+        if (stayOnLive) {
+          wasmBusyRef.current = true;
+          setWasmCutoutUri(fileUri);
+          return false;
+        }
+        startWasmCutout(fileUri);
+        return false;
+      }
+      if (
+        e instanceof CutoutError &&
+        (e.code === 'RATE_LIMITED' || e.code === 'CLOUD_FAILED') &&
+        isExpoGo()
+      ) {
+        if (stayOnLive) {
+          wasmBusyRef.current = true;
+          setWasmCutoutUri(fileUri);
+          return false;
+        }
+        startWasmCutout(fileUri);
+        return false;
+      }
+      if (stayOnLive) {
+        setLiveScanning(false);
+        setLiveScanError('Could not detect the object — tap it on screen to help AI.');
+        return false;
+      }
+      Alert.alert('Could not cut out subject', cutoutErrorMessage(e), [{ text: 'OK', style: 'cancel' }]);
+      setPhase('hub');
+      setWasmCutoutUri(null);
+      return false;
+    }
+    return false;
+  };
+
+  const enterLive = useCallback(async (stillUri?: string) => {
+    setCutout(null);
+    setLiveScanError(null);
+    setLiveStillUri(stillUri ?? null);
+    if (!stillUri) {
+      const perm = await requestCamPerm();
+      if (!perm?.granted) {
+        Alert.alert('Camera needed', 'Allow camera to scan objects for stickers.');
+        return;
+      }
+    }
+    setPhase('live');
+  }, [requestCamPerm]);
+
+  const pickFromGallery = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow photo library access to pick a sticker image.');
+        return;
+      }
+      await new Promise<void>(resolve => {
+        InteractionManager.runAfterInteractions(() => {
+          requestAnimationFrame(() => resolve());
+        });
+      });
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.72,
+        allowsEditing: false,
+      });
+      if (res.canceled || !res.assets[0]?.uri) return;
+      await enterLive(res.assets[0].uri);
+    } catch {
+      Alert.alert('Could not open gallery', 'Try again or use the camera.');
+    }
+  }, [enterLive]);
+
+  const runLiveScan = useCallback(async (focus?: { x: number; y: number }) => {
+    if (liveScanLock.current) return;
+    const gen = ++liveScanGen.current;
+    liveScanLock.current = true;
+    setLiveScanning(true);
+    setLiveScanError(null);
+    setProcessStage(focus ? 'Focusing on your tap…' : 'Scanning…');
+    if (focus) {
+      setCutout(null);
+      setWasmCutoutUri(null);
+      wasmBusyRef.current = false;
+    }
+    try {
+      let uri: string | undefined;
+      if (liveStillUri) {
+        uri = liveStillUri;
+      } else if (cameraRef.current) {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.42,
+          skipProcessing: true,
+          shutterSound: false,
+        });
+        uri = photo?.uri;
+      }
+      if (!uri || gen !== liveScanGen.current) return;
+      if (focus) {
+        uri = await cropPhotoAroundViewportPoint(uri, focus, {
+          width: SCREEN_W,
+          height: SCREEN_H,
+        });
+      }
+      if (gen !== liveScanGen.current) return;
+      const ok = await runCutout(uri, true);
+      if (gen === liveScanGen.current && !ok && !cutoutRef.current) {
+        setLiveScanError(
+          focus
+            ? 'Still tricky — tap the object again or use better light.'
+            : 'Tap the object on screen, or tap the refresh button to scan again.',
+        );
+      }
+    } catch {
+      if (gen === liveScanGen.current) {
+        setLiveScanning(false);
+        setLiveScanError('Scan failed — tap the object to try again.');
+      }
+    } finally {
+      if (gen === liveScanGen.current) liveScanLock.current = false;
+    }
+  }, [liveStillUri]);
+
+  useEffect(() => {
+    if (phase !== 'live') return;
+    const kick = () => {
+      if (!liveScanLock.current) void runLiveScan();
+    };
+    const t0 = setTimeout(kick, liveStillUri ? 200 : 550);
+    const interval = setInterval(() => {
+      if (!cutoutRef.current && !liveScanLock.current && !wasmBusyRef.current) kick();
+    }, 2800);
+    return () => {
+      clearTimeout(t0);
+      clearInterval(interval);
+    };
+  }, [phase, liveStillUri, runLiveScan]);
+
+  /** Pre-made transparent PNG only — camera/gallery always run AI cutout. */
+  const importCutoutPng = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.92,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
       allowsEditing: false,
     });
     if (res.canceled || !res.assets[0]) return;
+    beginProcessing('Opening your photo…');
+    await yieldToUi();
     await runCutout(res.assets[0].uri);
-  };
-
-  const runCutout = async (uri: string) => {
-    setSourceUri(uri);
-    setPhase('processing');
-    setCutout(null);
-    setProcessPct(0);
-    setProcessStage('Starting');
-    try {
-      const result = await extractSubject(uri, (pct, stage) => {
-        setProcessPct(pct);
-        setProcessStage(stage);
-      });
-      setCutout(result);
-      setCutoutMethod(cutoutMethodLabel(result.method));
-      setPhase('frame');
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      const msg =
-        e instanceof CutoutError
-          ? e.message
-          : 'Use one clear subject (food, drink, person, object) with contrast against the background.';
-      Alert.alert('Could not cut out subject', msg);
-      setPhase('hub');
-    }
   };
 
   const captureAndCutout = async () => {
     if (!cameraRef.current) return;
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.9, skipProcessing: false });
+    beginProcessing('Saving photo…');
+    await yieldToUi();
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.78, skipProcessing: false });
     if (photo?.uri) await runCutout(photo.uri);
+    else setPhase('camera');
   };
 
   const onMakeSticker = async () => {
@@ -134,13 +455,13 @@ export default function StickerStudioScreen() {
         quality: 1,
         result: 'tmpfile',
       });
-      await saveSticker({ uri, frameId, sourceUri: sourceUri ?? undefined });
+      await saveSticker({ uri, trace, sourceUri: sourceUri ?? undefined });
       await refreshLibrary();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Sticker saved', 'Add it to a collage or make another cutout.', [
-        { text: 'Collage', onPress: () => startCollage() },
-        { text: 'Done', style: 'cancel', onPress: () => setPhase('hub') },
-      ]);
+      setLiveStillUri(null);
+      setCutout(null);
+      setPhase('hub');
+      setShowSaveCelebration(true);
     } catch {
       Alert.alert('Save failed', 'Could not save this sticker. Try again.');
     } finally {
@@ -154,15 +475,26 @@ export default function StickerStudioScreen() {
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 1,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.65,
       allowsEditing: false,
     });
     if (res.canceled || !res.assets[0]) return;
-    setBgUri(res.assets[0].uri);
-    setPlaced([]);
-    setSelectedKey(null);
-    setPhase('collage');
+    setPhase('collage-loading');
+    setProcessPct(8);
+    setProcessStage('Preparing background…');
+    await yieldToUi();
+    try {
+      const bg = await normalizePhotoForCollage(res.assets[0].uri);
+      setBgUri(bg);
+      setPlaced([]);
+      setSelectedKey(null);
+      await refreshLibrary();
+      setPhase('collage');
+    } catch {
+      Alert.alert('Could not open photo', 'Try another image from your gallery.');
+      setPhase('hub');
+    }
   };
 
   const addPlacedFromLibrary = (s: SavedSticker) => {
@@ -173,7 +505,6 @@ export default function StickerStudioScreen() {
         key,
         stickerId: s.id,
         uri: s.uri,
-        frameId: s.frameId,
         x: CANVAS_W / 2 - 70 + (prev.length % 3) * 24,
         y: CANVAS_H / 2 - 70 + (prev.length % 2) * 30,
         scale: 1,
@@ -187,10 +518,16 @@ export default function StickerStudioScreen() {
   const exportCollage = async () => {
     if (!collageRef.current || !bgUri) return;
     setExporting(true);
+    setCaptureClean(true);
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'Allow photo library access to save your collage.');
+        setCaptureClean(false);
+        setExporting(false);
         return;
       }
       const uri = await captureRef(collageRef, {
@@ -204,22 +541,52 @@ export default function StickerStudioScreen() {
     } catch {
       Alert.alert('Export failed', 'Could not save the collage.');
     } finally {
+      setCaptureClean(false);
       setExporting(false);
     }
   };
 
   const openNewCutout = () => {
-    Alert.alert('New cutout', 'Snap or import a photo — we find the main subject for you.', [
-      { text: 'Camera', onPress: () => setPhase('camera') },
-      { text: 'Gallery', onPress: () => void pickFromGallery() },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    void enterLive();
   };
 
-  // ─── CAMERA ───────────────────────────────────────────────────────────────
-  if (phase === 'camera') {
+  const exitLive = () => {
+    liveScanGen.current += 1;
+    setLiveStillUri(null);
+    setCutout(null);
+    setWasmCutoutUri(null);
+    setLiveScanning(false);
+    setLiveScanError(null);
+    setPhase('hub');
+  };
+
+  let screen: React.ReactNode;
+
+  // ─── LIVE STICKER (style → scan → auto cutout) ───────────────────────────
+  if (phase === 'live') {
+    screen = (
+      <LiveStickerCamera
+        cameraRef={cameraRef}
+        trace={trace}
+        onTraceChange={setTrace}
+        cutout={cutout}
+        previewRef={previewRef}
+        scanning={liveScanning}
+        scanStage={processStage}
+        scanError={liveScanError}
+        saving={saving}
+        theme={theme}
+        stillUri={liveStillUri}
+        onBack={exitLive}
+        onGallery={() => void pickFromGallery()}
+        onScan={() => void runLiveScan()}
+        onTapFocus={point => void runLiveScan(point)}
+        onMakeSticker={() => void onMakeSticker()}
+      />
+    );
+  } else if (phase === 'camera') {
     if (!camPerm?.granted) {
-      return (
+      screen = (
         <SafeAreaView style={[st.root, { backgroundColor: theme.bg }]}>
           <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle="Sticker studio" />
           <View style={st.center}>
@@ -230,109 +597,79 @@ export default function StickerStudioScreen() {
           </View>
         </SafeAreaView>
       );
-    }
-
-    return (
+    } else {
+    screen = (
       <View style={st.root}>
         <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
-        <SafeAreaView style={st.camOverlay}>
+        <LinearGradient
+          colors={['rgba(0,0,0,0.55)', 'transparent', 'rgba(0,0,0,0.7)']}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <SafeAreaView style={st.camOverlay} edges={['top', 'bottom']}>
           <TouchableOpacity style={st.camBack} onPress={() => setPhase('hub')}>
             <Text style={st.camBackTxt}>← Back</Text>
           </TouchableOpacity>
-          <View style={st.scanFrame} pointerEvents="none" />
-          <Text style={st.camHint}>
-            Fill the box with one item — food, drink, person or object. Plain background = sharper cutout.
-          </Text>
-          <TouchableOpacity style={st.shutter} onPress={() => void captureAndCutout()}>
-            <View style={st.shutterInner} />
-          </TouchableOpacity>
-          <TouchableOpacity style={st.camGallery} onPress={() => void pickFromGallery()}>
-            <ImageIcon size={22} color="#fff" />
-          </TouchableOpacity>
+          <View style={st.camCenter}>
+            <View style={st.scanFrame} pointerEvents="none" />
+            <Text style={st.camHint}>One cute subject in the frame ✨</Text>
+          </View>
+          <View style={st.camBottom}>
+            <TouchableOpacity style={st.camGallery} onPress={() => void pickFromGallery()}>
+              <ImageIcon size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={st.shutter} onPress={() => void captureAndCutout()}>
+              <LinearGradient colors={['#FF6B9D', '#BF5AF2']} style={st.shutterGrad}>
+                <View style={st.shutterInner} />
+              </LinearGradient>
+            </TouchableOpacity>
+            <View style={st.camGallery} />
+          </View>
         </SafeAreaView>
       </View>
     );
-  }
-
-  // ─── PROCESSING ───────────────────────────────────────────────────────────
-  if (phase === 'processing') {
-    return (
-      <SafeAreaView style={[st.root, { backgroundColor: theme.bg }]}>
-        <View style={st.center}>
-          <ActivityIndicator size="large" color={theme.accent} />
-          <Text style={[st.processTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
-            Cutting out your subject…
-          </Text>
-          <Text style={[st.muted, { color: theme.textSub }]}>
-            {processStage || 'AI traces food, drinks, people & objects — not the whole frame'}
-          </Text>
-          <View style={[st.progressTrack, { backgroundColor: theme.bg3 }]}>
-            <View style={[st.progressFill, { width: `${Math.min(100, processPct)}%`, backgroundColor: theme.accent }]} />
-          </View>
-          <Text style={[st.progressPct, { color: theme.textMuted }]}>{processPct}%</Text>
-        </View>
-      </SafeAreaView>
+    }
+  } else if (phase === 'processing' || phase === 'collage-loading') {
+  // ─── PROCESSING / COLLAGE LOADING ─────────────────────────────────────────
+    const pct = Math.min(100, Math.max(0, processPct));
+    screen = (
+      <View style={[st.root, { backgroundColor: '#0d0d14' }]}>
+        <SafeAreaView style={st.flex} edges={['top', 'bottom']}>
+          {phase === 'processing' && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <StickerStepBar activeIndex={1} />
+            </View>
+          )}
+          {phase === 'collage-loading' ? (
+            <View style={st.minLoadWrap}>
+              <ActivityIndicator size="large" color={theme.accent} />
+              <Text style={[st.minLoadTitle, { color: theme.text }]}>Opening collage…</Text>
+              <Text style={[st.minLoadStage, { color: theme.textSub }]}>{processStage}</Text>
+            </View>
+          ) : (
+            <StickerCutoutLoading pct={pct} stage={processStage} pipeline={cutoutPipeline} />
+          )}
+        </SafeAreaView>
+      </View>
     );
-  }
-
-  // ─── FRAME PICKER ─────────────────────────────────────────────────────────
-  if (phase === 'frame' && cutout) {
-    return (
-      <SafeAreaView style={[st.root, { backgroundColor: theme.bg }]}>
-        <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle="Choose a frame" />
-        <View style={st.frameBody}>
-          <View ref={previewRef} collapsable={false} style={st.previewHub}>
-            <FramedCutout
-              uri={cutout.uri}
-              frameId={frameId}
-              width={PREVIEW_SIZE}
-              height={PREVIEW_SIZE}
-              showScanBox={frameId === 'dashed-gold'}
-            />
-          </View>
-          <Text style={[st.methodTag, { color: theme.textMuted }]}>{cutoutMethod}</Text>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.frameRow}>
-            {FRAME_OPTIONS.map(opt => {
-              const selected = frameId === opt.id;
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  onPress={() => {
-                    setFrameId(opt.id);
-                    void Haptics.selectionAsync();
-                  }}
-                  style={[st.frameChip, selected && st.frameChipOn, { borderColor: selected ? '#FFD54F' : theme.border }]}
-                >
-                  <View style={[st.framePreview, { backgroundColor: opt.previewColor === 'transparent' ? theme.bg3 : opt.previewColor }]}>
-                    <Sticker size={20} color={theme.isDark ? '#fff' : '#333'} strokeWidth={2} />
-                  </View>
-                  <Text style={[st.frameChipLbl, { color: selected ? theme.accent : theme.textSub }]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          <TouchableOpacity activeOpacity={0.9} onPress={() => void onMakeSticker()} disabled={saving}>
-            <LinearGradient colors={['#FF0055', '#BF5AF2']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={st.makeBtn}>
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Wand2 size={18} color="#fff" strokeWidth={2.5} />
-                  <Text style={st.makeBtnTxt}>MAKE STICKER</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+  } else if (phase === 'frame' && cutout) {
+    screen = (
+      <StickerEditorScreen
+        cutout={cutout}
+        trace={trace}
+        onTraceChange={setTrace}
+        onBack={() => setPhase('hub')}
+        onSave={() => void onMakeSticker()}
+        onNew={openNewCutout}
+        saving={saving}
+        previewRef={previewRef}
+        theme={theme}
+        titleFont={fonts.titleFont}
+      />
     );
-  }
-
+  } else if (phase === 'collage' && bgUri) {
   // ─── COLLAGE ──────────────────────────────────────────────────────────────
-  if (phase === 'collage' && bgUri) {
-    return (
+    screen = (
       <GestureHandlerRootView style={[st.root, { backgroundColor: theme.bg }]}>
         <SafeAreaView style={st.flex} edges={['top']}>
           <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle="Collage" />
@@ -360,6 +697,7 @@ export default function StickerStudioScreen() {
                     boundW={CANVAS_W}
                     boundH={CANVAS_H}
                     selected={selectedKey === p.key}
+                    hideChrome={captureClean}
                     onSelect={() => setSelectedKey(p.key)}
                     onRemove={() => {
                       setPlaced(prev => prev.filter(x => x.key !== p.key));
@@ -378,7 +716,13 @@ export default function StickerStudioScreen() {
           <Text style={[st.stripLabel, { color: theme.textMuted }]}>YOUR STICKERS</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.strip}>
             {library.map(s => (
-              <TouchableOpacity key={s.id} onPress={() => addPlacedFromLibrary(s)} style={[st.stripItem, { borderColor: theme.border }]}>
+              <TouchableOpacity
+                key={s.id}
+                onPress={() => addPlacedFromLibrary(s)}
+                onLongPress={() => setPreviewSticker(s)}
+                style={[st.stripItem, { borderColor: theme.border }]}
+              >
+                <View style={st.thumbChecker} />
                 <Image source={{ uri: s.uri }} style={st.stripThumb} resizeMode="contain" />
               </TouchableOpacity>
             ))}
@@ -389,70 +733,53 @@ export default function StickerStudioScreen() {
         </SafeAreaView>
       </GestureHandlerRootView>
     );
+  } else {
+    screen = (
+      <StickerStudioHub
+        library={library}
+        titleFont={fonts.titleFont}
+        theme={theme}
+        onBack={goBack}
+        onNew={openNewCutout}
+        onGallery={() => void pickFromGallery()}
+        onCollage={() => void startCollage()}
+        onStickerPress={setPreviewSticker}
+      />
+    );
   }
 
-  // ─── HUB ──────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={[st.root, { backgroundColor: theme.bg }]}>
-      <AppHeader variant="detail" onBack={goBack} subtitle="Cutouts & collage" />
-      <ScrollView contentContainerStyle={st.hubScroll} showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={['#1a0a2e', '#2d1b4e', '#0f172a']} style={st.hero}>
-          <Sparkles size={28} color="#FFD54F" />
-          <Text style={[st.heroTitle, { fontFamily: fonts.titleFont }]}>Sticker studio</Text>
-          <Text style={st.heroSub}>Snap anything · AI finds the hero · cute frames · scrapbook collages</Text>
-        </LinearGradient>
-
-        <View style={st.hubActions}>
-          <TouchableOpacity activeOpacity={0.9} onPress={openNewCutout} style={st.hubCardWrap}>
-            <LinearGradient colors={['#2244e8', '#00E5FF']} style={st.hubCard}>
-              <Camera size={26} color="#fff" strokeWidth={2.2} />
-              <Text style={st.hubCardTitle}>New cutout</Text>
-              <Text style={st.hubCardSub}>Camera or gallery</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.9} onPress={() => void startCollage()} style={st.hubCardWrap}>
-            <LinearGradient colors={['#FF4500', '#FF0055']} style={st.hubCard}>
-              <Layers size={26} color="#fff" strokeWidth={2.2} />
-              <Text style={st.hubCardTitle}>Collage</Text>
-              <Text style={st.hubCardSub}>Background + stickers</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        <View style={st.libHead}>
-          <Scan size={16} color={theme.accent} />
-          <Text style={[st.libTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>Your stickers</Text>
-          <Text style={[st.libCount, { color: theme.textMuted }]}>{library.length}</Text>
-        </View>
-
-        {library.length === 0 ? (
-          <Text style={[st.empty, { color: theme.textSub }]}>No stickers yet — create your first cutout above.</Text>
-        ) : (
-          <View style={st.grid}>
-            {library.map(s => (
-              <View key={s.id} style={[st.gridCell, { borderColor: theme.border, backgroundColor: theme.bg2 }]}>
-                <Image source={{ uri: s.uri }} style={st.gridImg} resizeMode="contain" />
-                <TouchableOpacity
-                  style={st.gridDel}
-                  onPress={() => {
-                    Alert.alert('Delete sticker?', undefined, [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Delete',
-                        style: 'destructive',
-                        onPress: () => void deleteSticker(s.id).then(refreshLibrary),
-                      },
-                    ]);
-                  }}
-                >
-                  <Trash2 size={14} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+    <>
+      {wasmEngineEl}
+      {screen}
+      <StickerSaveCelebration
+        visible={showSaveCelebration}
+        onDone={() => {
+          setShowSaveCelebration(false);
+          setPhase('hub');
+        }}
+        onCollage={() => {
+          setShowSaveCelebration(false);
+          void startCollage();
+        }}
+        onAnother={() => {
+          setShowSaveCelebration(false);
+          openNewCutout();
+        }}
+      />
+      <StickerPreviewModal
+        visible={previewSticker != null}
+        sticker={previewSticker}
+        onClose={() => setPreviewSticker(null)}
+        titleFont={fonts.titleFont}
+        onDelete={id => void deleteSticker(id).then(refreshLibrary)}
+        onUseInCollage={s => {
+          setPreviewSticker(null);
+          if (phase === 'collage' && bgUri) addPlacedFromLibrary(s);
+          else void startCollage();
+        }}
+      />
+    </>
   );
 }
 
@@ -461,38 +788,175 @@ const st = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 12 },
   muted: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  processTitle: { fontSize: 20, fontWeight: '800', marginTop: 16 },
-  progressTrack: { width: '80%', height: 6, borderRadius: 3, marginTop: 20, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  progressPct: { fontSize: 12, fontWeight: '700', marginTop: 8 },
+  processWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingBottom: 32 },
+  processCard: {
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  processIconRing: {
+    padding: 3,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 18,
+  },
+  processIconGrad: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processTitleLg: { fontSize: 22, fontWeight: '900', color: '#fff', textAlign: 'center', letterSpacing: 0.3 },
+  processStage: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 10,
+    paddingHorizontal: 8,
+    fontWeight: '600',
+  },
+  processPctBig: { fontSize: 36, fontWeight: '900', color: '#FFD54F', marginTop: 22, letterSpacing: -1 },
+  progressTrackLg: { width: '100%', height: 10, borderRadius: 5, marginTop: 14, overflow: 'hidden' },
+  progressFillLg: { height: '100%', borderRadius: 5 },
+  processSpinner: { marginTop: 20 },
   primaryBtn: { marginTop: 16, backgroundColor: '#FF0055', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 14 },
   primaryBtnTxt: { color: '#fff', fontWeight: '800' },
-  hubScroll: { paddingBottom: 40 },
-  hero: { margin: 16, borderRadius: 20, padding: 22, alignItems: 'center', gap: 8 },
-  heroTitle: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
-  heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 20 },
-  hubActions: { flexDirection: 'row', paddingHorizontal: 12, gap: 10 },
+  hubScroll: { paddingBottom: 48 },
+  hero: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  heroBadgeTxt: { color: '#FFD54F', fontSize: 10, fontWeight: '900', letterSpacing: 2 },
+  heroTitle: { fontSize: 30, fontWeight: '900', color: '#fff', letterSpacing: 0.6, textAlign: 'center' },
+  heroSub: { fontSize: 14, color: 'rgba(255,255,255,0.78)', textAlign: 'center', lineHeight: 21, paddingHorizontal: 8 },
+  heroWarmup: { fontSize: 11, color: '#00E5FF', fontWeight: '700', textAlign: 'center', marginTop: 4 },
+  heroPills: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 6 },
+  heroPill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  heroPillTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '700' },
+  hubSectionLbl: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2.2,
+    marginLeft: 20,
+    marginTop: 22,
+    marginBottom: 10,
+  },
+  hubActions: { flexDirection: 'row', paddingHorizontal: 14, gap: 12 },
   hubCardWrap: { flex: 1 },
-  hubCard: { borderRadius: 18, padding: 18, minHeight: 120, justifyContent: 'flex-end', gap: 4 },
+  hubCard: {
+    borderRadius: 20,
+    padding: 18,
+    minHeight: 132,
+    justifyContent: 'flex-end',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  hubCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   hubCardTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  hubCardSub: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600' },
-  libHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginTop: 22 },
-  libTitle: { fontSize: 16, fontWeight: '800', flex: 1 },
-  libCount: { fontSize: 12, fontWeight: '700' },
-  empty: { paddingHorizontal: 20, marginTop: 12, fontSize: 13 },
+  hubCardSub: { color: 'rgba(255,255,255,0.82)', fontSize: 11, fontWeight: '600', lineHeight: 15 },
+  libHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, marginTop: 26 },
+  libIconGrad: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  libTitle: { fontSize: 18, fontWeight: '900', flex: 1 },
+  libCountBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  libCount: { fontSize: 13, fontWeight: '900' },
+  emptyCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 28,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: 10,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: '800' },
+  empty: { fontSize: 13, textAlign: 'center', lineHeight: 19 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 10 },
-  gridCell: { width: (SCREEN_W - 44) / 2, height: (SCREEN_W - 44) / 2, borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  minLoadWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  minLoadTitle: { fontSize: 17, fontWeight: '800' },
+  minLoadStage: { fontSize: 13, textAlign: 'center' },
+  thumbChecker: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#252530',
+    opacity: 0.85,
+  },
+  gridCell: {
+    width: (SCREEN_W - 44) / 2,
+    height: (SCREEN_W - 44) / 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    backgroundColor: '#1e1e26',
+  },
   gridImg: { width: '100%', height: '100%' },
   gridDel: { position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  frameBody: { flex: 1, alignItems: 'center', paddingBottom: 24 },
-  previewHub: { marginTop: 8, padding: 16, alignItems: 'center', justifyContent: 'center' },
-  methodTag: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 12 },
-  frameRow: { paddingHorizontal: 14, gap: 10, paddingBottom: 16 },
-  frameChip: { alignItems: 'center', borderWidth: 2, borderRadius: 14, padding: 8, width: 72 },
-  frameChipOn: { backgroundColor: 'rgba(255,213,79,0.12)' },
-  framePreview: { width: 48, height: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  frameChipLbl: { fontSize: 9, fontWeight: '800', marginTop: 6, letterSpacing: 0.5 },
-  makeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginHorizontal: 20, marginTop: 8, paddingVertical: 16, borderRadius: 16, width: SCREEN_W - 40 },
+  frameScroll: { alignItems: 'center', paddingBottom: 20 },
+  cutoutSection: { width: '100%', marginTop: 8, gap: 10, paddingHorizontal: 4 },
+  cutoutEmpty: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  cutoutStrip: { gap: 10, paddingVertical: 4, paddingRight: 8 },
+  cutoutThumbWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cutoutThumb: { width: '92%', height: '92%' },
+  cutoutDel: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,0,85,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frameFooter: { borderTopWidth: 1, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 20 },
+  previewHub: { marginTop: 4, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  methodHint: { fontSize: 10, textAlign: 'center', paddingHorizontal: 24, marginBottom: 12, lineHeight: 14 },
+  makeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16, width: '100%' },
   makeBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 1.5 },
   collageToolbar: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   toolChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
@@ -507,39 +971,38 @@ const st = StyleSheet.create({
   stripItem: { width: 72, height: 72, borderRadius: 14, borderWidth: 1, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.04)' },
   stripThumb: { width: '100%', height: '100%' },
   stripAdd: { width: 72, height: 72, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  camOverlay: { flex: 1, justifyContent: 'space-between', padding: 16 },
+  camOverlay: { flex: 1, padding: 16 },
+  camCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  camBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, paddingBottom: 8 },
   camBack: { alignSelf: 'flex-start', padding: 8 },
   camBackTxt: { color: '#fff', fontWeight: '800', fontSize: 16 },
   scanFrame: {
-    alignSelf: 'center',
     width: SCREEN_W * 0.72,
     height: SCREEN_W * 0.72,
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,213,79,0.9)',
-    borderRadius: 12,
-    marginTop: SCREEN_H * 0.08,
+    borderColor: 'rgba(255,182,220,0.95)',
+    borderRadius: 24,
   },
-  camHint: { color: 'rgba(255,255,255,0.85)', textAlign: 'center', fontSize: 13, fontWeight: '600', paddingHorizontal: 24 },
+  camHint: { color: 'rgba(255,255,255,0.9)', textAlign: 'center', fontSize: 14, fontWeight: '700', paddingHorizontal: 24 },
   shutter: {
-    alignSelf: 'center',
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 4,
-    borderColor: '#fff',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    padding: 3,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  shutterGrad: {
+    flex: 1,
+    borderRadius: 37,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
   },
   shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff' },
   camGallery: {
-    position: 'absolute',
-    right: 24,
-    bottom: 36,
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',

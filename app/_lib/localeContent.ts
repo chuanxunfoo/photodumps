@@ -21,7 +21,14 @@ export type ExploreCopy = {
   rateUsSub: string;
   faq: string;
   faqSub: string;
-  instagram: string;
+  support: string;
+  supportSub: string;
+  supportModalTitle: string;
+  supportModalHint: string;
+  supportIgTitle: string;
+  supportIgSub: string;
+  supportEmailTitle: string;
+  supportEmailSub: string;
   subscribe: string;
   subscribeSubManage: string;
   subscribeSubUpgrade: string;
@@ -123,15 +130,21 @@ const EN: Bundle = {
     rateUsSub: 'Drag the smiley — tell us everything',
     faq: 'faq',
     faqSub: 'How swipes, Pro & safety work',
-    instagram: 'instagram',
-    instagramSub: '@ai.photodumps',
+    support: 'support',
+    supportSub: 'Instagram DM or email — tap to reach us',
+    supportModalTitle: 'HOW CAN WE HELP?',
+    supportModalHint: 'Pick how you want to reach us — we read every message.',
+    supportIgTitle: 'DM us on Instagram',
+    supportIgSub: '@photodumps.app · we usually reply within minutes',
+    supportEmailTitle: 'Email support',
+    supportEmailSub: 'photodumps.support@gmail.com · 1–2 working days',
     subscribe: 'subscribe',
     subscribeSubManage: 'Manage or restore your plan',
     subscribeSubUpgrade: 'Unlimited swipes + full toolkit',
     spinWheel: 'spin wheel',
     spinWheelSub: 'Win bonus swipes when your week runs low',
     photobooth: 'photobooth',
-    photoboothSub: 'Filters, frames & stickers',
+    photoboothSub: 'Digital cameras & photo strips',
     stickerStudio: 'sticker studio',
     stickerStudioSub: 'AI cutouts · cute frames · collage',
     videoTrim: 'video trim',
@@ -273,8 +286,6 @@ const MS: Bundle = {
     appIconSub: 'Percuma: Classic & Stealth · Pro: lapan ikon',
     languages: 'bahasa',
     languagesSub: 'Percuma: English · Pro: Español, 中文, 한국어…',
-    instagram: 'instagram',
-    instagramSub: '@ai.photodumps',
   },
   subscription: {
     ...EN.subscription,
@@ -371,8 +382,6 @@ const ES: Bundle = {
     appIconSub: 'Gratis: Classic y Stealth · Pro: ocho iconos',
     languages: 'idiomas',
     languagesSub: 'Gratis: inglés · Pro: español, 中文, 한국어…',
-    instagram: 'instagram',
-    instagramSub: '@ai.photodumps',
   },
   subscription: {
     ...EN.subscription,
@@ -434,7 +443,6 @@ const FR = bundleFromEn({
     notifications: 'notifications', notificationsSub: 'Rappels doux — gratuit pour tous',
     faq: 'faq', faqSub: 'Swipes, Pro et sécurité',
     rateUs: 'notez-nous', rateUsSub: 'Glissez l’emoji — dites-nous tout',
-    instagram: 'instagram', instagramSub: '@ai.photodumps',
     subscribe: "s'abonner", subscribeSubUpgrade: 'Swipes illimités + boîte à outils complète',
     spinWheel: 'roue bonus', spinWheelSub: 'Swipes bonus quand la semaine est basse',
     photobooth: 'photomaton', photoboothSub: 'Filtres, cadres et stickers',
@@ -469,7 +477,6 @@ const DE = bundleFromEn({
     notifications: 'benachrichtigungen', notificationsSub: 'Sanfte Erinnerungen — für alle kostenlos',
     faq: 'faq', faqSub: 'Swipes, Pro & Sicherheit',
     rateUs: 'bewerte uns', rateUsSub: 'Zieh das Emoji — sag uns alles',
-    instagram: 'instagram', instagramSub: '@ai.photodumps',
     subscribe: 'abonnieren', subscribeSubUpgrade: 'Unbegrenzte Swipes + volles Toolkit',
     spinWheel: 'glücksrad', spinWheelSub: 'Bonus-Swipes wenn die Woche knapp wird',
     photobooth: 'fotobox', photoboothSub: 'Filter, Rahmen & Sticker',

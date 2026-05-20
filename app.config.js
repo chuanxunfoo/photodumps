@@ -1,18 +1,18 @@
-// app.config.js — place this in your PROJECT ROOT (same folder as package.json)
-// This replaces or works alongside app.json.
-// It passes your Supabase credentials into the app and sets the deep-link scheme
-// so email confirmation links open your app instead of a blank localhost page.
-
-export default ({ config }) => ({
+/**
+ * Expo config at project root (not inside app/ — that folder is expo-router routes only).
+ * Env vars load from app/.env automatically (EXPO_PUBLIC_*).
+ */
+module.exports = ({ config }) => ({
   ...config,
   name: 'photodumps',
-  slug: 'dumpitapp',
+  slug: 'Dumplt',
   version: '1.0.0',
   orientation: 'portrait',
-  icon: './assets/brand-icon.png',
+  icon: './app/assets/brand-icon.png',
   userInterfaceStyle: 'dark',
+  androidStatusBar: { translucent: true, backgroundColor: '#00000000' },
   splash: {
-    image: './assets/brand-icon.png',
+    image: './app/assets/brand-icon.png',
     resizeMode: 'contain',
     backgroundColor: '#3B5BFC',
   },
@@ -20,19 +20,28 @@ export default ({ config }) => ({
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.yourname.dumpitapp',
-    // ↓ This is what makes email links open your app instead of localhost
     infoPlist: {
-      LSApplicationQueriesSchemes: ['dumpit'],
+      LSApplicationQueriesSchemes: ['dumpit', 'googlegmail', 'instagram', 'mailto'],
       NSPhotoLibraryAddUsageDescription:
         'photodumps saves your photo booth strips to your library when you tap Save.',
     },
   },
   android: {
+    edgeToEdgeEnabled: true,
     adaptiveIcon: {
-      foregroundImage: './assets/brand-icon.png',
+      foregroundImage: './app/assets/brand-icon.png',
       backgroundColor: '#3B5BFC',
     },
     package: 'com.yourname.dumpitapp',
+    queries: [
+      { package: 'com.google.android.gm' },
+      {
+        intent: {
+          action: 'android.intent.action.SENDTO',
+          data: { scheme: 'mailto' },
+        },
+      },
+    ],
     intentFilters: [
       {
         action: 'VIEW',
@@ -42,7 +51,6 @@ export default ({ config }) => ({
       },
     ],
   },
-  // ↓ CRITICAL: this registers "dumpit://" as a deep-link scheme for your app
   scheme: 'dumpit',
   plugins: [
     'expo-router',
@@ -62,15 +70,14 @@ export default ({ config }) => ({
     ],
     'react-native-compressor',
     'expo-notifications',
-    'rn-remove-image-bg',
   ],
   extra: {
-    // These get injected as Constants.expoConfig.extra inside the app
     EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
     EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     EXPO_PUBLIC_REMOVE_BG_API_KEY: process.env.EXPO_PUBLIC_REMOVE_BG_API_KEY,
+    EXPO_PUBLIC_NATIVE_CUTOUT: process.env.EXPO_PUBLIC_NATIVE_CUTOUT ?? '0',
     eas: {
-      projectId: 'YOUR_EAS_PROJECT_ID', // fill in after running: eas init
+      projectId: '1bd830d4-8001-4703-a60a-99538ef79f6b',
     },
   },
   experiments: {

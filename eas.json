@@ -1,0 +1,26 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+      }
+    }
+  }
+}

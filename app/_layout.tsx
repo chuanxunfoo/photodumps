@@ -1,14 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
-import { Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const SPLASH_LOGO = require('./assets/brand/photodumps-logo.png');
+import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SubscriptionModal } from './(tabs)/SubscriptionModal';
+import { safeReplace } from './_lib/safeNavigate';
 import { getSessionSafe } from './(tabs)/supabase';
 import { ThemeProvider, useTheme } from './(tabs)/ThemeContext';
 
@@ -53,18 +56,22 @@ function InnerLayout() {
   const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
-    setOnSubscriptionOpen(() => () => {
+    setOnSubscriptionOpen(() => {
       if (!isPro && !isAdmin) setShowSub(true);
     });
   }, [isPro, isAdmin, setOnSubscriptionOpen]);
 
   const handleSplashDone = async () => {
     setSplashDone(true);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const path = window.location.pathname.replace(/\/$/, '');
+      if (path === '/promo' || path.endsWith('/promo')) return;
+    }
     const session = await getSessionSafe();
 
     if (!session) {
       await setUser(null);
-      router.replace('/landing');
+      safeReplace('/landing');
       return;
     }
 
@@ -80,14 +87,16 @@ function InnerLayout() {
       username,
       isLoggedIn: true,
     });
-    router.replace('/calendar');
+    safeReplace('/hub');
   };
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} translucent backgroundColor="transparent" />
+      <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: theme.bg } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="promo" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
 

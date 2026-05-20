@@ -1,78 +1,135 @@
-import React from 'react';
-import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
-import { chalkLayers, frameOuterStyle } from '../../_lib/stickerStudio/frameStyles';
-import type { FrameId } from '../../_lib/stickerStudio/types';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, StyleSheet, View, type ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import type { TraceSettings } from '../../_lib/stickerStudio/types';
+import { TraceStrokeProcessor, type TraceStrokeMode } from './TraceStrokeProcessor';
 
 type Props = {
   uri: string;
-  frameId: FrameId;
+  trace: TraceSettings;
   width: number;
   height?: number;
   aspect?: number;
-  showScanBox?: boolean;
+  showTransparencyGrid?: boolean;
+  exportRef?: React.RefObject<View | null>;
+  style?: ViewStyle;
 };
+
+function strokeMode(trace: TraceSettings): TraceStrokeMode | null {
+  if (trace.style === 'none' || trace.width <= 0) return null;
+  return trace.style === 'toon' ? 'grainy' : 'smooth';
+}
 
 export function FramedCutout({
   uri,
-  frameId,
+  trace,
   width,
   height,
   aspect = 1,
-  showScanBox = false,
+  showTransparencyGrid = false,
+  exportRef,
+  style,
 }: Props) {
   const h = height ?? Math.round(width / aspect);
-  const outer = frameOuterStyle(frameId);
-  const layers = chalkLayers(frameId);
+  const mode = strokeMode(trace);
+  const [outUri, setOutUri] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setOutUri(null);
+  }, [uri, trace.color, trace.width, trace.style]);
+
+  if (!mode) {
+    return (
+      <View style={[styles.wrap, { width, height: h }, style]}>
+        {showTransparencyGrid && <CheckerTiles width={width} height={h} />}
+        <View ref={exportRef} collapsable={false} style={[styles.canvas, { width, height: h }]}>
+          <Image source={{ uri }} style={{ width, height: h }} resizeMode="contain" />
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.wrap, { width, height: h }]}>
-      {showScanBox && (
-        <View style={styles.scanBox} pointerEvents="none">
-          <View style={[styles.scanCorner, styles.tl]} />
-          <View style={[styles.scanCorner, styles.tr]} />
-          <View style={[styles.scanCorner, styles.bl]} />
-          <View style={[styles.scanCorner, styles.br]} />
-        </View>
-      )}
-      <View style={[styles.outer, outer, { maxWidth: width, maxHeight: h, position: 'relative' }]}>
-        {layers.map((layer, i) => (
-          <View key={i} style={[layer as ViewStyle, { width: '100%', height: '100%' }]} />
-        ))}
-        <View style={[styles.checker, { width: width * 0.78, height: h * 0.78 }]}>
-          <Image source={{ uri }} style={styles.image} resizeMode="contain" />
-        </View>
+    <View style={[styles.wrap, { width, height: h }, style]}>
+      {showTransparencyGrid && <CheckerTiles width={width} height={h} />}
+      <TraceStrokeProcessor
+        uri={uri}
+        color={trace.color}
+        width={trace.width}
+        mode={mode}
+        glow={trace.style === 'glow'}
+        onResult={setOutUri}
+        onProcessing={setBusy}
+      />
+      <View
+        ref={exportRef}
+        collapsable={false}
+        style={[styles.canvas, { width, height: h, backgroundColor: 'transparent' }]}
+      >
+        {outUri ? (
+          <Image source={{ uri: outUri }} style={{ width, height: h }} resizeMode="contain" />
+        ) : (
+          <View style={styles.wait}>
+            <Image source={{ uri }} style={{ width, height: h, opacity: 0.2 }} resizeMode="contain" />
+            <LinearGradient colors={['#FF0055', '#BF5AF2']} style={styles.waitBadge}>
+              <ActivityIndicator color="#fff" size="small" />
+            </LinearGradient>
+          </View>
+        )}
+        {busy && outUri && (
+          <View style={styles.busyOverlay} pointerEvents="none">
+            <ActivityIndicator color="#FFD54F" />
+          </View>
+        )}
       </View>
     </View>
   );
 }
 
+function CheckerTiles({ width, height }: { width: number; height: number }) {
+  const size = 12;
+  const cols = Math.ceil(width / size);
+  const rows = Math.ceil(height / size);
+  const cells: React.ReactNode[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if ((r + c) % 2 === 0) {
+        cells.push(
+          <View
+            key={`${r}_${c}`}
+            style={{
+              position: 'absolute',
+              left: c * size,
+              top: r * size,
+              width: size,
+              height: size,
+              backgroundColor: 'rgba(255,255,255,0.05)',
+            }}
+          />,
+        );
+      }
+    }
+  }
+  return <View style={[StyleSheet.absoluteFill, { backgroundColor: '#252530' }]}>{cells}</View>;
+}
+
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
-  outer: { alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
-  checker: {
-    backgroundColor: '#3a3a44',
-    borderRadius: 8,
-    overflow: 'hidden',
+  canvas: { overflow: 'visible', alignItems: 'center', justifyContent: 'center' },
+  wait: { alignItems: 'center', justifyContent: 'center' },
+  waitBadge: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  image: { width: '100%', height: '100%' },
-  scanBox: {
+  busyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255, 213, 79, 0.85)',
-    borderRadius: 8,
-    margin: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
-  scanCorner: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    borderColor: '#FFD54F',
-  },
-  tl: { top: 8, left: 8, borderTopWidth: 3, borderLeftWidth: 3 },
-  tr: { top: 8, right: 8, borderTopWidth: 3, borderRightWidth: 3 },
-  bl: { bottom: 8, left: 8, borderBottomWidth: 3, borderLeftWidth: 3 },
-  br: { bottom: 8, right: 8, borderBottomWidth: 3, borderRightWidth: 3 },
 });

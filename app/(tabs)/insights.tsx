@@ -212,12 +212,12 @@ export default function InsightsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {params.from === 'explore' ? (
+        {(params.from === 'explore' || params.from === 'features' || params.from === 'generals' || params.from === 'calendar') ? (
           <AppHeader variant="detail" onBack={goBack} subtitle={u.insightsTitle} />
         ) : null}
 
         <TouchableOpacity
-          style={[styles.refreshFab, { backgroundColor: theme.accent, top: params.from === 'explore' ? 108 : 56 }]}
+          style={[styles.refreshFab, { backgroundColor: theme.accent, top: (params.from === 'explore' || params.from === 'features' || params.from === 'generals' || params.from === 'calendar') ? 108 : 56 }]}
           onPress={() => {
             void loadAnalytics(true);
             void loadSupabase();

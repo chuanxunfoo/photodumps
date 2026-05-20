@@ -1,13 +1,13 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { Calendar, ChevronDown, Flame, Image as ImageIcon, Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated, Dimensions, Easing, Modal, Pressable,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
@@ -209,8 +209,9 @@ const mr = StyleSheet.create({
 let appSubPromptedThisLaunch = false;
 
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────
-export default function CalendarScreen() {
+export function CalendarScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { theme, t, isPro, isAdmin, openSubscription } = useTheme();
   const fonts = resolveTypeface(theme);
   const [year, setYear]       = useState(new Date().getFullYear());
@@ -266,7 +267,10 @@ export default function CalendarScreen() {
     <View style={[cs.root, { backgroundColor: theme.bg }]}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <Animated.View style={{ flex: 1, opacity: headerOpacity, transform: [{ scale: headerScale }] }}>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 36 }}
+          >
 
             <AppHeader
               variant="tabs"
@@ -406,3 +410,7 @@ const cs = StyleSheet.create({
   sectionLbl: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
   sectionLblText: { fontSize: 9, fontWeight: '900', letterSpacing: 4 },
 });
+
+export default function CalendarRoute() {
+  return <Redirect href="/hub?page=calendar" />;
+}

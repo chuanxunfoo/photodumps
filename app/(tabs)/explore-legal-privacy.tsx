@@ -2,7 +2,7 @@
  * Privacy Policy — photodumps
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft } from 'lucide-react-native';
+import { MinimalBackButton } from '../components/MinimalBackButton';
 import React from 'react';
 import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -68,11 +68,9 @@ export default function ExploreLegalPrivacyScreen() {
       />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={s.top}>
-          <TouchableOpacity onPress={goBack} style={[s.back, { backgroundColor: 'rgba(255,251,245,0.94)', borderColor: theme.border }]}>
-            <ChevronLeft size={22} color={theme.textSub} />
-          </TouchableOpacity>
+          <MinimalBackButton onPress={goBack} color={theme.textSub} style={s.backSlot} />
           <Text style={[s.title, { color: '#2d2418' }]}>{legal.privacyTitle}</Text>
-          <View style={{ width: 44 }} />
+          <View style={s.backSlot} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
           <View style={s.page}>
@@ -87,7 +85,7 @@ export default function ExploreLegalPrivacyScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f5ebe0' },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
-  back: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  backSlot: { width: 36 },
   title: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '900', letterSpacing: 2 },
   page: {
     backgroundColor: 'rgba(255, 251, 245, 0.88)',

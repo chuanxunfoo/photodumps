@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ArrowLeft, ChevronDown, Pause, Play, Sparkles, Upload,
+  ChevronDown, Pause, Play, Sparkles, Upload,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,6 +23,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MinimalBackButton } from '../components/MinimalBackButton';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import {
   compressVideoFile,
@@ -532,9 +533,7 @@ export default function ExploreTrimScreen() {
       <LinearGradient colors={['#121218', '#050508']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.iconBtn} onPress={goBack}>
-            <ArrowLeft size={22} color="#fff" />
-          </TouchableOpacity>
+          <MinimalBackButton onPress={goBack} color="#fff" size={26} />
           <View style={styles.topBarCenter}>
             <Text style={[styles.topBarTitle, { fontFamily: fonts.titleFont }]} numberOfLines={1}>
               TRIM & COMPRESS

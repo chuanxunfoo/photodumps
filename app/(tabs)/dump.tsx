@@ -334,9 +334,8 @@ export default function SwiperScreen() {
         ? `${params.month} ${params.year ?? ''}`
         : 'ALL MEDIA';
 
-  const tabBar = 64 + insets.bottom;
   const headerBlock = 80;
-  const bottomBlock = 96 + tabBar;
+  const bottomBlock = 96 + insets.bottom;
   const CARD_W = width - 24;
   const CARD_H = Math.max(260, height - insets.top - headerBlock - bottomBlock);
 

@@ -240,7 +240,7 @@ export default function SubscribePage() {
         onSuccess={async () => {
           await setPlan(selected);
           setShowPayment(false);
-          router.replace('/calendar');
+          router.replace('/hub');
         }}
       />
     </View>

@@ -11,7 +11,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
+import { MinimalBackButton } from '../components/MinimalBackButton';
+import { DigicamDateStamp } from '../components/photobooth/DigicamDateStamp';
 import { useExploreAwareBack } from '../_lib/exploreBack';
+import { saveDigiShot } from '../_lib/photobooth/storage';
+import { useRouter } from 'expo-router';
 import {
   Camera,
   Check,
@@ -99,7 +103,7 @@ async function trimSnapshotEdgeBleed(uri: string): Promise<string> {
   });
 }
 
-type Phase = 'camera' | 'edit' | 'save';
+type Phase = 'camera' | 'preview';
 type FilterId  = 'none' | 'dither' | 'vhs' | 'spotlight' | 'ripple' | 'bw' | 'warm';
 type FrameColor = {
   id: string; label: string;
@@ -139,13 +143,11 @@ type CameraRigId = 'sony' | 'canon' | 'pixel' | 'polaroid' | 'fuji' | 'nikon' | 
 type WbPreset = 'auto' | 'daylight' | 'cloudy' | 'tungsten';
 
 interface CapturedPhoto {
-  uri:       string;
-  filter:    FilterId;
-  rigId?:    CameraRigId;
-  /** WB as set at capture (digicam-style preview tint). */
+  uri: string;
+  rigId?: CameraRigId;
   wbPreset?: WbPreset;
-  /** EV compensation baked into preview / export (−12 … +2). */
-  evBias?:   number;
+  evBias?: number;
+  capturedAt: number;
 }
 
 const RIG_LCD_LINES: Record<CameraRigId, [string, string, string]> = {
@@ -736,6 +738,7 @@ const sv = StyleSheet.create({
 
 export default function PhotoBoothScreen() {
   const goBack = useExploreAwareBack();
+  const router = useRouter();
   const { theme } = useTheme();
 
   // ── Permissions ──
@@ -802,7 +805,7 @@ export default function PhotoBoothScreen() {
   }, [zoom]);
 
   useEffect(() => {
-    if (phase === 'edit' && !shot) setPhase('camera');
+    if (phase === 'preview' && !shot) setPhase('camera');
   }, [phase, shot]);
 
   const applyRig = useCallback((id: CameraRigId) => {
@@ -846,12 +849,11 @@ export default function PhotoBoothScreen() {
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
     const uri = result.assets[0].uri;
-    const shotIn: CapturedPhoto = { uri, filter: activeFilter, rigId: selectedRig, wbPreset, evBias };
+    const shotIn: CapturedPhoto = { uri, rigId: selectedRig, wbPreset, evBias, capturedAt: Date.now() };
     setShot(shotIn);
-    setEditFilter(activeFilter);
-    setPhase('edit');
+    setPhase('preview');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [activeFilter, selectedRig, wbPreset, evBias]);
+  }, [selectedRig, wbPreset, evBias]);
 
   const pinchGesture = useMemo(
     () =>
@@ -949,7 +951,6 @@ export default function PhotoBoothScreen() {
   const handleSingleCapture = useCallback(async () => {
     if (isCapturing) return;
     setIsCapturing(true);
-    const filterForShot = activeFilter;
     const delaySec = timerSec;
     const wbAtShutter = wbPreset;
     const evAtShutter = evBias;
@@ -964,13 +965,15 @@ export default function PhotoBoothScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const uri = await captureAlignedPhoto();
       if (uri) {
-        setShot({ uri, filter: filterForShot, rigId: selectedRig, wbPreset: wbAtShutter, evBias: evAtShutter });
+        setShot({
+          uri,
+          rigId: selectedRig,
+          wbPreset: wbAtShutter,
+          evBias: evAtShutter,
+          capturedAt: Date.now(),
+        });
+        setTimeout(() => setPhase('preview'), 380);
       }
-
-      setTimeout(() => {
-        setEditFilter(filterForShot);
-        setPhase('edit');
-      }, 380);
     } catch (e) {
       console.warn('Single capture error:', e);
     } finally {
@@ -1028,6 +1031,14 @@ export default function PhotoBoothScreen() {
       });
       const trimmed = await trimSnapshotEdgeBleed(tmpUri);
       await saveUriToLibrary(trimmed);
+      if (shot.rigId) {
+        await saveDigiShot({
+          uri: trimmed,
+          rigId: shot.rigId,
+          wbPreset: shot.wbPreset,
+          evBias: shot.evBias,
+        });
+      }
       setSaved(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: unknown) {
@@ -1042,9 +1053,6 @@ export default function PhotoBoothScreen() {
   // ─── Reset ────────────────────────────────────────────────────────────────
   const handleReset = () => {
     setShot(null);
-    setPlacedStickers([]);
-    setEditFilter('none');
-    setFrameColor(FRAME_COLORS[0]);
     setSaved(false);
     setSaving(false);
     setPhase('camera');
@@ -1082,166 +1090,57 @@ export default function PhotoBoothScreen() {
     );
   }
 
-  // ─── SAVE PHASE ───────────────────────────────────────────────────────────
-  if (phase === 'save') {
+  // ─── PREVIEW / SAVE ───────────────────────────────────────────────────────
+  if (phase === 'preview' && shot) {
+    const rig = shot.rigId ?? selectedRig;
+    const pw = LCD_W;
+    const ph = LCD_H;
     return (
       <View style={ms.root}>
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={ms.nav}>
-            <TouchableOpacity style={ms.backBtn} onPress={() => setPhase('edit')}>
+            <TouchableOpacity style={ms.backBtn} onPress={() => setPhase('camera')}>
               <ChevronLeft size={20} color="#FFF" />
             </TouchableOpacity>
-            <Text style={ms.navTitle}>SAVE PHOTO</Text>
+            <Text style={ms.navTitle}>PREVIEW</Text>
             <View style={{ width: 40 }} />
           </View>
-          <SaveScreen
-            photo={shot}
-            frame={frameColor}
-            stickers={placedStickers}
-            exportRef={saveExportRef}
-            onRetake={handleReset}
-            onSave={handleSave}
-            saving={saving}
-            saved={saved}
-          />
+          <ScrollView contentContainerStyle={{ alignItems: 'center', padding: 16, gap: 16 }}>
+            <View
+              ref={saveExportRef}
+              collapsable={false}
+              style={{ width: pw, height: ph, overflow: 'hidden', backgroundColor: '#000', borderRadius: 10 }}
+            >
+              <Image source={{ uri: shot.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+              <RigLookOverlay rigId={rig} w={pw} h={ph} />
+              <WbTintOverlay preset={shot.wbPreset ?? 'auto'} />
+              <EvCompensationOverlay evBias={shot.evBias ?? 0} />
+              <DigicamDateStamp rigId={rig} capturedAt={shot.capturedAt} />
+            </View>
+            {saved ? (
+              <View style={sv.savedBadge}>
+                <Check size={36} color="#00FFA3" />
+                <Text style={sv.savedText}>SAVED</Text>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => void handleSave()} disabled={saving} style={{ width: '100%' }}>
+                <LinearGradient colors={saving ? ['#333', '#222'] : ['#FF0055', '#FF5500']} style={sv.saveBtn}>
+                  {saving ? <ActivityIndicator color="#FFF" /> : (
+                    <>
+                      <Download size={20} color="#FFF" />
+                      <Text style={sv.saveBtnText}>SAVE TO GALLERY</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleReset} style={sv.retakeBtn}>
+              <RotateCcw size={16} color="#888" />
+              <Text style={sv.retakeBtnText}>NEW SHOT</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </SafeAreaView>
       </View>
-    );
-  }
-
-  // ─── EDIT PHASE ───────────────────────────────────────────────────────────
-  if (phase === 'edit') {
-    if (!shot) return null;
-
-    const ew = LCD_W;
-    const eh = LCD_H;
-    const editInner = (
-      <View style={{ width: ew, height: eh, borderRadius: 10, overflow: 'hidden', position: 'relative', backgroundColor: '#000' }}>
-        <Image source={{ uri: shot.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
-        <FilterOverlay filter={editFilter} w={ew} h={eh} />
-        <ColorGradeOverlay filter={editFilter} strength={1.12} />
-        <RigLookOverlay rigId={shot.rigId ?? selectedRig} w={ew} h={eh} />
-        <WbTintOverlay preset={shot.wbPreset ?? 'auto'} />
-        <EvCompensationOverlay evBias={shot.evBias ?? 0} />
-        <LcdRecipeHud rigId={shot.rigId ?? selectedRig} />
-      </View>
-    );
-
-    return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={ms.root}>
-          <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-            <View style={ms.nav}>
-              <TouchableOpacity style={ms.backBtn} onPress={() => setPhase('camera')}>
-                <ChevronLeft size={20} color="#FFF" />
-              </TouchableOpacity>
-              <Text style={ms.navTitle}>EDIT PHOTO</Text>
-              <TouchableOpacity style={ms.nextBtn} onPress={() => {
-                setShot(prev => (prev ? { ...prev, filter: editFilter } : null));
-                setPhase('save');
-              }}>
-                <Text style={ms.nextBtnText}>SAVE →</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={[ms.editCanvas, { minHeight: SCREEN_H * 0.42, backgroundColor: frameColor.bg, justifyContent: 'center', paddingVertical: 14 }]}>
-              <View style={[StyleSheet.absoluteFill, { borderWidth: 2, borderColor: frameColor.accent + '40' }]} pointerEvents="none" />
-
-              <LinearGradient
-                colors={['#d4d4d4', '#737373', '#404040', '#a3a3a3']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[ms.digitalBodyChrome, { alignSelf: 'center' }]}
-              >
-                <View style={[ms.digitalBody, { borderColor: 'rgba(0,0,0,0.35)' }]}>
-                  <Text style={[ms.digitalBrand, { color: 'rgba(0,0,0,0.55)' }]}>PLAY · EDIT</Text>
-                  <View
-                    style={{ position: 'relative', alignSelf: 'center' }}
-                    onLayout={e => {
-                      const { width, height } = e.nativeEvent.layout;
-                      setEditPreviewBox({ w: width, h: height });
-                    }}
-                  >
-                    {shot.rigId === 'polaroid' ? (
-                      <PolaroidFilmChrome>{editInner}</PolaroidFilmChrome>
-                    ) : (
-                      <View style={{ width: ew + 4, padding: 3, borderRadius: 12, backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#262626' }}>
-                        {editInner}
-                      </View>
-                    )}
-                    {placedStickers.map(s => (
-                      <DraggableSticker
-                        key={s.key}
-                        sticker={s}
-                        boundW={editPreviewBox.w}
-                        boundH={editPreviewBox.h}
-                        onMoveEnd={handleStickerMoveEnd}
-                        onRemove={() => setPlacedStickers(prev => prev.filter(x => x.key !== s.key))}
-                      />
-                    ))}
-                  </View>
-                </View>
-              </LinearGradient>
-            </View>
-
-            <View style={ms.editPanel}>
-              <View style={ms.editTabs}>
-                {(['filter', 'frame', 'sticker'] as const).map(tab => (
-                  <TouchableOpacity key={tab} style={[ms.editTab, editPanelTab === tab && ms.editTabActive]} onPress={() => setEditPanelTab(tab)}>
-                    <Text style={[ms.editTabLabel, editPanelTab === tab && { color: '#FF0055' }]}>
-                      {tab === 'filter' ? 'FILTER' : tab === 'frame' ? 'FRAME' : 'STICKER'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={{ flex: 1, justifyContent: 'center' }}>
-                {editPanelTab === 'filter' && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ms.chipRow}>
-                    {FILTERS.map(f => (
-                      <TouchableOpacity
-                        key={f.id}
-                        onPress={() => setEditFilter(f.id)}
-                        style={[ms.filterChip, editFilter === f.id && { borderColor: f.color, backgroundColor: f.color + '18' }]}
-                      >
-                        <Text style={[ms.filterChipLabel, { color: editFilter === f.id ? f.color : '#444' }]}>{f.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-
-                {editPanelTab === 'frame' && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ms.chipRow}>
-                    {FRAME_COLORS.map(fc => (
-                      <TouchableOpacity
-                        key={fc.id}
-                        onPress={() => setFrameColor(fc)}
-                        style={[ms.frameChip, frameColor.id === fc.id && { borderColor: fc.accent, backgroundColor: fc.accent + '20' }]}
-                      >
-                        <View style={[ms.frameChipColor, { backgroundColor: fc.bg, borderColor: fc.accent }]} />
-                        <Text style={[ms.frameChipLabel, { color: frameColor.id === fc.id ? fc.accent : '#444' }]}>{fc.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-
-                {editPanelTab === 'sticker' && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ms.chipRow}>
-                    {STICKERS.map(s => {
-                      const Ic = s.Icon;
-                      return (
-                        <TouchableOpacity key={s.id} onPress={() => addSticker(s)} style={ms.stickerChip} accessibilityLabel={s.label}>
-                          <Ic size={24} color="#FFF" strokeWidth={2} />
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-              </View>
-            </View>
-          </SafeAreaView>
-        </View>
-      </GestureHandlerRootView>
     );
   }
 
@@ -1265,11 +1164,10 @@ export default function PhotoBoothScreen() {
         isPinchToZoomEnabled={false}
       />
 
-      <FilterOverlay filter={activeFilter} w={vfInnerW} h={vfInnerH} />
-      <ColorGradeOverlay filter={activeFilter} strength={1.12} />
       <RigLookOverlay rigId={selectedRig} w={vfInnerW} h={vfInnerH} />
       <WbTintOverlay preset={wbPreset} />
       <EvCompensationOverlay evBias={evBias} />
+      <DigicamDateStamp rigId={selectedRig} />
 
       <Animated.View
         pointerEvents="none"
@@ -1293,69 +1191,94 @@ export default function PhotoBoothScreen() {
 
           {/* NAV */}
           <View style={ms.nav}>
-            <TouchableOpacity style={ms.backBtn} onPress={goBack}>
-              <ChevronLeft size={20} color="#FFF" />
-            </TouchableOpacity>
+            <MinimalBackButton onPress={goBack} color="#FFF" size={24} />
             <View style={{ alignItems: 'center', gap: 2, flex: 1 }}>
               <Text style={ms.navTitle}>DIGI CAM</Text>
-              <Text style={ms.navFormatHint}>Pick a look → tune settings → shoot</Text>
+              <Text style={ms.navFormatHint}>{activeRigMeta.brand} {activeRigMeta.model}</Text>
             </View>
-            <View style={{ width: 40 }} />
+            <TouchableOpacity
+              style={ms.backBtn}
+              onPress={() => router.push('/photobooth-gallery')}
+              accessibilityLabel="Digi cam roll"
+            >
+              <ImageIcon size={20} color="#FFF" />
+            </TouchableOpacity>
           </View>
 
           <ScrollView
-            style={ms.cameraPageScroll}
-            contentContainerStyle={ms.cameraPageScrollContent}
+            style={ms.compactCamScroll}
+            contentContainerStyle={ms.compactCamContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
           >
-            {/* ── 1 · Camera look (rig picker — own card, never under settings) ── */}
-            <View style={ms.sectionCard}>
-              <Text style={ms.sectionKicker}>1 · LOOK</Text>
-              <Text style={ms.sectionTitle}>Camera body</Text>
-              <Text style={ms.sectionHint}>
-                Choose the “body” that matches the vibe. The live preview below uses this look.
-              </Text>
-              <View style={ms.sectionActiveLine}>
-                <Text style={ms.sectionActiveLabel}>SELECTED</Text>
-                <Text style={[ms.sectionActiveValue, { color: activeRigMeta.grad[1] }]} numberOfLines={1}>
-                  {activeRigMeta.brand} {activeRigMeta.model}
-                </Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={ms.rigStripScroll}
-                contentContainerStyle={ms.rigStripContent}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={ms.rigStripContent}
+              style={ms.rigStripScroll}
+            >
+              {CAMERA_RIGS.map(rig => {
+                const sel = selectedRig === rig.id;
+                return (
+                  <TouchableOpacity key={rig.id} onPress={() => applyRig(rig.id)} activeOpacity={0.9}>
+                    <LinearGradient
+                      colors={rig.grad}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[ms.rigCard, sel && ms.rigCardActive]}
+                    >
+                      <Text style={ms.rigBrand}>{rig.brand}</Text>
+                      <Text style={ms.rigModel}>{rig.model}</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={ms.lcdSection}>
+              <LinearGradient
+                colors={['#d4d4d4', '#737373', '#404040', '#a3a3a3']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={ms.digitalBodyChrome}
               >
-                {CAMERA_RIGS.map(rig => {
-                  const sel = selectedRig === rig.id;
-                  return (
-                    <TouchableOpacity key={rig.id} onPress={() => applyRig(rig.id)} activeOpacity={0.9}>
-                      <LinearGradient
-                        colors={rig.grad}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={[ms.rigCard, sel && ms.rigCardActive]}
-                      >
-                        <Text style={ms.rigBrand}>{rig.brand}</Text>
-                        <Text style={ms.rigModel}>{rig.model}</Text>
-                        <Text style={ms.rigTag} numberOfLines={1}>{rig.tagline}</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                <View style={[ms.digitalBody, { flexDirection: 'column', gap: 10 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <View style={ms.digicamTopPlate}>
+                        <Text style={ms.digicamTopPlateL}>REC</Text>
+                        <Text style={ms.digicamTopPlateC}>{activeRigMeta.brand} {activeRigMeta.model}</Text>
+                        <Text style={ms.digicamTopPlateR}>HQ</Text>
+                      </View>
+                      <GestureDetector gesture={vfGestures}>
+                        <View style={[ms.digitalSensor, { borderColor: activeRigMeta.grad[1] }]}>
+                          <View style={[ms.digitalSensorInner, { transform: [{ scale: 0.82 + zoom * 0.22 }] }]}>
+                            {liveCameraStack}
+                          </View>
+                        </View>
+                      </GestureDetector>
+                    </View>
+                    <View style={ms.gripRail} pointerEvents="none">
+                      <View style={ms.gripGroove} />
+                      <View style={ms.gripGroove} />
+                      <View style={ms.gripGroove} />
+                      <View style={ms.gripGroove} />
+                    </View>
+                  </View>
+                  <View style={ms.lcdMetaPanel}>
+                    <View style={ms.lcdMetaRow}>
+                      <Text style={ms.lcdMetaFocal}>{mmFromZoom(selectedRig, zoom)}</Text>
+                      <Text style={ms.lcdMetaEvLine}>
+                        EV {evBias >= 0 ? '+' : ''}{evBias.toFixed(Math.abs(evBias) < 0.15 ? 2 : 1)} · ISO {isoReadout} · WB {wbPresetShort(wbPreset)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </LinearGradient>
             </View>
 
-            {/* ── 2 · WB / flash / timer / EV — separate card ── */}
-            <View style={ms.sectionCard}>
-              <Text style={ms.sectionKicker}>2 · SETTINGS</Text>
-              <Text style={ms.sectionTitle}>Exposure & light</Text>
-              <Text style={ms.sectionHint}>
-                WB and EV change the preview (and are baked in when you shoot). Flash uses the lamp on back camera when set to ON.
-              </Text>
-              <View style={ms.settingsInner}>
+            <View style={ms.settingsInner}>
                 <View style={ms.toolbeltRow}>
                   <TouchableOpacity style={ms.controlBtn} onPress={cycleWb} activeOpacity={0.85}>
                     <Text style={ms.controlLabel}>WB</Text>
@@ -1397,66 +1320,9 @@ export default function PhotoBoothScreen() {
                     thumbTintColor="#FFF"
                   />
                 </View>
-              </View>
             </View>
 
-            {/* ── 3 · LCD body (only the “camera” chrome + preview) ── */}
-            <View style={ms.sectionCard}>
-              <Text style={ms.sectionKicker}>3 · LCD</Text>
-              <Text style={ms.sectionTitle}>Live preview</Text>
-              <Text style={ms.sectionHint}>Pinch inside the frame to zoom. Readouts under the screen update live.</Text>
-              <View style={ms.lcdSection}>
-                <LinearGradient
-                  colors={['#d4d4d4', '#737373', '#404040', '#a3a3a3']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={ms.digitalBodyChrome}
-                >
-                  <View style={[ms.digitalBody, { flexDirection: 'column', gap: 10 }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
-                      <View style={{ flex: 1 }}>
-                        <View style={ms.digicamTopPlate}>
-                          <Text style={ms.digicamTopPlateL}>REC</Text>
-                          <Text style={ms.digicamTopPlateC}>{activeRigMeta.brand} {activeRigMeta.model}</Text>
-                          <Text style={ms.digicamTopPlateR}>HQ</Text>
-                        </View>
-                        <GestureDetector gesture={vfGestures}>
-                          <View style={[ms.digitalSensor, { borderColor: activeRigMeta.grad[1] }]}>
-                            <View style={[ms.digitalSensorInner, { transform: [{ scale: 0.82 + zoom * 0.22 }] }]}>
-                              {liveCameraStack}
-                            </View>
-                          </View>
-                        </GestureDetector>
-                      </View>
-                      <View style={ms.gripRail} pointerEvents="none">
-                        <View style={ms.gripGroove} />
-                        <View style={ms.gripGroove} />
-                        <View style={ms.gripGroove} />
-                        <View style={ms.gripGroove} />
-                      </View>
-                    </View>
-                    <View style={ms.lcdMetaPanel}>
-                      <View style={ms.lcdMetaRow}>
-                        <Text style={ms.lcdMetaFocal}>{mmFromZoom(selectedRig, zoom)}</Text>
-                        <Text style={ms.lcdMetaEvLine}>
-                          EV {evBias >= 0 ? '+' : ''}{evBias.toFixed(Math.abs(evBias) < 0.15 ? 2 : 1)} · ISO {isoReadout} · WB {wbPresetShort(wbPreset)}
-                        </Text>
-                      </View>
-                      {RIG_LCD_LINES[selectedRig].map((line, i) => (
-                        <Text key={i} style={ms.lcdMetaRecipe} numberOfLines={1}>{line}</Text>
-                      ))}
-                    </View>
-                  </View>
-                </LinearGradient>
-              </View>
-            </View>
-
-            {/* ── 4 · Shutter row ── */}
-            <View style={ms.sectionCard}>
-              <Text style={ms.sectionKicker}>4 · CAPTURE</Text>
-              <Text style={ms.sectionTitle}>Shutter & gallery</Text>
-              <Text style={ms.sectionHint}>Import a photo, flip the lens, or shoot. After shooting you can edit frames and stickers before saving.</Text>
-              <View style={ms.shutterRow}>
+            <View style={ms.shutterRow}>
                 <View style={ms.shutterDock}>
                   <TouchableOpacity style={ms.dockThumb} onPress={pickFromGallery} activeOpacity={0.85} accessibilityLabel="Import from gallery">
                     {previewThumbUri ? (
@@ -1490,7 +1356,7 @@ export default function PhotoBoothScreen() {
 
                 {canGoEdit ? (
                   <TouchableOpacity
-                    onPress={() => { setEditFilter(activeFilter); setPhase('edit'); }}
+                    onPress={() => setPhase('preview')}
                     style={ms.editLinkRow}
                     activeOpacity={0.85}
                   >
@@ -1498,12 +1364,7 @@ export default function PhotoBoothScreen() {
                     <Text style={ms.editLinkTxt}>Review last shot</Text>
                   </TouchableOpacity>
                 ) : null}
-
-                <Text style={ms.hintStrip}>
-                  Gallery saves the flat photo (look + filters + stickers). Edit frame colors are not in the file. EV / WB lock in at shutter.
-                </Text>
               </View>
-            </View>
           </ScrollView>
 
         </SafeAreaView>
@@ -1537,6 +1398,12 @@ const ms = StyleSheet.create({
   rigPill:       { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: SCREEN_W * 0.5 },
   rigPillText:   { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
 
+  compactCamScroll: { flex: 1 },
+  compactCamContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 28,
+    gap: 12,
+  },
   cameraPageScroll:        { flex: 1 },
   cameraPageScrollContent: { paddingTop: 6, paddingBottom: 32 },
   sectionCard:             { marginHorizontal: 12, marginBottom: 14, padding: 14, borderRadius: 18, backgroundColor: '#0c0c0c', borderWidth: 1, borderColor: '#242424' },

@@ -1,9 +1,9 @@
-import { Redirect } from 'expo-router';
+import { View } from 'react-native';
 
 /**
- * Resolves bare `/` and dev URLs ending in `/--/` so the app never opens on “Unmatched route”.
- * Post-splash routing still runs from `app/_layout.tsx` (onboarding / auth / calendar).
+ * Bare `/` resolves here. Post-splash routing runs from `app/_layout.tsx`.
+ * Avoid <Redirect> on first paint — it races the root Stack mount.
  */
 export default function RootIndex() {
-  return <Redirect href="/calendar" />;
+  return <View style={{ flex: 1 }} />;
 }

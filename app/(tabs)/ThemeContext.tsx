@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { HOBBY_WEEKLY_SWIPES } from '../_lib/appConfig';
@@ -662,7 +662,6 @@ interface ThemeContextType {
   swipesLeft: number;
   useSwipe: () => boolean;
   openSubscription: () => void;
-  onSubscriptionOpen: (() => void) | null;
   setOnSubscriptionOpen: (fn: () => void) => void;
   user: UserProfile | null;
   setUser: (u: UserProfile | null) => void;
@@ -686,11 +685,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [swipesLeft, setSwipesLeft] = useState(HOBBY_WEEKLY_SWIPES);
   const [plan, setPlanState] = useState<PlanType>('free');
   const [bonusSwipes, setBonusSwipes] = useState(0);
-  const [subOpenFn, setSubOpenFn] = useState<(() => void) | null>(null);
   const subOpenFnRef = useRef<(() => void) | null>(null);
   const isProRef = useRef(false);
   const isAdminRef = useRef(false);
-  useEffect(() => { subOpenFnRef.current = subOpenFn; }, [subOpenFn]);
   useEffect(() => { isProRef.current = isPro; }, [isPro]);
   useEffect(() => { isAdminRef.current = isAdmin; }, [isAdmin]);
   const [user, setUserState] = useState<UserProfile | null>(null);
@@ -889,10 +886,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem('@dumpit_swipes', String(next));
     return true;
   };
-  const openSubscription = () => {
+  const setOnSubscriptionOpen = useCallback((fn: () => void) => {
+    subOpenFnRef.current = fn;
+  }, []);
+
+  const openSubscription = useCallback(() => {
     if (isProRef.current || isAdminRef.current) return;
     subOpenFnRef.current?.();
-  };
+  }, []);
 
   const activeTheme = THEMES[themeId] ?? THEMES.dark;
 
@@ -907,8 +908,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       isAdmin, setIsAdmin,
       swipesLeft, useSwipe,
       openSubscription,
-      onSubscriptionOpen: subOpenFn,
-      setOnSubscriptionOpen: setSubOpenFn,
+      setOnSubscriptionOpen,
       user, setUser,
       recentDumps, addRecentDump,
     }}>

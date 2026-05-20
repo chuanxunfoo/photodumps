@@ -92,7 +92,7 @@ export default function PaymentScreen() {
     setLoading(false);
     setSuccess(true);
     Animated.spring(successScale, { toValue: 1, friction: 6, useNativeDriver: true }).start();
-    setTimeout(() => router.replace('/calendar'), 2200);
+    setTimeout(() => router.replace('/hub'), 2200);
   };
 
   if (success) {

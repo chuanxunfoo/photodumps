@@ -326,7 +326,7 @@ export default function AuthScreen() {
 
   const navigateAfterAuth = async () => {
     const onboard = await AsyncStorage.getItem('@dumpit_onboard');
-    router.replace(onboard ? '/calendar' : '/onboarding');
+    router.replace(onboard ? '/hub' : '/onboarding');
   };
 
   const handleOAuth = async (provider: 'google' | 'apple') => {
@@ -415,7 +415,7 @@ export default function AuthScreen() {
         username: uname,
         isLoggedIn: true,
       });
-      router.replace('/calendar');
+      router.replace('/hub');
     } catch (err: unknown) {
       Alert.alert('Error', formatAuthError(err));
     } finally {
