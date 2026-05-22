@@ -14,7 +14,7 @@
       "react-native-compressor"
     ],
     "ios": {
-      "bundleIdentifier": "com.yourname.dumplt",
+      "bundleIdentifier": "com.yourname.dumpitapp",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow Dumplt to access photos.",
         "ITSAppUsesNonExemptEncryption": false
@@ -29,7 +29,7 @@
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO"
       ],
-      "package": "com.yourname.dumplt"
+      "package": "com.yourname.dumpitapp"
     },
     "extra": {
       "eas": {

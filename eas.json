@@ -7,19 +7,22 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "ios": {
+        "image": "latest"
+      },
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "0"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "0"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "0"
       }
     }
   }

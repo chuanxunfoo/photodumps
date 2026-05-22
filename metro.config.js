@@ -11,16 +11,20 @@ try {
 const projectRoot = __dirname;
 const config = getDefaultConfig(projectRoot);
 
-/** Real native ML only when Metro starts with EXPO_PUBLIC_NATIVE_CUTOUT=1 */
-const useNativeCutout = process.env.EXPO_PUBLIC_NATIVE_CUTOUT === '1';
-
-const SHIMMED = new Set(['rn-remove-image-bg', 'react-native-nitro-modules']);
-const shimPath = path.resolve(projectRoot, 'app/_lib/stickerStudio/shims/noNativeCutout.ts');
+const cutoutShim = path.resolve(projectRoot, 'app/_lib/stickerStudio/shims/noNativeCutout.ts');
+const nitroShim = path.resolve(projectRoot, 'app/_lib/stickerStudio/shims/noNitroModules.ts');
 const defaultResolve = config.resolver.resolveRequest;
 
+/** Native cutout packages are not installed for EAS; always resolve to shims (cloud/WASM cutout). */
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (!useNativeCutout && SHIMMED.has(moduleName)) {
-    return { type: 'sourceFile', filePath: shimPath };
+  if (moduleName === 'rn-remove-image-bg') {
+    return { type: 'sourceFile', filePath: cutoutShim };
+  }
+  if (
+    moduleName === 'react-native-nitro-modules' ||
+    moduleName.startsWith('react-native-nitro-modules/')
+  ) {
+    return { type: 'sourceFile', filePath: nitroShim };
   }
   if (defaultResolve) {
     return defaultResolve(context, moduleName, platform);
