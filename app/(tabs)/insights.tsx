@@ -3,7 +3,6 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import {
-  Activity as ActivityIcon,
   RefreshCw,
   Sparkles,
   TrendingUp,
@@ -23,6 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
+import { GlassTicker } from '../components/GlassTicker';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { getLocaleUi } from '../_lib/localeUi';
 import { resetStatsSession, getOrCreateStatsSessionId, getStatsSessionId } from '../_lib/statsSession';
@@ -256,12 +256,11 @@ export default function InsightsScreen() {
             </LinearGradient>
           </Animated.View>
 
-          <LinearGradient colors={[theme.accent, '#7c3aed']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.singleTicker}>
-            <ActivityIcon size={14} color="#fff" />
-            <Text style={styles.singleTickerTxt}>
-              {u.insightsLibraryPulse} · {analytics.totalCount} · {u.insightsScreenshots} {analytics.ssCount}
-            </Text>
-          </LinearGradient>
+          <GlassTicker
+            text={`${u.insightsLibraryPulse} · ${analytics.totalCount} · ${u.insightsScreenshots} ${analytics.ssCount}`}
+            hues={[theme.accent, '#7c3aed', '#00E5FF']}
+            speed={9500}
+          />
 
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>{u.insightsAccountTotals}</Text>
           {(() => {

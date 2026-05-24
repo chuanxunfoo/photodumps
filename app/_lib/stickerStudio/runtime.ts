@@ -10,14 +10,19 @@ export function isExpoGo(): boolean {
  * Store / dev-client builds should enable via eas.json, `expo run:*`, or .env.
  */
 export function nativeCutoutBundled(): boolean {
+  if (isExpoGo()) return false;
   const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
   const flag = extra?.EXPO_PUBLIC_NATIVE_CUTOUT;
-  if (flag === '1' || flag === true) return true;
   if (flag === '0' || flag === false) return false;
+  if (flag === '1' || flag === true) {
+    return Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+  }
   return Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 }
 
 export function expoGoCutoutHint(): string {
-  if (nativeCutoutBundled()) return '';
-  return 'Expo Go uses free on-device AI cutout (Wi‑Fi for first run). Cloud API is skipped to avoid rate limits.';
+  if (nativeCutoutBundled()) {
+    return 'On-device cutout is enabled — use a dev build on your phone for the fastest results.';
+  }
+  return 'Expo Go uses slower in-browser AI. Run npm run ios (Apple Developer build) for 1–4 second on-device cutout.';
 }

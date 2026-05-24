@@ -12,17 +12,16 @@ import { cropPhotoAroundViewportPoint, normalizePhotoForCollage } from '../_lib/
 import {
   CutoutError,
   cutoutErrorMessage,
-  extractSubject,
+  cutoutFromPreparedFile,
+  hasRemoveBgApiKey,
   prepareLiveScanPhoto,
   preparePhotoUri,
-  tryCloudCutoutOnly,
 } from '../_lib/stickerStudio/cutoutEngine';
 import type { CutoutPipeline } from '../_lib/stickerStudio/cutoutProgress';
 import { isExpoGo, nativeCutoutBundled } from '../_lib/stickerStudio/runtime';
 import { LiveStickerCamera } from '../components/sticker-studio/LiveStickerCamera';
-import { StickerStepBar } from '../components/sticker-studio/StickerStepBar';
-import { StickerCutoutLoading } from '../components/sticker-studio/StickerCutoutLoading';
 import { StickerEditorScreen } from '../components/sticker-studio/StickerEditorScreen';
+import { StickerCollectionSheet } from '../components/sticker-studio/StickerCollectionSheet';
 import { StickerPreviewModal } from '../components/sticker-studio/StickerPreviewModal';
 import { StickerSaveCelebration } from '../components/sticker-studio/StickerSaveCelebration';
 import { StickerStudioHub } from '../components/sticker-studio/StickerStudioHub';
@@ -47,7 +46,6 @@ import {
   Dimensions,
   Image,
   ImageBackground,
-  InteractionManager,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,6 +55,8 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
+import { getExploreCopy } from '../_lib/localeContent';
+import { getLocaleUi } from '../_lib/localeUi';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -73,7 +73,9 @@ const yieldToUi = () =>
 
 export default function StickerStudioScreen() {
   const goBack = useExploreAwareBack();
-  const { theme } = useTheme();
+  const { theme, language } = useTheme();
+  const ex = getExploreCopy(language);
+  const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
 
   const [phase, setPhase] = useState<Phase>('hub');
@@ -96,6 +98,8 @@ export default function StickerStudioScreen() {
   const [wasmModelsReady, setWasmModelsReady] = useState(false);
   const [previewSticker, setPreviewSticker] = useState<SavedSticker | null>(null);
   const [showSaveCelebration, setShowSaveCelebration] = useState(false);
+  const [absorbUri, setAbsorbUri] = useState<string | null>(null);
+  const [showCollection, setShowCollection] = useState(false);
   const [liveStillUri, setLiveStillUri] = useState<string | null>(null);
   const [liveScanning, setLiveScanning] = useState(false);
   const [liveScanError, setLiveScanError] = useState<string | null>(null);
@@ -205,21 +209,23 @@ export default function StickerStudioScreen() {
   );
 
   const runCutout = async (uri: string, stayOnLive = false): Promise<boolean> => {
+    const onProg = (pct: number, stage: string) => {
+      if (stayOnLive) setProcessStage(stage);
+      else {
+        setProcessPct(pct);
+        setProcessStage(stage);
+      }
+    };
+
     let fileUri: string;
     try {
-      if (!stayOnLive) {
-        setProcessPct(10);
-        setProcessStage('Resizing photo…');
-        await yieldToUi();
-      } else {
-        setProcessStage('Preparing…');
-      }
+      if (!stayOnLive) setProcessPct(8);
       fileUri = stayOnLive ? await prepareLiveScanPhoto(uri) : await preparePhotoUri(uri);
       setSourceUri(fileUri);
-      if (!stayOnLive) setProcessPct(18);
     } catch {
       if (stayOnLive) {
         setLiveScanning(false);
+        setLiveScanError('Could not read the photo. Try another image from your gallery.');
         return false;
       }
       Alert.alert(
@@ -230,56 +236,14 @@ export default function StickerStudioScreen() {
       return false;
     }
 
-    if (isExpoGo() && !nativeCutoutBundled()) {
-      try {
-        const cloud = await tryCloudCutoutOnly(fileUri, (pct, stage) => {
-          if (stayOnLive) setProcessStage(stage || 'Cutting out…');
-          else {
-            setProcessPct(pct);
-            setProcessStage(stage);
-          }
-        });
-        if (cloud) {
-          await finishCutout(cloud.uri, 'removebg', stayOnLive);
-          if (stayOnLive) setLiveScanError(null);
-          return true;
-        }
-      } catch (e) {
-        if (e instanceof CutoutError && e.code !== 'RATE_LIMITED' && e.code !== 'CLOUD_FAILED') {
-          if (stayOnLive) {
-            setLiveScanning(false);
-            setLiveScanError(cutoutErrorMessage(e));
-            return false;
-          }
-          Alert.alert('Could not cut out subject', cutoutErrorMessage(e));
-          setPhase('hub');
-          return false;
-        }
-        if (stayOnLive && e instanceof CutoutError && e.code === 'RATE_LIMITED') {
-          setProcessStage('Retrying on device…');
-        }
-      }
-      if (stayOnLive) {
-        setProcessStage('Cutting out…');
-        wasmBusyRef.current = true;
-        setWasmCutoutUri(fileUri);
-        return false;
-      }
-      await yieldToUi();
-      startWasmCutout(fileUri);
-      return false;
-    }
-
-    const pipeline: CutoutPipeline = nativeCutoutBundled() ? 'native' : 'cloud';
-    setCutoutPipeline(pipeline);
+    setCutoutPipeline(
+      nativeCutoutBundled() ? 'native' : hasRemoveBgApiKey() ? 'cloud' : 'wasm',
+    );
 
     try {
-      const result = await extractSubject(fileUri, (pct, stage) => {
-        if (stayOnLive) setProcessStage(stage);
-        else {
-          setProcessPct(pct);
-          setProcessStage(stage);
-        }
+      const result = await cutoutFromPreparedFile(fileUri, onProg, {
+        cloudSize: stayOnLive ? 'preview' : 'small',
+        nativeMaxDimension: stayOnLive ? 480 : 640,
       });
       const method = result.method === 'imported' ? 'wasm' : result.method;
       await finishCutout(result.uri, method, stayOnLive);
@@ -287,30 +251,16 @@ export default function StickerStudioScreen() {
       return true;
     } catch (e) {
       if (e instanceof CutoutError && e.message === 'EXPO_GO_WASM') {
-        if (stayOnLive) {
-          wasmBusyRef.current = true;
-          setWasmCutoutUri(fileUri);
-          return false;
-        }
-        startWasmCutout(fileUri);
-        return false;
-      }
-      if (
-        e instanceof CutoutError &&
-        (e.code === 'RATE_LIMITED' || e.code === 'CLOUD_FAILED') &&
-        isExpoGo()
-      ) {
-        if (stayOnLive) {
-          wasmBusyRef.current = true;
-          setWasmCutoutUri(fileUri);
-          return false;
-        }
-        startWasmCutout(fileUri);
+        wasmBusyRef.current = true;
+        setWasmCutoutUri(fileUri);
+        if (!stayOnLive) startWasmCutout(fileUri);
         return false;
       }
       if (stayOnLive) {
         setLiveScanning(false);
-        setLiveScanError('Could not detect the object — tap it on screen to help AI.');
+        setLiveScanError(
+          e instanceof CutoutError ? cutoutErrorMessage(e) : 'Could not detect the object — tap to retry.',
+        );
         return false;
       }
       Alert.alert('Could not cut out subject', cutoutErrorMessage(e), [{ text: 'OK', style: 'cancel' }]);
@@ -318,19 +268,27 @@ export default function StickerStudioScreen() {
       setWasmCutoutUri(null);
       return false;
     }
-    return false;
   };
 
-  const enterLive = useCallback(async (stillUri?: string) => {
+  const enterLive = useCallback(async (galleryUri?: string) => {
     setCutout(null);
+    setAbsorbUri(null);
     setLiveScanError(null);
-    setLiveStillUri(stillUri ?? null);
-    if (!stillUri) {
-      const perm = await requestCamPerm();
-      if (!perm?.granted) {
-        Alert.alert('Camera needed', 'Allow camera to scan objects for stickers.');
-        return;
-      }
+    setLiveStillUri(galleryUri ?? null);
+    const perm = await requestCamPerm();
+    if (!perm?.granted) {
+      Alert.alert(
+        'Camera needed',
+        galleryUri
+          ? 'Allow camera for the live view while your photo is cut out.'
+          : 'Allow camera to scan objects for stickers.',
+      );
+      return;
+    }
+    if (galleryUri) {
+      liveScanGen.current += 1;
+      setLiveScanning(true);
+      setProcessStage('');
     }
     setPhase('live');
   }, [requestCamPerm]);
@@ -338,46 +296,43 @@ export default function StickerStudioScreen() {
   const pickFromGallery = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      if (status !== 'granted' && status !== 'limited') {
         Alert.alert('Permission needed', 'Allow photo library access to pick a sticker image.');
         return;
       }
-      await new Promise<void>(resolve => {
-        InteractionManager.runAfterInteractions(() => {
-          requestAnimationFrame(() => resolve());
-        });
-      });
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.72,
+        quality: 0.55,
         allowsEditing: false,
+        copyToCacheDirectory: true,
       });
-      if (res.canceled || !res.assets[0]?.uri) return;
-      await enterLive(res.assets[0].uri);
+      const uri = res.assets?.[0]?.uri;
+      if (res.canceled || !uri) return;
+      await enterLive(uri);
     } catch {
       Alert.alert('Could not open gallery', 'Try again or use the camera.');
+      if (phase !== 'live') setPhase('hub');
     }
   }, [enterLive]);
 
   const runLiveScan = useCallback(async (focus?: { x: number; y: number }) => {
-    if (liveScanLock.current) return;
+    if (liveScanLock.current && !focus) return;
+    if (liveScanLock.current && focus) liveScanGen.current += 1;
     const gen = ++liveScanGen.current;
     liveScanLock.current = true;
     setLiveScanning(true);
     setLiveScanError(null);
-    setProcessStage(focus ? 'Focusing on your tap…' : 'Scanning…');
-    if (focus) {
-      setCutout(null);
-      setWasmCutoutUri(null);
-      wasmBusyRef.current = false;
-    }
+    setCutout(null);
+    setWasmCutoutUri(null);
+    wasmBusyRef.current = false;
+    setProcessStage('');
     try {
       let uri: string | undefined;
       if (liveStillUri) {
         uri = liveStillUri;
       } else if (cameraRef.current) {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.42,
+          quality: focus ? 0.48 : 0.38,
           skipProcessing: true,
           shutterSound: false,
         });
@@ -388,7 +343,7 @@ export default function StickerStudioScreen() {
         uri = await cropPhotoAroundViewportPoint(uri, focus, {
           width: SCREEN_W,
           height: SCREEN_H,
-        });
+        }, 0.54);
       }
       if (gen !== liveScanGen.current) return;
       const ok = await runCutout(uri, true);
@@ -411,17 +366,12 @@ export default function StickerStudioScreen() {
 
   useEffect(() => {
     if (phase !== 'live') return;
-    const kick = () => {
-      if (!liveScanLock.current) void runLiveScan();
-    };
-    const t0 = setTimeout(kick, liveStillUri ? 200 : 550);
-    const interval = setInterval(() => {
-      if (!cutoutRef.current && !liveScanLock.current && !wasmBusyRef.current) kick();
-    }, 2800);
-    return () => {
-      clearTimeout(t0);
-      clearInterval(interval);
-    };
+    const t0 = setTimeout(() => {
+      if (!cutoutRef.current && !liveScanLock.current && !wasmBusyRef.current) {
+        void runLiveScan();
+      }
+    }, liveStillUri ? 60 : 160);
+    return () => clearTimeout(t0);
   }, [phase, liveStillUri, runLiveScan]);
 
   /** Pre-made transparent PNG only — camera/gallery always run AI cutout. */
@@ -430,6 +380,7 @@ export default function StickerStudioScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
       allowsEditing: false,
+      copyToCacheDirectory: true,
     });
     if (res.canceled || !res.assets[0]) return;
     beginProcessing('Opening your photo…');
@@ -446,7 +397,7 @@ export default function StickerStudioScreen() {
     else setPhase('camera');
   };
 
-  const onMakeSticker = async () => {
+  const onSaveSticker = async () => {
     if (!cutout || !previewRef.current) return;
     setSaving(true);
     try {
@@ -457,10 +408,11 @@ export default function StickerStudioScreen() {
       });
       await saveSticker({ uri, trace, sourceUri: sourceUri ?? undefined });
       await refreshLibrary();
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setLiveStillUri(null);
+      setAbsorbUri(uri);
+      setTimeout(() => setAbsorbUri(null), 900);
       setCutout(null);
-      setPhase('hub');
+      setLiveScanError(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowSaveCelebration(true);
     } catch {
       Alert.alert('Save failed', 'Could not save this sticker. Try again.');
@@ -478,6 +430,7 @@ export default function StickerStudioScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.65,
       allowsEditing: false,
+      copyToCacheDirectory: true,
     });
     if (res.canceled || !res.assets[0]) return;
     setPhase('collage-loading');
@@ -572,23 +525,24 @@ export default function StickerStudioScreen() {
         cutout={cutout}
         previewRef={previewRef}
         scanning={liveScanning}
-        scanStage={processStage}
         scanError={liveScanError}
         saving={saving}
         theme={theme}
-        stillUri={liveStillUri}
+        stickerCount={library.length}
         onBack={exitLive}
         onGallery={() => void pickFromGallery()}
         onScan={() => void runLiveScan()}
         onTapFocus={point => void runLiveScan(point)}
-        onMakeSticker={() => void onMakeSticker()}
+        onOpenCollection={() => setShowCollection(true)}
+        onSaveSticker={() => void onSaveSticker()}
+        absorbUri={absorbUri}
       />
     );
   } else if (phase === 'camera') {
     if (!camPerm?.granted) {
       screen = (
         <SafeAreaView style={[st.root, { backgroundColor: theme.bg }]}>
-          <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle="Sticker studio" />
+          <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle={ex.stickerStudio} />
           <View style={st.center}>
             <Text style={[st.muted, { color: theme.textSub }]}>Camera access is needed to snap cutouts.</Text>
             <TouchableOpacity style={st.primaryBtn} onPress={() => void requestCamPerm()}>
@@ -631,24 +585,12 @@ export default function StickerStudioScreen() {
     }
   } else if (phase === 'processing' || phase === 'collage-loading') {
   // ─── PROCESSING / COLLAGE LOADING ─────────────────────────────────────────
-    const pct = Math.min(100, Math.max(0, processPct));
     screen = (
       <View style={[st.root, { backgroundColor: '#0d0d14' }]}>
         <SafeAreaView style={st.flex} edges={['top', 'bottom']}>
-          {phase === 'processing' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-              <StickerStepBar activeIndex={1} />
-            </View>
-          )}
-          {phase === 'collage-loading' ? (
-            <View style={st.minLoadWrap}>
-              <ActivityIndicator size="large" color={theme.accent} />
-              <Text style={[st.minLoadTitle, { color: theme.text }]}>Opening collage…</Text>
-              <Text style={[st.minLoadStage, { color: theme.textSub }]}>{processStage}</Text>
-            </View>
-          ) : (
-            <StickerCutoutLoading pct={pct} stage={processStage} pipeline={cutoutPipeline} />
-          )}
+          <View style={st.minLoadWrap}>
+            <ActivityIndicator size="large" color={theme.accent} />
+          </View>
         </SafeAreaView>
       </View>
     );
@@ -659,7 +601,7 @@ export default function StickerStudioScreen() {
         trace={trace}
         onTraceChange={setTrace}
         onBack={() => setPhase('hub')}
-        onSave={() => void onMakeSticker()}
+        onSave={() => void onSaveSticker()}
         onNew={openNewCutout}
         saving={saving}
         previewRef={previewRef}
@@ -672,7 +614,7 @@ export default function StickerStudioScreen() {
     screen = (
       <GestureHandlerRootView style={[st.root, { backgroundColor: theme.bg }]}>
         <SafeAreaView style={st.flex} edges={['top']}>
-          <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle="Collage" />
+          <AppHeader variant="detail" onBack={() => setPhase('hub')} subtitle={u.collageSubtitle} />
           <View style={st.collageToolbar}>
             <TouchableOpacity style={[st.toolChip, { borderColor: theme.border }]} onPress={() => void exportCollage()} disabled={exporting}>
               {exporting ? <ActivityIndicator size="small" color={theme.accent} /> : <Download size={16} color={theme.accent} />}
@@ -738,6 +680,7 @@ export default function StickerStudioScreen() {
       <StickerStudioHub
         library={library}
         titleFont={fonts.titleFont}
+        headerSubtitle={ex.stickerStudio}
         theme={theme}
         onBack={goBack}
         onNew={openNewCutout}
@@ -756,15 +699,21 @@ export default function StickerStudioScreen() {
         visible={showSaveCelebration}
         onDone={() => {
           setShowSaveCelebration(false);
-          setPhase('hub');
-        }}
-        onCollage={() => {
-          setShowSaveCelebration(false);
-          void startCollage();
+          exitLive();
         }}
         onAnother={() => {
           setShowSaveCelebration(false);
           openNewCutout();
+        }}
+      />
+      <StickerCollectionSheet
+        visible={showCollection}
+        library={library}
+        theme={theme}
+        onClose={() => setShowCollection(false)}
+        onStickerPress={s => {
+          setShowCollection(false);
+          setPreviewSticker(s);
         }}
       />
       <StickerPreviewModal

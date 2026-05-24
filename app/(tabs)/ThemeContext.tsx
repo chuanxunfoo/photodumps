@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 
@@ -29,9 +30,8 @@ export type ThemeId =
   | 'dark' | 'light'
   | 'cyberpunk' | 'vintage' | 'zen' | 'y2k' | 'nordic' | 'brutalist';
 
-export type LanguageId =
-  | 'en' | 'es' | 'fr' | 'it' | 'pt' | 'de'
-  | 'ja' | 'ko' | 'zh' | 'tr' | 'ar' | 'ru' | 'ms';
+export type { LanguageId } from '../_lib/i18n/supported';
+import { LANGUAGE_LABELS, normalizeLanguage, type LanguageId } from '../_lib/i18n/supported';
 
 export interface ThemeColors {
   bg: string; bg2: string; bg3: string; card: string;
@@ -219,9 +219,12 @@ function ScanlineOverlay({ opacity }: { opacity: number }) {
 }
 
 export const LANGUAGES: Record<LanguageId, string> = {
-  en: 'English 🇬🇧', es: 'Español 🇪🇸', fr: 'Français 🇫🇷', it: 'Italiano 🇮🇹',
-  pt: 'Português 🇵🇹', de: 'Deutsch 🇩🇪', ja: '日本語 🇯🇵', ko: '한국어 🇰🇷',
-  zh: '中文 🇨🇳', tr: 'Türkçe 🇹🇷', ar: 'العربية 🇸🇦', ru: 'Русский 🇷🇺', ms: 'Melayu 🇲🇾',
+  en: `${LANGUAGE_LABELS.en} 🇬🇧`,
+  es: `${LANGUAGE_LABELS.es} 🇪🇸`,
+  fr: `${LANGUAGE_LABELS.fr} 🇫🇷`,
+  ja: `${LANGUAGE_LABELS.ja} 🇯🇵`,
+  ko: `${LANGUAGE_LABELS.ko} 🇰🇷`,
+  zh: `${LANGUAGE_LABELS.zh} 🇨🇳`,
 };
 
 // ─── TRANSLATIONS ────────────────────────────────────────────────────
@@ -633,10 +636,10 @@ const T: Record<LanguageId, Translations> = {
   },
 };
 
-export const getTranslations = (lang: LanguageId): Translations => ({
-  ...T.en,
-  ...(T[lang] ?? {}),
-});
+export const getTranslations = (lang: LanguageId): Translations => {
+  const id = normalizeLanguage(lang);
+  return { ...T.en, ...(T[id] ?? {}) };
+};
 
 export interface UserProfile {
   uid: string;
@@ -753,7 +756,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           setThemeIdState(next);
           if (next !== raw) void AsyncStorage.setItem('@dumpit_theme', next);
         }
-        if (l) setLanguageState(l as LanguageId);
+        if (l) {
+          const norm = normalizeLanguage(l);
+          setLanguageState(norm);
+          if (norm !== l) void AsyncStorage.setItem('@dumpit_lang', norm);
+        }
         if (dumps) setRecentDumps(JSON.parse(dumps));
         if (bonusVal != null && bonusVal !== '') {
           const b = parseInt(bonusVal, 10);
@@ -811,8 +818,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('@dumpit_theme', id);
   };
   const setLanguage = async (id: LanguageId) => {
-    setLanguageState(id);
-    await AsyncStorage.setItem('@dumpit_lang', id);
+    const norm = normalizeLanguage(id);
+    setLanguageState(norm);
+    await AsyncStorage.setItem('@dumpit_lang', norm);
   };
   const setIsPro = async (v: boolean) => {
     const uid = userRef.current?.uid;
@@ -892,7 +900,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const openSubscription = useCallback(() => {
     if (isProRef.current || isAdminRef.current) return;
-    subOpenFnRef.current?.();
+    try {
+      router.push('/subscription');
+    } catch {
+      setTimeout(() => router.push('/subscription'), 50);
+    }
   }, []);
 
   const activeTheme = THEMES[themeId] ?? THEMES.dark;

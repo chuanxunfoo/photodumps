@@ -7,4 +7,4 @@ export const STUDIO = {
   warm: ['#FFD54F', '#FF8EC7'] as const,
 };
 
-export const STUDIO_STEPS = ['Photo', 'Magic cut', 'Style', 'Save'] as const;
+export const STUDIO_STEPS = ['Photo', 'Cutout', 'Style', 'Home'] as const;

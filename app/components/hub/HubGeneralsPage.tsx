@@ -7,9 +7,10 @@ import {
   ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SubscriptionModal } from '../../(tabs)/SubscriptionModal';
+import { router } from 'expo-router';
 import { hubPush } from '../../_lib/exploreBack';
 import { getExploreCopy } from '../../_lib/localeContent';
+import { getLocaleUi } from '../../_lib/localeUi';
 import { PREMIUM_THEMES, resolveTypeface, useTheme } from '../../(tabs)/ThemeContext';
 import { HubPageChrome } from './HubPageChrome';
 import { SupportModal } from './SupportModal';
@@ -30,21 +31,27 @@ export default function HubGeneralsPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, isPro, isAdmin, openSubscription, themeId, setThemeId, language } = useTheme();
   const ex = getExploreCopy(language);
+  const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
   const vibe = exploreBannerVibe(themeId, theme.isDark);
   const bannerColors = useMemo(() => assignUniqueBannerGradients(vibe, [...GENERAL_SLOTS]), [vibe]);
   const color = (slot: number) => bannerColors.get(slot);
-  const [showSub, setShowSub] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
   const [showLang, setShowLang] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
-  const openSubModal = useCallback(() => setShowSub(true), []);
+  const openSubPage = useCallback(() => {
+    try {
+      router.push('/subscription');
+    } catch {
+      setTimeout(() => router.push('/subscription'), 50);
+    }
+  }, []);
   const go = (pathname: Parameters<typeof hubPush>[0]) => () => hubPush(pathname, 'generals');
 
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <HubPageChrome active={active} sectionLabel="Generals" onSubscriptionModal={() => setShowSub(true)}>
+        <HubPageChrome active={active} sectionLabel={u.hubGenerals}>
           <ScrollView
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
@@ -151,7 +158,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
                 <Text style={es.klFooterTitle}>{ex.footerMadeIn}</Text>
                 <Text style={es.klFooterSub}>{ex.footerSub}</Text>
                 <View style={{ flexDirection: 'row', gap: 16, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <TouchableOpacity onPress={() => { if (isPro || isAdmin) openSubModal(); else openSubscription(); }}>
+                  <TouchableOpacity onPress={() => { if (isPro || isAdmin) openSubPage(); else openSubscription(); }}>
                     <Text style={es.klLink}>{ex.footerRestore}</Text>
                   </TouchableOpacity>
                   <Text style={es.klLink}>v3.0</Text>
@@ -162,7 +169,6 @@ export default function HubGeneralsPage({ active = false }: Props) {
           </ScrollView>
         </HubPageChrome>
       </SafeAreaView>
-      <SubscriptionModal visible={showSub} onClose={() => setShowSub(false)} />
       <ThemeModal visible={showTheme} onClose={() => setShowTheme(false)} />
       <LanguageModal visible={showLang} onClose={() => setShowLang(false)} />
       <SupportModal visible={showSupport} onClose={() => setShowSupport(false)} copy={ex} />

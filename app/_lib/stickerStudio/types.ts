@@ -22,11 +22,14 @@ export type LegacyFrameId =
 
 export type CutoutMethod = 'native' | 'removebg' | 'wasm' | 'imported';
 
+export type StickerCategory = 'food' | 'drinks' | 'items' | 'people';
+
 export type SavedSticker = {
   id: string;
   uri: string;
   trace: TraceSettings;
   createdAt: number;
+  category?: StickerCategory;
   sourceUri?: string;
   /** @deprecated migrated on load */
   frameId?: LegacyFrameId;

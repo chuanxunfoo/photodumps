@@ -1,16 +1,16 @@
-import { Image as ImageIcon, Layers, Plus, Sticker } from 'lucide-react-native';
-import React from 'react';
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image as ImageIcon, Layers, Plus } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../AppHeader';
 import type { SavedSticker } from '../../_lib/stickerStudio/types';
+import { StickerPhysicsJar } from './StickerPhysicsJar';
+import {
+  filterStickerLibrary,
+  stickerFilterCounts,
+  visibleStickerFilters,
+  type StickerHubFilterId,
+} from './stickerHubFilters';
 
 type ThemeSlice = {
   bg: string;
@@ -28,6 +28,7 @@ type ThemeSlice = {
 type Props = {
   library: SavedSticker[];
   titleFont?: string;
+  headerSubtitle: string;
   theme: ThemeSlice;
   onBack: () => void;
   onNew: () => void;
@@ -36,9 +37,12 @@ type Props = {
   onStickerPress: (s: SavedSticker) => void;
 };
 
+const SAGE = '#8FAF7E';
+
 export function StickerStudioHub({
   library,
   titleFont,
+  headerSubtitle,
   theme,
   onBack,
   onNew,
@@ -46,20 +50,74 @@ export function StickerStudioHub({
   onCollage,
   onStickerPress,
 }: Props) {
+  const [filter, setFilter] = useState<StickerHubFilterId>('all');
+
+  const filtered = useMemo(() => filterStickerLibrary(library, filter), [library, filter]);
+
+  const filters = useMemo(() => visibleStickerFilters(library), [library]);
+  const counts = useMemo(() => stickerFilterCounts(library), [library]);
+
+  useEffect(() => {
+    if (!filters.some(f => f.id === filter)) setFilter('all');
+  }, [filters, filter]);
+
   return (
     <View style={[st.root, { backgroundColor: theme.bg }]}>
       <SafeAreaView style={st.flex} edges={['top']}>
-        <AppHeader variant="detail" onBack={onBack} subtitle="Stickers & collage" />
+        <AppHeader variant="detail" onBack={onBack} subtitle={headerSubtitle} />
+
         <ScrollView
           contentContainerStyle={st.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
         >
-          <View style={st.intro}>
-            <Text style={[st.title, { color: theme.text, fontFamily: titleFont }]}>Sticker studio</Text>
-            <Text style={[st.sub, { color: theme.textSub }]}>
-              Pick a style, scan any object with the camera, or use a photo from your gallery.
-            </Text>
+          <Text style={[st.pageTitle, { color: theme.text, fontFamily: titleFont }]}>Your stickers</Text>
+
+          <StickerPhysicsJar stickers={filtered} theme={theme} onStickerPress={onStickerPress} />
+
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={st.filterRow}
+            style={st.filterScroll}
+          >
+            {filters.map(f => {
+              const on = filter === f.id;
+              const n = counts[f.id];
+              return (
+                <TouchableOpacity
+                  key={f.id}
+                  activeOpacity={0.88}
+                  onPress={() => setFilter(f.id)}
+                  style={[
+                    st.chip,
+                    {
+                      backgroundColor: on ? SAGE : theme.bg2,
+                      borderColor: on ? SAGE : theme.border,
+                    },
+                  ]}
+                >
+                  <Text style={[st.chipTxt, { color: on ? '#1a1a1a' : theme.textSub }]}>
+                    {f.label}
+                    {n > 0 ? ` · ${n}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={[st.statsRow, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
+            <View style={st.statCell}>
+              <Text style={[st.statLbl, { color: theme.textMuted }]}>Total</Text>
+              <Text style={[st.statVal, { color: SAGE }]}>{library.length}</Text>
+            </View>
+            <View style={[st.statDiv, { backgroundColor: theme.border }]} />
+            <View style={st.statCell}>
+              <Text style={[st.statLbl, { color: theme.textMuted }]}>Showing</Text>
+              <Text style={[st.statVal, { color: theme.text }]}>{filtered.length}</Text>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -67,50 +125,28 @@ export function StickerStudioHub({
             onPress={onNew}
             style={[st.primary, { backgroundColor: theme.accent }]}
           >
-            <Plus size={22} color="#fff" strokeWidth={2.5} />
-            <Text style={st.primaryTxt}>New sticker (camera)</Text>
+            <Plus size={20} color="#fff" strokeWidth={2.2} />
+            <Text style={st.primaryTxt}>New sticker</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onPress={onGallery}
-            style={[st.rowBtn, { borderColor: theme.border, backgroundColor: theme.bg2 }]}
-          >
-            <ImageIcon size={20} color={theme.text} />
-            <Text style={[st.rowBtnTxt, { color: theme.text }]}>Gallery</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onPress={onCollage}
-            style={[st.rowBtn, { borderColor: theme.border, backgroundColor: theme.bg2, marginBottom: 24 }]}
-          >
-            <Layers size={20} color={theme.text} />
-            <Text style={[st.rowBtnTxt, { color: theme.text }]}>Collage</Text>
-          </TouchableOpacity>
-
-          <Text style={[st.sectionLbl, { color: theme.textMuted }]}>Your stickers</Text>
-          {library.length === 0 ? (
-            <View style={[st.empty, { borderColor: theme.border, backgroundColor: theme.bg2 }]}>
-              <Sticker size={32} color={theme.textMuted} strokeWidth={1.6} />
-              <Text style={[st.emptyTitle, { color: theme.text }]}>No stickers yet</Text>
-              <Text style={[st.emptySub, { color: theme.textSub }]}>Use camera or gallery to add one.</Text>
-            </View>
-          ) : (
-            <View style={st.grid}>
-              {library.map(s => (
-                <TouchableOpacity
-                  key={s.id}
-                  activeOpacity={0.88}
-                  style={[st.cell, { borderColor: theme.border, backgroundColor: theme.bg2, borderRadius: theme.radiusMd }]}
-                  onPress={() => onStickerPress(s)}
-                >
-                  <View style={[st.cellInner, { backgroundColor: theme.bg3 }]} />
-                  <Image source={{ uri: s.uri }} style={st.cellImg} resizeMode="contain" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          <View style={st.actionRow}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={onGallery}
+              style={[st.actionBtn, { borderColor: theme.border, backgroundColor: theme.bg2 }]}
+            >
+              <ImageIcon size={18} color={theme.text} strokeWidth={2} />
+              <Text style={[st.actionTxt, { color: theme.textSub }]}>Gallery</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={onCollage}
+              style={[st.actionBtn, { borderColor: theme.border, backgroundColor: theme.bg2 }]}
+            >
+              <Layers size={18} color={theme.text} strokeWidth={2} />
+              <Text style={[st.actionTxt, { color: theme.textSub }]}>Collage</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -120,54 +156,62 @@ export function StickerStudioHub({
 const st = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
-  scroll: { paddingHorizontal: 20, paddingBottom: 40, flexGrow: 1 },
-  intro: { marginTop: 4, marginBottom: 20, gap: 6 },
-  title: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-  sub: { fontSize: 15, lineHeight: 22, fontWeight: '500' },
+  scroll: { paddingHorizontal: 18, paddingBottom: 36 },
+  pageTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  filterScroll: { marginBottom: 14, flexGrow: 0 },
+  filterRow: { gap: 8, paddingRight: 4 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  chipTxt: { fontSize: 13, fontWeight: '700' },
+  statsRow: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 4,
+  },
+  statDiv: { width: 1, marginVertical: 10 },
+  statLbl: { fontSize: 11, fontWeight: '600' },
+  statVal: { fontSize: 22, fontWeight: '800' },
   primary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 14,
-    marginBottom: 10,
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+    marginBottom: 8,
   },
-  primaryTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  rowBtn: {
+  primaryTxt: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 15,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  rowBtnTxt: { fontSize: 16, fontWeight: '700' },
-  sectionLbl: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-  },
-  empty: {
-    padding: 28,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: '800' },
-  emptySub: { fontSize: 13, textAlign: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  cell: {
-    width: '47.5%',
-    aspectRatio: 1,
-    overflow: 'hidden',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  cellInner: { ...StyleSheet.absoluteFillObject },
-  cellImg: { width: '100%', height: '100%' },
+  actionTxt: { fontSize: 13, fontWeight: '600' },
 });

@@ -4,20 +4,21 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   BarChart2, Check, Crown, Infinity as InfinityIcon,
-  Palette, Shield, Sparkles, Star, X, Zap,
+  Palette, Shield, Sparkles, Star, Zap,
 } from 'lucide-react-native';
+import { AppHeader } from '../components/AppHeader';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, Dimensions, Easing, Modal, ScrollView,
+  Animated, Dimensions, Easing, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { getSubscriptionCopy } from '../_lib/localeContent';
 import { PaymentModal } from './PaymentModal';
 import type { PaymentItem } from './PaymentModal';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
-import { Ticker } from './Ticker';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const PRO_ICONS = [InfinityIcon, Sparkles, BarChart2, Palette, Star, Check, Check, Shield];
 
@@ -159,16 +160,17 @@ const pc = StyleSheet.create({
   perDayTxt: { fontSize: 9, fontWeight: '900' },
 });
 
-interface Props { visible: boolean; onClose: () => void; }
+type Props = { onClose: () => void };
 
-export function SubscriptionModal({ visible, onClose }: Props) {
+/** Full-screen subscription page (routed at /subscription). */
+export default function SubscriptionScreen({ onClose }: Props) {
+  const insets = useSafeAreaInsets();
   const { theme, setPlan, language } = useTheme();
   const sub = getSubscriptionCopy(language);
   const [selected, setSelected] = useState<PlanId>('monthly');
   const [showPay, setShowPay] = useState(false);
   const [payItem, setPayItem] = useState<PaymentItem | null>(null);
 
-  const slideAnim = useRef(new Animated.Value(height)).current;
   const crownGlow = useRef(new Animated.Value(0)).current;
 
   const PLANS: PlanDef[] = [
@@ -207,19 +209,15 @@ export function SubscriptionModal({ visible, onClose }: Props) {
   ];
 
   useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, { toValue: 0, friction: 12, tension: 80, useNativeDriver: true }).start();
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(crownGlow, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
-          Animated.timing(crownGlow, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
-        ]),
-      ).start();
-    } else {
-      Animated.spring(slideAnim, { toValue: height, friction: 14, useNativeDriver: true }).start();
-      crownGlow.stopAnimation();
-    }
-  }, [visible]);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(crownGlow, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+        Animated.timing(crownGlow, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [crownGlow]);
 
   const glowR = crownGlow.interpolate({ inputRange: [0, 1], outputRange: [10, 38] });
   const plan = PLANS.find((p) => p.id === selected)!;
@@ -259,16 +257,17 @@ export function SubscriptionModal({ visible, onClose }: Props) {
 
   return (
     <>
-      <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
-        <View style={s.overlay}>
-          <Animated.View style={[s.sheet, { backgroundColor: theme.bg, transform: [{ translateY: slideAnim }] }]}>
-            <TouchableOpacity style={s.closeBtn} onPress={onClose}>
-              <X size={18} color="rgba(255,255,255,0.55)" />
-            </TouchableOpacity>
+      <View style={[s.fullPage, { backgroundColor: theme.bg }]}>
+        <SafeAreaView style={s.fullSafe} edges={['top']}>
+          <AppHeader variant="detail" onBack={onClose} subtitle="photodumps Pro" />
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll} bounces>
+          <ScrollView
+            style={s.scrollView}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[s.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}
+            bounces
+          >
               <LinearGradient colors={['#08001C', '#10003A', '#08001C']} style={s.hdr}>
-                <Ticker text={sub.ticker} bg="transparent" color="#9B5FDE" speed={7000} height={26} fontSize={9} />
                 <View style={s.hdrBody}>
                   <Animated.View style={{ shadowColor: '#FFD700', shadowRadius: glowR, shadowOpacity: 1, elevation: 20 }}>
                     <LinearGradient colors={['#FFD700', '#FF8C00', '#FF4500']} style={s.crownBox}>
@@ -350,11 +349,10 @@ export function SubscriptionModal({ visible, onClose }: Props) {
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={{ height: 32 }} />
-            </ScrollView>
-          </Animated.View>
-        </View>
-      </Modal>
+            <View style={{ height: 32 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
 
       {payItem && (
         <PaymentModal visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
@@ -364,12 +362,9 @@ export function SubscriptionModal({ visible, onClose }: Props) {
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.78)', justifyContent: 'flex-end' },
-  sheet: { maxHeight: height * 0.93, borderTopLeftRadius: 36, borderTopRightRadius: 36, overflow: 'hidden' },
-  closeBtn: {
-    position: 'absolute', top: 12, right: 18, zIndex: 10, width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center',
-  },
+  fullPage: { flex: 1 },
+  fullSafe: { flex: 1 },
+  scrollView: { flex: 1 },
   hdr: { paddingBottom: 22, paddingTop: 8 },
   hdrBody: { alignItems: 'center', paddingTop: 6, paddingHorizontal: 24, gap: 7 },
   crownBox: { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
@@ -377,7 +372,7 @@ const s = StyleSheet.create({
   heroSub: { color: 'rgba(255,255,255,0.42)', fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
   stars: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   rating: { color: 'rgba(255,255,255,0.38)', fontSize: 12, fontWeight: '700', marginLeft: 5 },
-  scroll: { paddingHorizontal: 18, paddingBottom: 8 },
+  scroll: { paddingHorizontal: 18 },
   featCard: { borderWidth: 1, borderRadius: 22, padding: 18, marginBottom: 14, marginTop: 4 },
   featHdr: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   featHdrTxt: { fontSize: 9, fontWeight: '900', letterSpacing: 3 },

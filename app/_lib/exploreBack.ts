@@ -16,6 +16,8 @@ export type HubChildRoute =
   | '/supercut'
   | '/insights'
   | '/sticker-studio'
+  | '/widgets'
+  | '/widget-editor'
   | '/photobooth'
   | '/photobooth-gallery';
 

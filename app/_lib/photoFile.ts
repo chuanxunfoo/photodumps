@@ -6,10 +6,12 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'react-native';
 
-/** Max long edge for full-quality cutout. */
-export const CUTOUT_MAX_DIMENSION = 512;
-/** Smaller = faster live camera scans (cloud / WASM). */
-export const CUTOUT_LIVE_DIMENSION = 320;
+/** Max long edge for editor-quality cutout. */
+export const CUTOUT_MAX_DIMENSION = 480;
+/** Live / gallery — small uploads = faster cloud cutout (seconds). */
+export const CUTOUT_LIVE_DIMENSION = 256;
+/** Cloud upload cap when not in live mode. */
+export const CUTOUT_CLOUD_DIMENSION = 384;
 export const COLLAGE_BG_MAX_DIMENSION = 1280;
 
 function withFileScheme(path: string): string {
@@ -40,6 +42,9 @@ export async function resolveReadableFileUri(uri: string): Promise<string> {
     const info = await FileSystem.getInfoAsync(raw);
     if (info.exists) {
       if (raw === destUri) return raw;
+      const cachePath = cache.replace(/^file:\/\//, '');
+      const rawPath = raw.replace(/^file:\/\//, '');
+      if (rawPath.startsWith(cachePath)) return raw;
       await FileSystem.copyAsync({ from: raw, to: destUri });
       return destUri;
     }
@@ -142,7 +147,10 @@ export async function normalizePhotoForCutout(
   const { uri: out } = await ImageManipulator.manipulateAsync(
     readable,
     resizeActions(width, height, maxDimension),
-    { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
+    {
+      compress: maxDimension <= CUTOUT_LIVE_DIMENSION ? 0.72 : 0.78,
+      format: ImageManipulator.SaveFormat.JPEG,
+    },
   );
   return withFileScheme(out);
 }

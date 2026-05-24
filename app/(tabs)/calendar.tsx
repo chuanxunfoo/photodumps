@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
-import { Calendar, ChevronDown, Flame, Image as ImageIcon, Sparkles, Zap } from 'lucide-react-native';
+import { Calendar, ChevronDown, Flame, Image as ImageIcon, Shuffle, Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated, Dimensions, Easing, Modal, Pressable,
@@ -9,32 +9,16 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
+import { GlassTicker } from '../components/GlassTicker';
+import {
+  countAssetsInRange,
+  countRandomVaultAssets,
+  monthRange,
+  RANDOM_VAULT,
+} from '../_lib/mediaArchive';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 const { width, height } = Dimensions.get('window');
-
-// ─── TICKER ──────────────────────────────────────────────────────────
-function Ticker({ text, bg, color, speed = 9000 }: { text: string; bg: string; color: string; speed?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const run = () => {
-      anim.setValue(0);
-      Animated.timing(anim, { toValue: -width, duration: speed, easing: Easing.linear, useNativeDriver: true }).start(() => run());
-    };
-    run();
-    return () => anim.stopAnimation();
-  }, []);
-  const full = `${text}   •   ${text}   •   ${text}   •   `;
-  return (
-    <View style={{ height: 28, backgroundColor: bg, overflow: 'hidden', justifyContent: 'center' }}>
-      <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: anim }] }}>
-        {[0, 1, 2, 3].map(i => (
-          <Text key={i} style={{ color, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 }}>{full}</Text>
-        ))}
-      </Animated.View>
-    </View>
-  );
-}
 
 // ─── MONTH DATA ───────────────────────────────────────────────────────
 const MONTH_DATA = [
@@ -88,8 +72,13 @@ function YearPicker({ visible, year, onSelect, onClose, theme, t }: any) {
 
 // ─── MONTH ROW ────────────────────────────────────────────────────────
 // Full-width coloured rows like the reference image, each row = one month
-function MonthRow({ item, count, onPress, delay, year }: {
-  item: typeof MONTH_DATA[0]; count: number; onPress: () => void; delay: number; year: number;
+function MonthRow({ item, count, onPress, delay, year, isRandom = false }: {
+  item: typeof MONTH_DATA[0] | typeof RANDOM_VAULT;
+  count: number;
+  onPress: () => void;
+  delay: number;
+  year: number;
+  isRandom?: boolean;
 }) {
   const entrance  = useRef(new Animated.Value(0)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
@@ -136,14 +125,22 @@ function MonthRow({ item, count, onPress, delay, year }: {
               <View style={mr.orb} />
 
               <View style={{ flex: 1 }}>
-                <Text style={mr.monthName}>{item.short}{" '"}{String(year).slice(2)}</Text>
-              {count > 0 && (
-                <Text style={mr.countLabel}>{count} items</Text>
-              )}
+                <Text style={mr.monthName}>
+                  {isRandom ? item.name : `${item.short} '${String(year).slice(2)}`}
+                </Text>
+                {isRandom ? (
+                  <Text style={mr.countLabel}>{RANDOM_VAULT.tagline}</Text>
+                ) : count > 0 ? (
+                  <Text style={mr.countLabel}>{count} items</Text>
+                ) : null}
               </View>
 
               <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                {isCurrent ? (
+                {isRandom ? (
+                  <View style={mr.currentBadge}>
+                    <Shuffle size={16} color="#FFF" />
+                  </View>
+                ) : isCurrent ? (
                   <View style={mr.currentBadge}>
                     <Sparkles size={16} color="#FFF" />
                   </View>
@@ -217,6 +214,7 @@ export function CalendarScreen() {
   const [year, setYear]       = useState(new Date().getFullYear());
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [counts, setCounts]   = useState<Record<string, number>>({});
+  const [randomCount, setRandomCount] = useState(0);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale   = useRef(new Animated.Value(0.97)).current;
 
@@ -243,14 +241,11 @@ export function CalendarScreen() {
       if (status !== 'granted') return;
       const result: Record<string, number> = {};
       for (const m of MONTH_DATA) {
-        const { totalCount } = await MediaLibrary.getAssetsAsync({
-          first: 0, mediaType: ['photo', 'video'],
-          createdAfter:  new Date(year, m.num - 1, 1).getTime(),
-          createdBefore: new Date(year, m.num, 0, 23, 59, 59).getTime(),
-        });
-        result[m.short] = totalCount;
+        const { createdAfter, createdBefore } = monthRange(year, m.num - 1);
+        result[m.short] = await countAssetsInRange(createdAfter, createdBefore);
       }
       setCounts(result);
+      setRandomCount(await countRandomVaultAssets());
     } catch {}
   };
 
@@ -260,6 +255,13 @@ export function CalendarScreen() {
     router.push({
       pathname: '/dump',
       params: { month: monthName, year: year.toString() },
+    });
+  };
+
+  const navigateToRandom = () => {
+    router.push({
+      pathname: '/dump',
+      params: { mode: 'random_vault' },
     });
   };
 
@@ -317,7 +319,7 @@ export function CalendarScreen() {
               ))}
             </View>
 
-            <Ticker text={`PHOTODUMPS  •  AI PHOTO CLEANER  •  FREE YOUR STORAGE`} bg={theme.accent} color="#FFF" speed={8000} />
+            <GlassTicker text="PHOTODUMPS  •  AI PHOTO CLEANER  •  FREE YOUR STORAGE" speed={8000} />
 
             {/* Deep clean CTA */}
             <TouchableOpacity
@@ -335,9 +337,28 @@ export function CalendarScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <Ticker text={`JAN  FEB  MAR  APR  MAY  JUN  JUL  AUG  SEP  OCT  NOV  DEC  •  ${year}`} bg={theme.accent} color="#FFF" speed={12000} />
+            <GlassTicker
+              text={`JAN  FEB  MAR  APR  MAY  JUN  JUL  AUG  SEP  OCT  NOV  DEC  •  ${year}`}
+              hues={['#6C00FF', '#FF0055', '#00E5FF']}
+              speed={12000}
+            />
 
-            {/* Section label */}
+            <View style={cs.sectionLbl}>
+              <Shuffle size={11} color={theme.accent} />
+              <Text style={[cs.sectionLblText, { color: theme.textSub }]}>LOST &amp; FOUND</Text>
+            </View>
+
+            <View style={{ paddingBottom: 6 }}>
+              <MonthRow
+                item={RANDOM_VAULT}
+                count={randomCount}
+                year={year}
+                delay={0}
+                isRandom
+                onPress={navigateToRandom}
+              />
+            </View>
+
             <View style={cs.sectionLbl}>
               <Sparkles size={11} color={theme.accent} />
               <Text style={[cs.sectionLblText, { color: theme.textSub }]}>
@@ -353,7 +374,7 @@ export function CalendarScreen() {
                   item={m}
                   count={counts[m.short] ?? 0}
                   year={year}
-                  delay={i * 45}
+                  delay={(i + 1) * 45}
                   onPress={() => navigateToMonth(m.name)}
                 />
               ))}

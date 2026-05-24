@@ -25,9 +25,9 @@ const STYLE_PRESETS: {
   { style: 'none', color: '#FFFFFF', width: 0, label: 'None' },
 ];
 
-/** Symmetric sticker blob — outline preview matches real trace better than a “bunny”. */
-const SILHOUETTE =
-  'M32 10 C20 10 12 18 12 30 C12 40 16 48 22 52 L32 58 L42 52 C48 48 52 40 52 30 C52 18 44 10 32 10 Z';
+/** Heart silhouette — outline wraps the shape cleanly. */
+const HEART =
+  'M32 54 C32 54 10 36 10 24 C10 14 18 8 26 12 C30 6 34 6 38 12 C46 8 54 14 54 24 C54 36 32 54 32 54 Z';
 
 type ThemeSlice = {
   text: string;
@@ -47,26 +47,20 @@ type Props = {
 
 function TracePreviewIcon({ trace, selected, theme }: { trace: TraceSettings; selected: boolean; theme: ThemeSlice }) {
   const params = getTraceRenderParams(trace);
-  const strokeW = trace.style === 'none' ? 0 : Math.max(1.5, trace.width * 0.45);
-  const fill = theme.isDark ? '#3a3a44' : '#d4d4dc';
+  const strokeW = trace.style === 'none' ? 0 : Math.max(1.8, trace.width * 0.42);
+  const fill = theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
   return (
-    <View
-      style={[
-        pv.wrap,
-        { backgroundColor: theme.bg2, borderColor: theme.border },
-        selected && { borderColor: theme.accent, backgroundColor: theme.isDark ? '#1f1f28' : '#f0f0f5' },
-      ]}
-    >
-      <Svg width={52} height={52} viewBox="0 0 64 64">
+    <View style={[pv.wrap, selected && pv.wrapOn, { borderColor: selected ? theme.accent : theme.border }]}>
+      <Svg width={48} height={48} viewBox="0 0 64 64">
         {params && trace.style === 'glow' ? (
           <>
-            <Path d={SILHOUETTE} fill={fill} stroke={trace.color} strokeWidth={strokeW + 4} opacity={0.35} />
-            <Path d={SILHOUETTE} fill={fill} stroke={trace.color} strokeWidth={strokeW} strokeLinejoin="round" />
+            <Path d={HEART} fill={fill} stroke={trace.color} strokeWidth={strokeW + 3} opacity={0.35} strokeLinejoin="round" />
+            <Path d={HEART} fill={fill} stroke={trace.color} strokeWidth={strokeW} strokeLinejoin="round" strokeLinecap="round" />
           </>
         ) : (
           <Path
-            d={SILHOUETTE}
+            d={HEART}
             fill={fill}
             stroke={trace.style === 'none' ? 'transparent' : trace.color}
             strokeWidth={strokeW}
@@ -91,20 +85,20 @@ export function StickerStyleBar({ trace, onChange, theme }: Props) {
     trace.width === p.width;
 
   return (
-    <View style={st.root}>
-      <Text style={[st.lbl, { color: theme.textSub }]}>Outline style</Text>
+    <View style={st.panel}>
+      <Text style={[st.title, { color: theme.textSub }]}>Outline</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.styleRow}>
         {STYLE_PRESETS.map(p => (
-          <TouchableOpacity key={`${p.style}-${p.color}-${p.width}`} onPress={() => applyPreset(p)} activeOpacity={0.85}>
+          <TouchableOpacity key={`${p.style}-${p.color}-${p.width}`} onPress={() => applyPreset(p)} activeOpacity={0.88}>
             <TracePreviewIcon trace={p} selected={isPreset(p)} theme={theme} />
-            <Text style={[st.presetLbl, { color: theme.textSub }, isPreset(p) && { color: theme.accent, fontWeight: '800' }]}>
+            <Text style={[st.presetLbl, { color: theme.textSub }, isPreset(p) && { color: theme.accent }]}>
               {p.label}
             </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      <Text style={[st.lbl, { color: theme.textSub }]}>Colour</Text>
+      <Text style={[st.title, { color: theme.textSub, marginTop: 4 }]}>Colour</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.colorRow}>
         {TRACE_COLOR_PRESETS.slice(0, 12).map(p => {
           const on = trace.color.toUpperCase() === p.color.toUpperCase();
@@ -124,7 +118,7 @@ export function StickerStyleBar({ trace, onChange, theme }: Props) {
                 st.colorDot,
                 { backgroundColor: p.color },
                 light && { borderWidth: 1, borderColor: theme.border },
-                on && { borderColor: theme.accent, borderWidth: 2.5 },
+                on && st.colorDotOn,
               ]}
             />
           );
@@ -133,7 +127,7 @@ export function StickerStyleBar({ trace, onChange, theme }: Props) {
 
       {trace.style !== 'none' && (
         <View style={st.sliderRow}>
-          <Text style={[st.sliderLbl, { color: theme.textSub }]}>Thickness</Text>
+          <Text style={[st.sliderLbl, { color: theme.textSub }]}>Weight</Text>
           <Slider
             style={st.slider}
             minimumValue={TRACE_WIDTH_MIN}
@@ -154,24 +148,33 @@ export function StickerStyleBar({ trace, onChange, theme }: Props) {
 
 const pv = StyleSheet.create({
   wrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 14,
+    width: 54,
+    height: 54,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  wrapOn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
 });
 
 const st = StyleSheet.create({
-  root: { gap: 8 },
-  lbl: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginLeft: 2 },
-  styleRow: { gap: 10, paddingVertical: 2 },
-  presetLbl: { fontSize: 10, fontWeight: '600', textAlign: 'center', marginTop: 4, width: 58 },
+  panel: { gap: 5 },
+  title: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3 },
+  styleRow: { gap: 8, paddingVertical: 2 },
+  presetLbl: { fontSize: 9, fontWeight: '700', textAlign: 'center', marginTop: 4, width: 54 },
   colorRow: { gap: 8, paddingVertical: 2 },
-  colorDot: { width: 28, height: 28, borderRadius: 14 },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  sliderLbl: { fontSize: 11, fontWeight: '700', width: 68 },
+  colorDot: { width: 26, height: 26, borderRadius: 13 },
+  colorDotOn: { borderWidth: 2.5, borderColor: '#F5D547', transform: [{ scale: 1.08 }] },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  sliderLbl: { fontSize: 11, fontWeight: '600', width: 52 },
   slider: { flex: 1, height: 28 },
   sliderVal: { fontSize: 12, fontWeight: '800', width: 22, textAlign: 'right' },
 });

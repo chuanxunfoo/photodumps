@@ -10,7 +10,6 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { SubscriptionModal } from './(tabs)/SubscriptionModal';
 import { safeReplace } from './_lib/safeNavigate';
 import { getSessionSafe } from './(tabs)/supabase';
 import { ThemeProvider, useTheme } from './(tabs)/ThemeContext';
@@ -51,15 +50,8 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
 }
 
 function InnerLayout() {
-  const { theme, setOnSubscriptionOpen, setUser, isPro, isAdmin } = useTheme();
-  const [showSub, setShowSub] = useState(false);
+  const { theme, setUser } = useTheme();
   const [splashDone, setSplashDone] = useState(false);
-
-  useEffect(() => {
-    setOnSubscriptionOpen(() => {
-      if (!isPro && !isAdmin) setShowSub(true);
-    });
-  }, [isPro, isAdmin, setOnSubscriptionOpen]);
 
   const handleSplashDone = async () => {
     setSplashDone(true);
@@ -101,7 +93,6 @@ function InnerLayout() {
       </Stack>
 
       {!splashDone && <SplashScreen onDone={handleSplashDone} />}
-      <SubscriptionModal visible={showSub} onClose={() => setShowSub(false)} />
     </View>
   );
 }

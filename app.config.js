@@ -18,8 +18,12 @@ module.exports = ({ config }) => ({
   },
   assetBundlePatterns: ['**/*'],
   ios: {
+    appleTeamId: '75356Q29L5',
     supportsTablet: false,
     bundleIdentifier: 'com.yourname.dumpitapp',
+    entitlements: {
+      'com.apple.security.application-groups': ['group.com.yourname.dumpitapp.widgets'],
+    },
     infoPlist: {
       LSApplicationQueriesSchemes: ['dumpit', 'googlegmail', 'instagram', 'mailto'],
       NSPhotoLibraryAddUsageDescription:
@@ -70,6 +74,7 @@ module.exports = ({ config }) => ({
     ],
     'react-native-compressor',
     'expo-notifications',
+    '@bacons/apple-targets',
   ],
   extra: {
     EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,

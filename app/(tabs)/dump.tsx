@@ -16,6 +16,13 @@ import { takeDuplicateSwiperPayload } from './duplicateNavPayload';
 import { useTheme } from './ThemeContext';
 import { AppHeader } from '../components/AppHeader';
 import { addBookmark } from '../_lib/bookmarks';
+import {
+  fetchAssetsPaged,
+  fetchDeepCleanCandidates,
+  fetchRandomVaultAssets,
+  mapAssetToSwiper,
+  monthRange,
+} from '../_lib/mediaArchive';
 import { recordUserStatsDeletion } from '../_lib/userStatsSupabase';
 
 const { width, height } = Dimensions.get('window');
@@ -145,6 +152,10 @@ export default function SwiperScreen() {
   const [showQueue, setShowQueue] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [sessionSaved, setSessionSaved] = useState(0);
+  const [loadProgress, setLoadProgress] = useState<{ loaded: number; total: number | null }>({
+    loaded: 0,
+    total: null,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -153,6 +164,7 @@ export default function SwiperScreen() {
       setCurrentIndex(0);
       setDeleteQueue([]);
       setSessionSaved(0);
+      setLoadProgress({ loaded: 0, total: null });
 
       const dupMode = typeof params.mode === 'string' && params.mode.toLowerCase() === 'duplicates';
       if (dupMode) {
@@ -172,42 +184,51 @@ export default function SwiperScreen() {
       if (!mounted) return;
       if (status !== 'granted') { setLoading(false); return; }
 
-      const deepClean = typeof params.mode === 'string' && params.mode.toLowerCase() === 'deep_clean';
+      const mode = typeof params.mode === 'string' ? params.mode.toLowerCase() : '';
+      const deepClean = mode === 'deep_clean';
+      const randomVault = mode === 'random_vault';
 
-      // Use a larger page size for month lists and deep clean.
-      const baseOptions: any = { first: deepClean ? 250 : 180, mediaType: ['photo', 'video'], sortBy: 'creationTime' };
+      try {
+        let assets: Awaited<ReturnType<typeof fetchAssetsPaged>> = [];
 
-      // Filter by month if provided
-      if (!deepClean && params.month && params.year) {
-        const monthNames = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
-        const monthIdx = monthNames.indexOf(String(params.month).toUpperCase());
-        if (monthIdx !== -1) {
-          const y = parseInt(String(params.year), 10);
-          baseOptions.createdAfter  = new Date(y, monthIdx, 1).getTime();
-          baseOptions.createdBefore = new Date(y, monthIdx + 1, 0, 23, 59, 59).getTime();
+        if (randomVault) {
+          assets = await fetchRandomVaultAssets((loaded, total) => {
+            if (mounted) setLoadProgress({ loaded, total });
+          });
+        } else if (deepClean) {
+          assets = await fetchDeepCleanCandidates((loaded, total) => {
+            if (mounted) setLoadProgress({ loaded, total });
+          });
+        } else {
+          const rangeOpts: Parameters<typeof fetchAssetsPaged>[0] = { sortBy: 'creationTime' };
+
+          if (params.month && params.year) {
+            const monthNames = [
+              'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+              'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+            ];
+            const monthIdx = monthNames.indexOf(String(params.month).toUpperCase());
+            if (monthIdx !== -1) {
+              const y = parseInt(String(params.year), 10);
+              const { createdAfter, createdBefore } = monthRange(y, monthIdx);
+              rangeOpts.createdAfter = createdAfter;
+              rangeOpts.createdBefore = createdBefore;
+            }
+          }
+
+          assets = await fetchAssetsPaged(rangeOpts, (loaded, total) => {
+            if (mounted) setLoadProgress({ loaded, total });
+          });
         }
+
+        if (!mounted) return;
+
+        setPhotos(assets.map(mapAssetToSwiper));
+      } catch {
+        if (mounted) setPhotos([]);
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      const { assets } = await MediaLibrary.getAssetsAsync(baseOptions);
-      if (!mounted) return;
-
-      const mapped = assets.map(a => {
-        const isVid = a.mediaType === 'video';
-        return {
-          ...a,
-          mediaType: isVid ? 'video' : 'photo',
-          sizeMB: isVid
-            ? +(Math.max(0.4, a.duration) * 0.38).toFixed(2)
-            : +((a.width * a.height) * 0.00000045).toFixed(2),
-          device: Platform.OS === 'ios' ? 'iPhone' : 'Android',
-          dateStr: new Date(a.creationTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        };
-      });
-
-      // Deep clean prioritizes “largest” items first.
-      const finalPhotos = deepClean ? mapped.sort((a, b) => (b.sizeMB ?? 0) - (a.sizeMB ?? 0)) : mapped;
-      setPhotos(finalPhotos);
-      setLoading(false);
     })();
 
     return () => { mounted = false; };
@@ -327,26 +348,40 @@ export default function SwiperScreen() {
   const isDupMissing = !loading && dupMode && photos.length === 0;
   const isDone = !loading && !isDupMissing && currentIndex >= photos.length && photos.length > 0;
 
+  const modeKey = typeof params.mode === 'string' ? params.mode.toLowerCase() : '';
+  const randomVault = modeKey === 'random_vault';
+
   const monthLabel =
-    params.mode && String(params.mode).toLowerCase() === 'duplicates'
+    dupMode
       ? 'DUPLICATE SET'
-      : params.month
-        ? `${params.month} ${params.year ?? ''}`
-        : 'ALL MEDIA';
+      : randomVault
+        ? 'LOST & FOUND'
+        : params.month
+          ? `${params.month} ${params.year ?? ''}`
+          : 'ALL MEDIA';
 
   const headerBlock = 80;
   const bottomBlock = 96 + insets.bottom;
   const CARD_W = width - 24;
   const CARD_H = Math.max(260, height - insets.top - headerBlock - bottomBlock);
 
+  const totalShown = photos.length;
+  const progressPct = totalShown
+    ? Math.min(100, Math.round((currentIndex / Math.max(totalShown, 1)) * 100))
+    : 0;
+
   const headerSubtitle = loading
-    ? 'Loading…'
+    ? loadProgress.total != null
+      ? `Loading ${loadProgress.loaded} / ${loadProgress.total}…`
+      : loadProgress.loaded > 0
+        ? `Loading ${loadProgress.loaded}…`
+        : 'Loading…'
     : dupMode
-      ? (photos.length
-        ? `Duplicates · ${photos.length} in set · ${currentIndex}/${photos.length}`
+      ? (totalShown
+        ? `Duplicates · ${totalShown} in set · ${currentIndex + 1}/${totalShown}`
         : 'Duplicates')
-      : `${monthLabel} · ${currentIndex}/${photos.length}${
-        photos.length ? ` · ${Math.min(100, Math.round((currentIndex / Math.max(photos.length, 1)) * 100))}%` : ''
+      : `${monthLabel} · ${totalShown} photos · ${currentIndex + 1}/${totalShown}${
+        totalShown ? ` · ${progressPct}%` : ''
       }${!isPro ? ` · ${swipesLeft} swipes` : ''}`;
 
   const renderCard = (card: any) => {

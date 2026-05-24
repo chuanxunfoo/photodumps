@@ -2,10 +2,10 @@ import { Image, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { removeBgImage, BackgroundRemovalError } from 'rn-remove-image-bg';
 import {
+  CUTOUT_CLOUD_DIMENSION,
   CUTOUT_LIVE_DIMENSION,
+  CUTOUT_MAX_DIMENSION,
   normalizePhotoForCutout,
-  readPhotoBase64,
-  resolveReadableFileUri,
   writePngBase64,
 } from '../photoFile';
 import { isExpoGo, nativeCutoutBundled } from './runtime';
@@ -66,16 +66,38 @@ async function imageSize(uri: string): Promise<{ width: number; height: number }
   });
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+  }
+  if (typeof globalThis.btoa === 'function') return globalThis.btoa(binary);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i]!;
+    const b = bytes[i + 1] ?? 0;
+    const c = bytes[i + 2] ?? 0;
+    out += chars[a >> 2] + chars[((a & 3) << 4) | (b >> 4)] + chars[((b & 15) << 2) | (c >> 6)] + chars[c & 63];
+  }
+  return out;
+}
+
+type RemoveBgSize = 'preview' | 'small' | 'auto';
+
 async function nativeSubjectCutout(
   uri: string,
   onProgress?: (pct: number) => void,
+  maxDimension = 720,
 ): Promise<string> {
   try {
     return await removeBgImage(uri, {
-      maxDimension: 1024,
+      maxDimension,
       format: 'PNG',
-      quality: 100,
-      useCache: false,
+      quality: 92,
+      useCache: true,
       onProgress: n => onProgress?.(Math.round(n)),
     });
   } catch (err) {
@@ -86,9 +108,13 @@ async function nativeSubjectCutout(
   }
 }
 
-async function removeBackgroundCloud(fileUri: string, apiKey: string): Promise<CutoutResult> {
+async function removeBackgroundCloud(
+  fileUri: string,
+  apiKey: string,
+  size: RemoveBgSize = 'preview',
+): Promise<CutoutResult> {
   const form = new FormData();
-  form.append('size', 'auto');
+  form.append('size', size);
   form.append('format', 'png');
   form.append('type', 'auto');
   form.append('image_file', {
@@ -117,48 +143,35 @@ async function removeBackgroundCloud(fileUri: string, apiKey: string): Promise<C
     throw new CutoutError(`Cloud cutout failed: ${hint}`, 'CLOUD_FAILED');
   }
 
-  const arrayBuffer = await res.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  let base64 = '';
-  if (typeof globalThis.btoa === 'function') {
-    base64 = globalThis.btoa(binary);
-  } else {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-    for (let i = 0; i < bytes.length; i += 3) {
-      const a = bytes[i]!;
-      const b = bytes[i + 1] ?? 0;
-      const c = bytes[i + 2] ?? 0;
-      base64 += chars[a >> 2] + chars[((a & 3) << 4) | (b >> 4)] + chars[((b & 15) << 2) | (c >> 6)] + chars[c & 63];
-    }
-  }
-
+  const base64 = arrayBufferToBase64(await res.arrayBuffer());
   const outPath = await writePngBase64(base64);
   const { width, height } = await imageSize(outPath);
   return { uri: outPath, width, height, method: 'removebg' };
 }
 
-/** Fast cloud path when API key is set (~5–15s). Throws on rate limit / auth errors. */
+/** Fast cloud path when API key is set (~2–8s with preview size). */
 export async function tryCloudCutoutOnly(
   fileUri: string,
   onProgress?: CutoutProgress,
+  size: RemoveBgSize = 'preview',
 ): Promise<CutoutResult | null> {
   const key = removeBgApiKey();
   if (!key) return null;
-  onProgress?.(15, 'Cloud cutout (fast)…');
-  return tryCloudCutout(fileUri, onProgress);
+  onProgress?.(20, '');
+  return tryCloudCutout(fileUri, onProgress, size);
 }
 
-async function tryCloudCutout(fileUri: string, onProgress?: CutoutProgress): Promise<CutoutResult | null> {
+async function tryCloudCutout(
+  fileUri: string,
+  onProgress?: CutoutProgress,
+  size: RemoveBgSize = 'preview',
+): Promise<CutoutResult | null> {
   const key = removeBgApiKey();
   if (!key) return null;
   try {
-    onProgress?.(30, 'Tracing your subject…');
-    const cloud = await removeBackgroundCloud(fileUri, key);
-    onProgress?.(100, 'Done');
+    onProgress?.(35, '');
+    const cloud = await removeBackgroundCloud(fileUri, key, size);
+    onProgress?.(100, '');
     return cloud;
   } catch (err) {
     if (err instanceof CutoutError) throw err;
@@ -172,21 +185,87 @@ export function cutoutMethodLabel(_method: CutoutMethod): string {
 
 /** Prepare picker/camera URI for any cutout backend. */
 export async function preparePhotoUri(uri: string, maxDimension?: number): Promise<string> {
-  return normalizePhotoForCutout(uri, maxDimension);
+  return normalizePhotoForCutout(uri, maxDimension ?? CUTOUT_CLOUD_DIMENSION);
 }
 
 export async function prepareLiveScanPhoto(uri: string): Promise<string> {
   return normalizePhotoForCutout(uri, CUTOUT_LIVE_DIMENSION);
 }
 
+async function nativeCutoutResult(
+  fileUri: string,
+  onProgress?: CutoutProgress,
+  maxDimension = 512,
+): Promise<CutoutResult> {
+  onProgress?.(12, '');
+  const outUri = await nativeSubjectCutout(
+    fileUri,
+    pct => onProgress?.(12 + Math.round(pct * 0.82), ''),
+    maxDimension,
+  );
+  const { width, height } = await imageSize(outUri);
+  onProgress?.(100, '');
+  return { uri: outUri, width, height, method: 'native' };
+}
+
+/**
+ * Cut out from an already-resized JPEG (skips second normalize pass).
+ * Dev builds: on-device Core ML / ML Kit first (~1–4s). Cloud is fallback only.
+ */
+export async function cutoutFromPreparedFile(
+  fileUri: string,
+  onProgress?: CutoutProgress,
+  options?: { cloudSize?: RemoveBgSize; nativeMaxDimension?: number },
+): Promise<CutoutResult> {
+  const cloudSize = options?.cloudSize ?? 'preview';
+  const nativeMax = options?.nativeMaxDimension ?? 512;
+  const useNative = nativeCutoutBundled() && Platform.OS !== 'web';
+
+  if (useNative) {
+    try {
+      return await nativeCutoutResult(fileUri, onProgress, nativeMax);
+    } catch (nativeErr) {
+      if (hasRemoveBgApiKey()) {
+        try {
+          const cloud = await tryCloudCutout(fileUri, onProgress, cloudSize);
+          if (cloud) return cloud;
+        } catch (cloudErr) {
+          if (cloudErr instanceof CutoutError && cloudErr.code === 'RATE_LIMITED' && isExpoGo()) {
+            throw new CutoutError('EXPO_GO_WASM', 'NATIVE_UNAVAILABLE');
+          }
+          if (cloudErr instanceof CutoutError) throw cloudErr;
+        }
+      }
+      if (nativeErr instanceof CutoutError) throw nativeErr;
+      throw new CutoutError(
+        'Could not isolate the subject. Use one clear item with contrast against the background.',
+        'NATIVE_UNAVAILABLE',
+      );
+    }
+  }
+
+  if (isExpoGo()) {
+    throw new CutoutError('EXPO_GO_WASM', 'NATIVE_UNAVAILABLE');
+  }
+
+  const cloud = await tryCloudCutout(fileUri, onProgress, cloudSize);
+  if (cloud) return cloud;
+
+  throw new CutoutError(
+    'Cutout unavailable. Add EXPO_PUBLIC_REMOVE_BG_API_KEY to app/.env or use npm run ios.',
+    'NATIVE_UNAVAILABLE',
+  );
+}
+
 /**
  * Detect and cut the main subject (transparent PNG).
+ * @deprecated Prefer prepare + cutoutFromPreparedFile to avoid double resize.
  */
 export async function extractSubject(uri: string, onProgress?: CutoutProgress): Promise<CutoutResult> {
-  onProgress?.(2, 'Preparing photo');
+  onProgress?.(2, '');
   let fileUri: string;
   try {
-    fileUri = await normalizePhotoForCutout(uri);
+    fileUri = await normalizePhotoForCutout(uri, CUTOUT_MAX_DIMENSION);
     await imageSize(fileUri);
   } catch {
     throw new CutoutError(
@@ -194,49 +273,5 @@ export async function extractSubject(uri: string, onProgress?: CutoutProgress): 
       'INVALID_IMAGE',
     );
   }
-
-  onProgress?.(8, 'Finding main subject');
-
-  const useNative = nativeCutoutBundled() && Platform.OS !== 'web';
-
-  if (!useNative) {
-    if (isExpoGo()) {
-      throw new CutoutError('EXPO_GO_WASM', 'NATIVE_UNAVAILABLE');
-    }
-
-    const cloud = await tryCloudCutout(fileUri, onProgress);
-    if (cloud) return cloud;
-
-    throw new CutoutError(
-      'Cutout unavailable. Add EXPO_PUBLIC_REMOVE_BG_API_KEY to app/.env or use npm run android.',
-      'NATIVE_UNAVAILABLE',
-    );
-  }
-
-  try {
-    onProgress?.(12, Platform.OS === 'android' ? 'Loading ML model…' : 'Tracing edges…');
-    const outUri = await nativeSubjectCutout(fileUri, pct => {
-      onProgress?.(12 + Math.round(pct * 0.78), 'Cutting out subject');
-    });
-    const { width, height } = await imageSize(outUri);
-    onProgress?.(100, 'Done');
-    return { uri: outUri, width, height, method: 'native' };
-  } catch (nativeErr) {
-    try {
-      const cloud = await tryCloudCutout(fileUri, onProgress);
-      if (cloud) return cloud;
-    } catch (cloudErr) {
-      if (cloudErr instanceof CutoutError && cloudErr.code === 'RATE_LIMITED' && isExpoGo()) {
-        throw new CutoutError('EXPO_GO_WASM', 'NATIVE_UNAVAILABLE');
-      }
-      if (cloudErr instanceof CutoutError) throw cloudErr;
-    }
-
-    if (nativeErr instanceof CutoutError) throw nativeErr;
-
-    throw new CutoutError(
-      'Could not isolate the subject. Use one clear item with contrast against the background.',
-      'NATIVE_UNAVAILABLE',
-    );
-  }
+  return cutoutFromPreparedFile(fileUri, onProgress, { cloudSize: 'small' });
 }

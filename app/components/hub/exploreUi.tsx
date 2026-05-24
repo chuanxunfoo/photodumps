@@ -10,6 +10,8 @@ import type { ThemeColors } from '../../(tabs)/ThemeContext';
 import {
   LANGUAGES, LanguageId, FREE_THEMES, THEMES_MAP, THEME_META, THEME_PICKER_IDS, ThemeId, resolveTypeface, useTheme,
 } from '../../(tabs)/ThemeContext';
+import { getLocaleUi } from '../../_lib/localeUi';
+import { SUPPORTED_LANGUAGE_IDS } from '../../_lib/i18n/supported';
 
 const { width, height } = Dimensions.get('window');
 
@@ -192,28 +194,13 @@ export function ThemeShowcaseCard({ id, active, cardWidth = PRO_LOOK_CARD_W }: {
   );
 }
 
-// â”€â”€â”€ LED TICKER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export function Ticker({ text, bg, color, speed = 10000, height: h = 28 }: {
+import { GlassTicker } from '../GlassTicker';
+
+/** Glassy colour-shifting ticker — shared across hub & calendar. */
+export function Ticker({ text, bg: _bg, color: _color, speed = 10000, height: h = 32 }: {
   text: string; bg: string; color: string; speed?: number; height?: number;
 }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const run = () => {
-      anim.setValue(0);
-      Animated.timing(anim, { toValue: -width, duration: speed, easing: Easing.linear, useNativeDriver: true }).start(() => run());
-    };
-    run();
-  }, []);
-  const full = `${text}   â€¢   ${text}   â€¢   ${text}   â€¢   `;
-  return (
-    <View style={{ height: h, backgroundColor: bg, overflow: 'hidden', justifyContent: 'center' }}>
-      <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: anim }] }}>
-        {[0, 1, 2, 3].map(i => (
-          <Text key={i} style={{ color, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 }}>{full}</Text>
-        ))}
-      </Animated.View>
-    </View>
-  );
+  return <GlassTicker text={text} speed={speed} height={h} hues={['#FF0055', '#7C3AED', '#00E5FF']} />;
 }
 
 // â”€â”€â”€ GLOW BANNER â€” typography follows active theme; colours follow vibe (dark = neon, light = deep jewel, etc.)
@@ -450,12 +437,13 @@ export function ThemeModal({ visible, onClose }: { visible: boolean; onClose: ()
 // â”€â”€â”€ LANGUAGE MODAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function LanguageModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme, language, setLanguage, isPro, openSubscription } = useTheme();
+  const u = getLocaleUi(language);
   const slideAnim = useRef(new Animated.Value(height)).current;
   useEffect(() => {
     Animated.spring(slideAnim, { toValue: visible ? 0 : height, friction: 14, useNativeDriver: true }).start();
   }, [visible]);
 
-  const allIds = Object.keys(LANGUAGES) as LanguageId[];
+  const allIds = SUPPORTED_LANGUAGE_IDS as unknown as LanguageId[];
   const freeIds: LanguageId[] = ['en'];
   const proOnly = allIds.filter(id => !freeIds.includes(id));
 
@@ -478,19 +466,19 @@ export function LanguageModal({ visible, onClose }: { visible: boolean; onClose:
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>
         <Animated.View style={[exploreModalStyles.sheet, { backgroundColor: theme.bg, transform: [{ translateY: slideAnim }] }]}>
           <View style={[exploreModalStyles.handle, { backgroundColor: theme.border }]} />
-          <Text style={[exploreModalStyles.title, { color: theme.text }]}>LANGUAGES</Text>
+          <Text style={[exploreModalStyles.title, { color: theme.text }]}>{u.langModalTitle}</Text>
           <Text style={{ color: theme.textSub, fontSize: 12, fontWeight: '600', paddingHorizontal: 20, marginBottom: 8, lineHeight: 17 }}>
-            English is included on Hobby. Every other language unlocks with Pro.
+            {u.langModalHint}
           </Text>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}>
-            <Text style={{ color: theme.textSub, fontSize: 9, fontWeight: '900', letterSpacing: 3, marginBottom: 10 }}>INCLUDED</Text>
+            <Text style={{ color: theme.textSub, fontSize: 9, fontWeight: '900', letterSpacing: 3, marginBottom: 10 }}>{u.langIncluded}</Text>
             {freeIds.map(id => (
               <TouchableOpacity key={id} style={[exploreModalStyles.langRow, { backgroundColor: theme.bg2, borderColor: language === id ? theme.accent : theme.border }]} onPress={() => pick(id)}>
                 <Text style={{ flex: 1, color: theme.text, fontSize: 16, fontWeight: '700' }}>{LANGUAGES[id]}</Text>
                 {language === id && <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: theme.accent, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>âœ“</Text></View>}
               </TouchableOpacity>
             ))}
-            <Text style={{ color: theme.textSub, fontSize: 9, fontWeight: '900', letterSpacing: 3, marginTop: 18, marginBottom: 10 }}>PRO LANGUAGES</Text>
+            <Text style={{ color: theme.textSub, fontSize: 9, fontWeight: '900', letterSpacing: 3, marginTop: 18, marginBottom: 10 }}>{u.langPro}</Text>
             {proOnly.map(id => {
               const locked = !isPro;
               return (

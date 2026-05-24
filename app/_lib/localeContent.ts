@@ -1,5 +1,13 @@
 import type { LanguageId } from '../(tabs)/ThemeContext';
 import { HOBBY_WEEKLY_SWIPES } from './appConfig';
+import {
+  EXPLORE_FR,
+  EXPLORE_JA,
+  EXPLORE_KO,
+  EXPLORE_ZH,
+  patchExploreEs,
+} from './i18n/exploreComplete';
+import { normalizeLanguage } from './i18n/supported';
 
 export type FaqItem = { q: string; a: string };
 
@@ -38,6 +46,8 @@ export type ExploreCopy = {
   photoboothSub: string;
   stickerStudio: string;
   stickerStudioSub: string;
+  widgets: string;
+  widgetsSub: string;
   videoTrim: string;
   videoTrimSub: string;
   duplicates: string;
@@ -147,6 +157,8 @@ const EN: Bundle = {
     photoboothSub: 'Digital cameras & photo strips',
     stickerStudio: 'sticker studio',
     stickerStudioSub: 'AI cutouts · cute frames · collage',
+    widgets: 'widgets',
+    widgetsSub: 'Home screen templates · your stickers · captions',
     videoTrim: 'video trim',
     videoTrimSub: 'CapCut-style cut · quality export to gallery',
     duplicates: 'duplicates',
@@ -272,6 +284,8 @@ const MS: Bundle = {
     photoboothSub: 'Penapis, bingkai & pelekat',
     stickerStudio: 'studio pelekat',
     stickerStudioSub: 'Potong AI · bingkai comel · kolaj',
+    widgets: 'widget',
+    widgetsSub: 'Templat skrin utama · pelekat anda · kapsyen',
     videoTrim: 'potong video',
     videoTrimSub: 'Potong gaya CapCut · eksport ke galeri',
     duplicates: 'pendua',
@@ -600,22 +614,33 @@ const BUNDLES: Record<LanguageId, Bundle> = {
   en: EN, ms: MS, es: ES, fr: FR, de: DE, zh: ZH, ja: JA, ko: KO, pt: PT, it: IT, tr: TR, ar: AR, ru: RU,
 };
 
+function bundleFor(lang: LanguageId): Bundle {
+  const id = normalizeLanguage(lang);
+  const base = BUNDLES[id] ?? EN;
+  if (id === 'fr') return { ...base, explore: EXPLORE_FR };
+  if (id === 'ja') return { ...base, explore: EXPLORE_JA };
+  if (id === 'ko') return { ...base, explore: EXPLORE_KO };
+  if (id === 'zh') return { ...base, explore: EXPLORE_ZH };
+  if (id === 'es') return { ...base, explore: patchExploreEs(base.explore) };
+  return base;
+}
+
 export function getExploreCopy(lang: LanguageId): ExploreCopy {
-  return BUNDLES[lang]?.explore ?? EN.explore;
+  return bundleFor(lang).explore;
 }
 
 export function getSubscriptionCopy(lang: LanguageId): SubscriptionCopy {
-  return BUNDLES[lang]?.subscription ?? EN.subscription;
+  return bundleFor(lang).subscription;
 }
 
 export function getFaqItems(lang: LanguageId): FaqItem[] {
-  return BUNDLES[lang]?.faq ?? EN.faq;
+  return bundleFor(lang).faq;
 }
 
 export function getFaqHero(lang: LanguageId): FaqHeroCopy {
-  return BUNDLES[lang]?.faqHero ?? EN.faqHero;
+  return bundleFor(lang).faqHero;
 }
 
 export function getLegalCopy(lang: LanguageId): LegalCopy {
-  return BUNDLES[lang]?.legal ?? EN.legal;
+  return bundleFor(lang).legal;
 }

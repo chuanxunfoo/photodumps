@@ -73,6 +73,7 @@ function TabsLayout() {
         <Tabs.Screen name="auth" options={{ href: null }} />
         <Tabs.Screen name="landing" options={{ href: null }} />
         <Tabs.Screen name="subscribe" options={{ href: null }} />
+        <Tabs.Screen name="subscription" options={{ href: null }} />
         <Tabs.Screen name="payment" options={{ href: null }} />
         <Tabs.Screen name="duplicates" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
@@ -81,6 +82,8 @@ function TabsLayout() {
         <Tabs.Screen name="photobooth" options={{ href: null }} />
         <Tabs.Screen name="photobooth-gallery" options={{ href: null }} />
         <Tabs.Screen name="sticker-studio" options={{ href: null }} />
+        <Tabs.Screen name="widgets" options={{ href: null }} />
+        <Tabs.Screen name="widget-editor" options={{ href: null }} />
         <Tabs.Screen name="explore-trim" options={{ href: null }} />
         <Tabs.Screen name="explore-rate" options={{ href: null }} />
         <Tabs.Screen name="explore-faq" options={{ href: null }} />

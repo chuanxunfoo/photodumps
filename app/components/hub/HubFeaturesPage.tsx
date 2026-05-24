@@ -1,13 +1,14 @@
 import { useFocusEffect } from 'expo-router';
 import {
-  BarChart2, Camera, Crown, Layers2, Scissors, Sticker, Zap,
+  BarChart2, Camera, Crown, Layers2, LayoutGrid, Scissors, Sticker, Zap,
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SubscriptionModal } from '../../(tabs)/SubscriptionModal';
+import { router } from 'expo-router';
 import { hubPush, type HubChildRoute } from '../../_lib/exploreBack';
 import { getExploreCopy } from '../../_lib/localeContent';
+import { getLocaleUi } from '../../_lib/localeUi';
 import { resolveTypeface, useTheme } from '../../(tabs)/ThemeContext';
 import { HubPageChrome } from './HubPageChrome';
 import {
@@ -15,7 +16,7 @@ import {
 } from './exploreUi';
 import { hubPageStyles as es } from './hubPageStyles';
 
-const FEATURE_SLOTS = [6, 16, 15, 7, 2, 10, 0] as const;
+const FEATURE_SLOTS = [6, 16, 15, 7, 2, 10, 3, 0] as const;
 
 type Props = { active?: boolean };
 
@@ -23,12 +24,18 @@ export default function HubFeaturesPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, isPro, isAdmin, openSubscription, themeId, language } = useTheme();
   const ex = getExploreCopy(language);
+  const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
   const vibe = exploreBannerVibe(themeId, theme.isDark);
   const bannerColors = useMemo(() => assignUniqueBannerGradients(vibe, [...FEATURE_SLOTS]), [vibe]);
   const color = (slot: number) => bannerColors.get(slot);
-  const [showSub, setShowSub] = useState(false);
-  const openSubModal = useCallback(() => setShowSub(true), []);
+  const openSubPage = useCallback(() => {
+    try {
+      router.push('/subscription');
+    } catch {
+      setTimeout(() => router.push('/subscription'), 50);
+    }
+  }, []);
   const openSubRef = useRef(openSubscription);
   openSubRef.current = openSubscription;
 
@@ -50,10 +57,22 @@ export default function HubFeaturesPage({ active = false }: Props) {
 
   const go = (pathname: HubChildRoute) => () => hubPush(pathname, 'features');
 
+  const openWidgets = useCallback(() => {
+    if (!isPro && !isAdmin) {
+      openSubscription();
+      return;
+    }
+    try {
+      router.push('/widgets');
+    } catch {
+      setTimeout(() => router.push('/widgets'), 50);
+    }
+  }, [isPro, isAdmin, openSubscription]);
+
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <HubPageChrome active={active} sectionLabel="Features" onSubscriptionModal={() => setShowSub(true)}>
+        <HubPageChrome active={active} sectionLabel={u.hubFeatures}>
           <ScrollView
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
@@ -76,19 +95,19 @@ export default function HubFeaturesPage({ active = false }: Props) {
                 colors={SUBSCRIBE_BANNER_GRADIENT}
                 subscribeShimmer={!isPro && !isAdmin}
                 icon={<Crown size={22} color="#FFF" />}
-                onPress={() => { if (isPro || isAdmin) openSubModal(); else openSubscription(); }}
+                onPress={() => { if (isPro || isAdmin) openSubPage(); else openSubscription(); }}
               />
               <GlowBanner slot={16} vibe={vibe} theme={theme} fonts={fonts} colors={color(16)} title={ex.duplicates} subtitle={ex.duplicatesSub} proLock={!isPro && !isAdmin} icon={<Layers2 size={22} color="#FFF" />} onPress={() => gatePro(go('/duplicates'))} />
               <GlowBanner slot={15} vibe={vibe} theme={theme} fonts={fonts} colors={color(15)} title={ex.videoTrim} subtitle={ex.videoTrimSub} proLock={!isPro && !isAdmin} icon={<Scissors size={22} color="#FFF" />} onPress={() => gatePro(go('/explore-trim'))} />
               <GlowBanner slot={7} vibe={vibe} theme={theme} fonts={fonts} colors={color(7)} title={ex.supercut} subtitle={ex.supercutSub} proLock={!isPro && !isAdmin} icon={<Zap size={22} color="#FFF" />} onPress={() => gatePro(go('/supercut'))} />
               <GlowBanner slot={2} vibe={vibe} theme={theme} fonts={fonts} colors={color(2)} title={ex.myStats} subtitle={ex.myStatsSub} proLock={!isPro && !isAdmin} icon={<BarChart2 size={22} color="#FFF" />} onPress={() => gatePro(go('/insights'))} />
               <GlowBanner slot={10} vibe={vibe} theme={theme} fonts={fonts} colors={color(10)} title={ex.stickerStudio} subtitle={ex.stickerStudioSub} proLock={!isPro && !isAdmin} icon={<Sticker size={22} color="#FFF" />} onPress={() => gatePro(go('/sticker-studio'))} />
+              <GlowBanner slot={3} vibe={vibe} theme={theme} fonts={fonts} colors={color(3)} title={ex.widgets} subtitle={ex.widgetsSub} proLock={!isPro && !isAdmin} icon={<LayoutGrid size={22} color="#FFF" />} onPress={openWidgets} />
               <GlowBanner slot={0} vibe={vibe} theme={theme} fonts={fonts} colors={color(0)} title={ex.photobooth} subtitle={ex.photoboothSub} proLock={!isPro && !isAdmin} icon={<Camera size={22} color="#FFF" />} onPress={() => gatePro(go('/photobooth'))} />
             </View>
           </ScrollView>
         </HubPageChrome>
       </SafeAreaView>
-      <SubscriptionModal visible={showSub} onClose={() => setShowSub(false)} />
     </View>
   );
 }

@@ -38,6 +38,8 @@ type Props = {
   trace: TraceSettings;
   onTraceChange: (t: TraceSettings) => void;
   onBack: () => void;
+  category: StickerCategory;
+  onCategoryChange: (c: StickerCategory) => void;
   onSave: () => void;
   onNew: () => void;
   saving: boolean;
@@ -96,6 +98,26 @@ export function StickerEditorScreen({
               <Text style={st.panelTitle}>Trace & vibe</Text>
             </View>
             <TraceControls trace={trace} onChange={onTraceChange} theme={theme} />
+            <Text style={st.catLbl}>Collector tag</Text>
+            <View style={st.catRow}>
+              {STICKER_CATEGORIES.map(c => {
+                const on = category === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      void Haptics.selectionAsync();
+                      onCategoryChange(c.id);
+                    }}
+                    style={[st.catChip, on && st.catChipOn]}
+                  >
+                    <Text style={st.catEmoji}>{c.emoji}</Text>
+                    <Text style={[st.catTxt, on && st.catTxtOn]}>{c.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         </ScrollView>
 

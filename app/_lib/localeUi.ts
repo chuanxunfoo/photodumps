@@ -1,6 +1,8 @@
 import type { LanguageId } from '../(tabs)/ThemeContext';
+import { normalizeLanguage } from './i18n/supported';
+import { UI_ES_EXTRA, UI_FR, UI_JA, UI_KO, UI_ZH } from './i18n/localeUiLang';
 
-/** Extra UI strings (merged app-wide). Non-English fall back to English until translated. */
+/** Extra UI strings (merged app-wide). */
 export type LocaleUi = {
   settingsTitle: string;
   settingsSubtitle: string;
@@ -57,6 +59,48 @@ export type LocaleUi = {
   insightsEmptyHint: string;
   insightsAllMedia: string;
   dumpQueuePhotos: string;
+  hubFeatures: string;
+  hubGenerals: string;
+  hubUpgrade: string;
+  hubSignedIn: string;
+  widgetsTitle: string;
+  widgetsHint: string;
+  widgetsNote: string;
+  widgetsHeader: string;
+  widgetsMySection: string;
+  widgetsCreateSection: string;
+  widgetsEmpty: string;
+  widgetsUntitled: string;
+  widgetOnHome: string;
+  widgetDeleteTitle: string;
+  widgetDeleteMsg: string;
+  widgetDeleteConfirm: string;
+  widgetActiveTitle: string;
+  widgetActiveMsg: string;
+  widgetStickers: string;
+  widgetCaption: string;
+  widgetSave: string;
+  widgetHelp: string;
+  captionModalTitle: string;
+  captionPlaceholder: string;
+  captionCancel: string;
+  captionDone: string;
+  captionFonts: string;
+  captionColors: string;
+  captionSize: string;
+  widgetPermTitle: string;
+  widgetPermMsg: string;
+  widgetSavedTitle: string;
+  widgetSavedMsg: string;
+  widgetSaveFailedTitle: string;
+  widgetSaveFailedMsg: string;
+  templateNotFound: string;
+  stickerStudioSubtitle: string;
+  collageSubtitle: string;
+  langModalTitle: string;
+  langModalHint: string;
+  langIncluded: string;
+  langPro: string;
 };
 
 const EN: LocaleUi = {
@@ -115,6 +159,49 @@ const EN: LocaleUi = {
   insightsEmptyHint: 'Sign in, then delete from Swipe or Supercut — every removal through photodumps counts toward your totals.',
   insightsAllMedia: 'ALL MEDIA',
   dumpQueuePhotos: 'photos',
+  hubFeatures: 'Features',
+  hubGenerals: 'Generals',
+  hubUpgrade: 'UPGRADE',
+  hubSignedIn: 'Signed in',
+  widgetsTitle: 'Widget maker',
+  widgetsHint: 'Save designs in My widgets. To pick one on your home screen: add the Dumplt widget, then long-press it → Edit → Choose design.',
+  widgetsNote:
+    'After saving in the app, open Dumplt once so designs sync. Then long-press the home screen widget → Edit → Choose design lists your saved templates.',
+  widgetsHeader: 'Widgets',
+  widgetsMySection: 'MY WIDGETS',
+  widgetsCreateSection: 'NEW TEMPLATE',
+  widgetsEmpty: 'No saved widgets yet. Pick a template below to create one.',
+  widgetsUntitled: 'Widget',
+  widgetOnHome: 'Home',
+  widgetDeleteTitle: 'Delete widget?',
+  widgetDeleteMsg: 'This removes the design from your library.',
+  widgetDeleteConfirm: 'Delete',
+  widgetActiveTitle: 'Set for home screen',
+  widgetActiveMsg:
+    'Synced to your home screen widget. Long-press the Dumplt widget on your home screen → Edit → Choose design to pick this template (or another saved one).',
+  widgetStickers: 'Stickers',
+  widgetCaption: 'Caption',
+  widgetSave: 'Save',
+  widgetHelp: 'Drag stickers in the zone, add a caption (resize in Caption), drag text to the bottom, then Save.',
+  captionModalTitle: 'Caption',
+  captionPlaceholder: 'Write a short line…',
+  captionCancel: 'Cancel',
+  captionDone: 'Done',
+  captionFonts: 'Font',
+  captionColors: 'Color',
+  widgetPermTitle: 'Permission needed',
+  widgetPermMsg: 'Allow photo library access to save your widget.',
+  widgetSavedTitle: 'Saved',
+  widgetSavedMsg: 'Saved in My widgets and set for your home screen. Add the Dumplt widget on iOS after installing your latest build.',
+  widgetSaveFailedTitle: 'Save failed',
+  widgetSaveFailedMsg: 'Could not save this widget. Try again.',
+  templateNotFound: 'Template not found.',
+  stickerStudioSubtitle: 'Sticker studio',
+  collageSubtitle: 'Collage',
+  langModalTitle: 'LANGUAGES',
+  langModalHint: 'English is included on Hobby. Every other language unlocks with Pro.',
+  langIncluded: 'INCLUDED',
+  langPro: 'PRO LANGUAGES',
 };
 
 const MS: Partial<LocaleUi> = {
@@ -204,8 +291,15 @@ const ES: Partial<LocaleUi> = {
   insightsAllMedia: 'TODO EL CONTENIDO',
 };
 
-const overrides: Partial<Record<LanguageId, Partial<LocaleUi>>> = { ms: MS, es: ES };
+const overrides: Partial<Record<LanguageId, Partial<LocaleUi>>> = {
+  es: { ...ES, ...UI_ES_EXTRA },
+  fr: UI_FR,
+  ja: UI_JA,
+  ko: UI_KO,
+  zh: UI_ZH,
+};
 
 export function getLocaleUi(lang: LanguageId): LocaleUi {
-  return { ...EN, ...(overrides[lang] ?? {}) };
+  const id = normalizeLanguage(lang);
+  return { ...EN, ...(overrides[id] ?? {}) };
 }
