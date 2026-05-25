@@ -7,7 +7,7 @@ module.exports = config => ({
   icon: '../../app/assets/brand-icon.png',
   colors: {
     $accent: '#3B5BFC',
-    $widgetBackground: '#1a1a22',
+    $widgetBackground: '#00000000',
   },
   entitlements: {
     'com.apple.security.application-groups':

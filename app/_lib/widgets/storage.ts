@@ -6,6 +6,7 @@ import {
   widgetPreviewExists,
   writeWidgetManifest,
 } from './widgetFiles';
+import { normalizeWidgetPreview } from './normalizePreview';
 import { syncWidgetsToHomeScreen } from './widgetHomeSync';
 import type { SavedWidget } from './types';
 
@@ -82,22 +83,58 @@ export async function loadWidgets(): Promise<SavedWidget[]> {
 }
 
 export async function saveWidget(
-  entry: Omit<SavedWidget, 'id' | 'createdAt' | 'previewUri'>,
+  entry: Omit<SavedWidget, 'id' | 'createdAt' | 'updatedAt' | 'previewUri'>,
   previewTmpUri: string,
 ): Promise<SavedWidget> {
   const id = newWidgetId();
-  const previewUri = await persistWidgetPreview(previewTmpUri, id);
+  const normalized = await normalizeWidgetPreview(previewTmpUri, entry.family);
+  const previewUri = await persistWidgetPreview(normalized, id);
   const widget: SavedWidget = {
     ...entry,
     id,
     previewUri,
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
   const list = await readWidgetsRaw();
   const next = [widget, ...list.filter(w => w.id !== id)].slice(0, 24);
   await persistList(next);
   await AsyncStorage.setItem(ACTIVE_KEY, widget.id);
   await syncAll(next, widget.id);
+  return widget;
+}
+
+export async function getWidgetById(id: string): Promise<SavedWidget | null> {
+  const list = await readWidgetsRaw();
+  const w = list.find(x => x.id === id);
+  if (!w) return null;
+  const exists = await widgetPreviewExists(w.previewUri);
+  return exists ? w : null;
+}
+
+export async function updateWidget(
+  id: string,
+  entry: Omit<SavedWidget, 'id' | 'createdAt' | 'updatedAt' | 'previewUri'>,
+  previewTmpUri: string,
+): Promise<SavedWidget> {
+  const list = await readWidgetsRaw();
+  const prev = list.find(w => w.id === id);
+  if (!prev) throw new Error('NOT_FOUND');
+
+  if (prev.previewUri) await deleteWidgetPreview(prev.previewUri);
+  const normalized = await normalizeWidgetPreview(previewTmpUri, entry.family);
+  const previewUri = await persistWidgetPreview(normalized, id);
+  const widget: SavedWidget = {
+    ...entry,
+    id,
+    previewUri,
+    createdAt: prev.createdAt,
+    updatedAt: Date.now(),
+  };
+  const next = list.map(w => (w.id === id ? widget : w));
+  await persistList(next);
+  const active = await getActiveWidgetId();
+  await syncAll(next, active);
   return widget;
 }
 

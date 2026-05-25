@@ -253,7 +253,11 @@ export default function StickerStudioScreen() {
       if (e instanceof CutoutError && e.message === 'EXPO_GO_WASM') {
         wasmBusyRef.current = true;
         setWasmCutoutUri(fileUri);
-        if (!stayOnLive) startWasmCutout(fileUri);
+        if (!stayOnLive) {
+          startWasmCutout(fileUri);
+        } else {
+          setProcessStage('Loading on-device AI…');
+        }
         return false;
       }
       if (stayOnLive) {
@@ -275,16 +279,15 @@ export default function StickerStudioScreen() {
     setAbsorbUri(null);
     setLiveScanError(null);
     setLiveStillUri(galleryUri ?? null);
-    const perm = await requestCamPerm();
-    if (!perm?.granted) {
-      Alert.alert(
-        'Camera needed',
-        galleryUri
-          ? 'Allow camera for the live view while your photo is cut out.'
-          : 'Allow camera to scan objects for stickers.',
-      );
-      return;
+
+    if (!galleryUri) {
+      const perm = await requestCamPerm();
+      if (!perm?.granted) {
+        Alert.alert('Camera needed', 'Allow camera to scan objects for stickers.');
+        return;
+      }
     }
+
     if (galleryUri) {
       liveScanGen.current += 1;
       setLiveScanning(true);
@@ -293,27 +296,38 @@ export default function StickerStudioScreen() {
     setPhase('live');
   }, [requestCamPerm]);
 
-  const pickFromGallery = useCallback(async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted' && status !== 'limited') {
-        Alert.alert('Permission needed', 'Allow photo library access to pick a sticker image.');
-        return;
+  const pickFromGallery = useCallback(
+    async (mode: 'direct' | 'live' = 'direct') => {
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted' && status !== 'limited') {
+          Alert.alert('Permission needed', 'Allow photo library access to pick a sticker image.');
+          return;
+        }
+        const res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: mode === 'direct' ? 0.85 : 0.55,
+          allowsEditing: false,
+          copyToCacheDirectory: true,
+        });
+        const uri = res.assets?.[0]?.uri;
+        if (res.canceled || !uri) return;
+
+        if (mode === 'direct') {
+          beginProcessing('Cutting out your sticker…');
+          await yieldToUi();
+          await runCutout(uri, false);
+          return;
+        }
+
+        await enterLive(uri);
+      } catch {
+        Alert.alert('Could not open gallery', 'Try again or use the camera.');
+        if (phase !== 'live') setPhase('hub');
       }
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.55,
-        allowsEditing: false,
-        copyToCacheDirectory: true,
-      });
-      const uri = res.assets?.[0]?.uri;
-      if (res.canceled || !uri) return;
-      await enterLive(uri);
-    } catch {
-      Alert.alert('Could not open gallery', 'Try again or use the camera.');
-      if (phase !== 'live') setPhase('hub');
-    }
-  }, [enterLive]);
+    },
+    [beginProcessing, enterLive, phase, runCutout],
+  );
 
   const runLiveScan = useCallback(async (focus?: { x: number; y: number }) => {
     if (liveScanLock.current && !focus) return;
@@ -377,7 +391,7 @@ export default function StickerStudioScreen() {
   /** Pre-made transparent PNG only — camera/gallery always run AI cutout. */
   const importCutoutPng = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 1,
       allowsEditing: false,
       copyToCacheDirectory: true,
@@ -427,7 +441,7 @@ export default function StickerStudioScreen() {
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.65,
       allowsEditing: false,
       copyToCacheDirectory: true,
@@ -520,6 +534,8 @@ export default function StickerStudioScreen() {
     screen = (
       <LiveStickerCamera
         cameraRef={cameraRef}
+        stillUri={liveStillUri}
+        showCamera={!liveStillUri || Boolean(camPerm?.granted)}
         trace={trace}
         onTraceChange={setTrace}
         cutout={cutout}
@@ -530,7 +546,7 @@ export default function StickerStudioScreen() {
         theme={theme}
         stickerCount={library.length}
         onBack={exitLive}
-        onGallery={() => void pickFromGallery()}
+        onGallery={() => void pickFromGallery('live')}
         onScan={() => void runLiveScan()}
         onTapFocus={point => void runLiveScan(point)}
         onOpenCollection={() => setShowCollection(true)}
@@ -569,7 +585,7 @@ export default function StickerStudioScreen() {
             <Text style={st.camHint}>One cute subject in the frame ✨</Text>
           </View>
           <View style={st.camBottom}>
-            <TouchableOpacity style={st.camGallery} onPress={() => void pickFromGallery()}>
+            <TouchableOpacity style={st.camGallery} onPress={() => void pickFromGallery('direct')}>
               <ImageIcon size={24} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity style={st.shutter} onPress={() => void captureAndCutout()}>
@@ -684,7 +700,7 @@ export default function StickerStudioScreen() {
         theme={theme}
         onBack={goBack}
         onNew={openNewCutout}
-        onGallery={() => void pickFromGallery()}
+        onGallery={() => void pickFromGallery('direct')}
         onCollage={() => void startCollage()}
         onStickerPress={setPreviewSticker}
       />

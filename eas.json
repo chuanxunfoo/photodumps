@@ -11,18 +11,18 @@
         "image": "latest"
       },
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "0"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "0"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "0"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
       }
     }
   }

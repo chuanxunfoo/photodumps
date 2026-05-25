@@ -36,7 +36,7 @@ export function cutoutErrorMessage(err: unknown): string {
     }
     if (err.code === 'CLOUD_FAILED') {
       if (err.message.toLowerCase().includes('credit')) {
-        return 'Cloud cutout credits are used up. Use a dev build (npm run ios / android) for free on-device cutout, or add remove.bg credits.';
+        return 'Cloud cutout credits are used up. Rebuild with on-device cutout: npm run ios (Mac) or eas build --platform ios --profile development, then use start:dev-client — not Expo Go.';
       }
       return err.message.replace(/^Cloud cutout failed:\s*/i, '') || 'Cloud cutout failed. Try again with Wi‑Fi.';
     }

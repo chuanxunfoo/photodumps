@@ -1,0 +1,346 @@
+[
+  {
+    "id": "digicam-pink",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\digicam-pink.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "gingham-bow-blue",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\gingham-bow-blue.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "denim-flowers",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\denim-flowers.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "digicam-film",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\digicam-film.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "pink-scrap-card",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\pink-scrap-card.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "gingham-pearl",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\gingham-pearl.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "digicam-lavender",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\digicam-lavender.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "wave-scrapbook",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\wave-scrapbook.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "starry-sky",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\starry-sky.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "lockers",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\lockers.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "clipboard-penco",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\clipboard-penco.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "archive-gingham",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\archive-gingham.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "gingham-center",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\gingham-center.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "denim-frame",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\denim-frame.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "grid-paper",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\grid-paper.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "picnic-table",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\picnic-table.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "digicam-classic",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\digicam-classic.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "digicam-green",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\digicam-green.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "digicam-yellow",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\digicam-yellow.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "doodle-flowers",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\doodle-flowers.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "ribbon-bows",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\ribbon-bows.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "dreamy-stars",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\dreamy-stars.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "butterfly-glow",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\butterfly-glow.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "coastal-happen",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\coastal-happen.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "meadow-time",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\meadow-time.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "reminder-gingham",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\reminder-gingham.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "fish-once",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\fish-once.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "ease-journal",
+    "family": "large",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\ease-journal.png",
+    "w": 1080,
+    "h": 1128
+  },
+  {
+    "id": "study-gingham",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\study-gingham.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "quote-good-things",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-good-things.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "quote-be-kind",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-be-kind.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "quote-small-steps",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-small-steps.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "quote-works-out",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-works-out.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "quote-favorite",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-favorite.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "ios-reminder",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\ios-reminder.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "polaroid-stack",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\polaroid-stack.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "pastel-doodles",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\pastel-doodles.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "quote-breathe",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-breathe.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "quote-self-love",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-self-love.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "tape-photos",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\tape-photos.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "quote-you-got-this",
+    "family": "small",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\quote-you-got-this.png",
+    "w": 510,
+    "h": 510
+  },
+  {
+    "id": "heart-frame",
+    "family": "medium",
+    "kind": "overlay",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\heart-frame.png",
+    "w": 1080,
+    "h": 507
+  },
+  {
+    "id": "cloud-soft",
+    "family": "medium",
+    "kind": "full",
+    "outPath": "C:\\Users\\ChuanXunFoo\\Dumplt\\app\\assets\\widget-templates\\cloud-soft.png",
+    "w": 1080,
+    "h": 507
+  }
+]

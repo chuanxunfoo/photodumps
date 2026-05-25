@@ -80,14 +80,17 @@ export type LocaleUi = {
   widgetStickers: string;
   widgetCaption: string;
   widgetSave: string;
+  widgetUpdate: string;
   widgetHelp: string;
+  widgetSizeHint: string;
   captionModalTitle: string;
-  captionPlaceholder: string;
   captionCancel: string;
   captionDone: string;
   captionFonts: string;
   captionColors: string;
   captionSize: string;
+  captionWeight: string;
+  captionSlant: string;
   widgetPermTitle: string;
   widgetPermMsg: string;
   widgetSavedTitle: string;
@@ -164,9 +167,9 @@ const EN: LocaleUi = {
   hubUpgrade: 'UPGRADE',
   hubSignedIn: 'Signed in',
   widgetsTitle: 'Widget maker',
-  widgetsHint: 'Save designs in My widgets. To pick one on your home screen: add the Dumplt widget, then long-press it → Edit → Choose design.',
+  widgetsHint: 'Tap a saved widget to edit. Use the size tabs below to match Small, Medium, or Large iOS widgets.',
   widgetsNote:
-    'After saving in the app, open Dumplt once so designs sync. Then long-press the home screen widget → Edit → Choose design lists your saved templates.',
+    'Cutout templates (cameras, quotes) have transparent backgrounds. Set Home on a saved design, then pick it on your iOS home screen widget.',
   widgetsHeader: 'Widgets',
   widgetsMySection: 'MY WIDGETS',
   widgetsCreateSection: 'NEW TEMPLATE',
@@ -182,13 +185,17 @@ const EN: LocaleUi = {
   widgetStickers: 'Stickers',
   widgetCaption: 'Caption',
   widgetSave: 'Save',
-  widgetHelp: 'Drag stickers in the zone, add a caption (resize in Caption), drag text to the bottom, then Save.',
+  widgetUpdate: 'Update',
+  widgetHelp: 'Pinch caption to resize · stickers go anywhere · tap Stickers again to add or remove without losing positions.',
+  widgetSizeHint: 'Templates shown fit this iOS widget size. Square art appears in Small & Large; wide art in Medium.',
   captionModalTitle: 'Caption',
-  captionPlaceholder: 'Write a short line…',
   captionCancel: 'Cancel',
   captionDone: 'Done',
   captionFonts: 'Font',
   captionColors: 'Color',
+  captionSize: 'Size',
+  captionWeight: 'Weight',
+  captionSlant: 'Slant',
   widgetPermTitle: 'Permission needed',
   widgetPermMsg: 'Allow photo library access to save your widget.',
   widgetSavedTitle: 'Saved',

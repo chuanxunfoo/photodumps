@@ -27,8 +27,12 @@ export function defaultPreviewUri(widgetId: string): string {
 
 /** Fill missing preview paths for entries saved before previewUri existed. */
 export function hydrateWidget(raw: SavedWidget): SavedWidget {
-  if (raw.previewUri?.trim()) return raw;
-  return { ...raw, previewUri: defaultPreviewUri(raw.id) };
+  const base = raw.previewUri?.trim() ? raw : { ...raw, previewUri: defaultPreviewUri(raw.id) };
+  return {
+    ...base,
+    family: base.family ?? 'medium',
+    kind: base.kind ?? 'full',
+  };
 }
 
 export async function widgetPreviewExists(uri: string): Promise<boolean> {
@@ -73,7 +77,7 @@ export async function deleteWidgetPreview(uri: string): Promise<void> {
 /** Written for the iOS Widget Extension to read the same designs as the app. */
 export async function writeWidgetManifest(widgets: SavedWidget[], activeWidgetId: string | null): Promise<void> {
   try {
-    await FileSystem.makeDirectoryAsync(WIDGET_DIR, { intermediates: true });
+    await FileSystem.makeDirectoryAsync(widgetDir(), { intermediates: true });
     const payload = {
       version: 1,
       updatedAt: Date.now(),

@@ -1,80 +1,163 @@
 import { Platform, type TextStyle } from 'react-native';
+import type { CaptionSlant, CaptionWeight, WidgetCaption } from './types';
 
-export type CaptionFontId = 'rounded' | 'serif' | 'hand' | 'mono';
-export type CaptionColorId = 'ink' | 'rose' | 'lavender' | 'mint' | 'cream' | 'sky';
+export type CaptionFontId =
+  | 'rounded'
+  | 'serif'
+  | 'hand'
+  | 'script'
+  | 'marker'
+  | 'typewriter'
+  | 'bubble';
 
-export const CAPTION_FONT_IDS: CaptionFontId[] = ['rounded', 'serif', 'hand', 'mono'];
-export const CAPTION_COLOR_IDS: CaptionColorId[] = ['ink', 'rose', 'lavender', 'mint', 'cream', 'sky'];
+export type CaptionColorId =
+  | 'ink'
+  | 'rose'
+  | 'blush'
+  | 'lavender'
+  | 'lilac'
+  | 'mint'
+  | 'sage'
+  | 'sky'
+  | 'butter'
+  | 'peach'
+  | 'cream'
+  | 'mauve';
+
+export const CAPTION_FONT_IDS: CaptionFontId[] = [
+  'rounded',
+  'serif',
+  'hand',
+  'script',
+  'marker',
+  'typewriter',
+  'bubble',
+];
+
+export const CAPTION_COLOR_IDS: CaptionColorId[] = [
+  'ink',
+  'rose',
+  'blush',
+  'lavender',
+  'lilac',
+  'mint',
+  'sage',
+  'sky',
+  'butter',
+  'peach',
+  'cream',
+  'mauve',
+];
+
+export const CAPTION_WEIGHTS: CaptionWeight[] = ['400', '500', '600', '700', '800'];
+export const CAPTION_SLANTS: CaptionSlant[] = ['normal', 'italic'];
 
 const ios = Platform.OS === 'ios';
 
 type CaptionFontSpec = {
   family?: string;
-  weight: TextStyle['fontWeight'];
-  fontStyle?: TextStyle['fontStyle'];
+  defaultWeight: CaptionWeight;
+  defaultSlant: CaptionSlant;
 };
 
-/** Safe system fonts — avoid invalid PostScript names that crash some iOS builds. */
 export const CAPTION_FONTS: Record<CaptionFontId, CaptionFontSpec> = {
-  rounded: { weight: '700' },
+  rounded: { defaultWeight: '700', defaultSlant: 'normal' },
   serif: {
     family: ios ? 'Georgia' : 'serif',
-    weight: '600',
-    fontStyle: 'italic',
+    defaultWeight: '600',
+    defaultSlant: 'italic',
   },
   hand: {
-    family: Platform.select({ ios: 'Snell Roundhand', android: undefined, default: undefined }),
-    weight: '600',
-    fontStyle: 'italic',
+    family: Platform.select({ ios: 'Snell Roundhand', default: undefined }),
+    defaultWeight: '600',
+    defaultSlant: 'italic',
   },
-  mono: {
-    family: ios ? 'Menlo' : 'monospace',
-    weight: '700',
+  script: {
+    family: Platform.select({ ios: 'Bradley Hand', default: undefined }),
+    defaultWeight: '600',
+    defaultSlant: 'italic',
   },
+  marker: {
+    family: Platform.select({ ios: 'Marker Felt', default: undefined }),
+    defaultWeight: '700',
+    defaultSlant: 'normal',
+  },
+  typewriter: {
+    family: ios ? 'Courier New' : 'monospace',
+    defaultWeight: '600',
+    defaultSlant: 'normal',
+  },
+  bubble: { defaultWeight: '800', defaultSlant: 'normal' },
 };
 
 export const CAPTION_COLORS: Record<CaptionColorId, string> = {
-  ink: '#2a2418',
-  rose: '#c45c7a',
-  lavender: '#7b6ba8',
-  mint: '#3d8a72',
-  cream: '#f5efe0',
-  sky: '#4a7fad',
+  ink: '#3d3648',
+  rose: '#d4738f',
+  blush: '#f4a4b8',
+  lavender: '#9b8ec4',
+  lilac: '#c4b5fd',
+  mint: '#6eb89a',
+  sage: '#8faf9a',
+  sky: '#7eb0d4',
+  butter: '#e8c87a',
+  peach: '#f0b49a',
+  cream: '#faf6ee',
+  mauve: '#b07a9a',
 };
 
 export const DEFAULT_CAPTION_FONT: CaptionFontId = 'rounded';
 export const DEFAULT_CAPTION_COLOR: CaptionColorId = 'ink';
+export const DEFAULT_CAPTION_WEIGHT: CaptionWeight = '700';
+export const DEFAULT_CAPTION_SLANT: CaptionSlant = 'normal';
 
 export function captionTextStyle(
   fontId: CaptionFontId = DEFAULT_CAPTION_FONT,
   colorId: CaptionColorId = DEFAULT_CAPTION_COLOR,
   fontSize = 15,
+  fontWeight?: CaptionWeight,
+  fontSlant?: CaptionSlant,
 ): TextStyle {
   const font = CAPTION_FONTS[fontId];
   const color = CAPTION_COLORS[colorId];
+  const weight = fontWeight ?? font.defaultWeight;
+  const slant = fontSlant ?? font.defaultSlant;
+
   const style: TextStyle = {
     fontSize,
     color,
     textAlign: 'center',
-    lineHeight: Math.round(fontSize * 1.35),
+    lineHeight: Math.round(fontSize * 1.38),
+    fontWeight: weight,
+    fontStyle: slant,
   };
 
   if (font.family) {
     style.fontFamily = font.family;
-    if (font.fontStyle) style.fontStyle = font.fontStyle;
-  } else {
-    style.fontWeight = font.weight;
   }
 
-  if (colorId === 'cream') {
-    style.textShadowColor = 'rgba(0,0,0,0.35)';
+  if (fontId === 'bubble') {
+    style.letterSpacing = 0.4;
+  }
+
+  if (colorId === 'cream' || colorId === 'butter') {
+    style.textShadowColor = 'rgba(0,0,0,0.28)';
     style.textShadowOffset = { width: 0, height: 1 };
-    style.textShadowRadius = 4;
+    style.textShadowRadius = 3;
   } else {
-    style.textShadowColor = 'rgba(255,255,255,0.85)';
+    style.textShadowColor = 'rgba(255,255,255,0.75)';
     style.textShadowOffset = { width: 0, height: 0 };
-    style.textShadowRadius = 6;
+    style.textShadowRadius = 5;
   }
 
   return style;
+}
+
+export function captionStyleFromWidget(caption: WidgetCaption): TextStyle {
+  return captionTextStyle(
+    caption.fontId,
+    caption.colorId,
+    caption.fontSize,
+    caption.fontWeight,
+    caption.fontSlant,
+  );
 }

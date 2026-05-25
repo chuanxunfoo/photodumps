@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Modal,
@@ -23,12 +23,24 @@ type Props = {
   visible: boolean;
   stickers: SavedSticker[];
   maxPick: number;
+  initialSelectedIds?: string[];
   onClose: () => void;
   onDone: (picked: SavedSticker[]) => void;
 };
 
-export function WidgetStickerPicker({ visible, stickers, maxPick, onClose, onDone }: Props) {
+export function WidgetStickerPicker({
+  visible,
+  stickers,
+  maxPick,
+  initialSelectedIds = [],
+  onClose,
+  onDone,
+}: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (visible) setSelected(new Set(initialSelectedIds));
+  }, [visible, initialSelectedIds]);
 
   const toggle = (id: string) => {
     setSelected(prev => {
@@ -46,30 +58,25 @@ export function WidgetStickerPicker({ visible, stickers, maxPick, onClose, onDon
 
   const handleDone = () => {
     onDone(picked);
-    setSelected(new Set());
-  };
-
-  const handleClose = () => {
-    setSelected(new Set());
     onClose();
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={st.root} edges={['top', 'bottom']}>
         <View style={st.bar}>
-          <TouchableOpacity onPress={handleClose} hitSlop={12}>
+          <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Text style={st.barGhost}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={st.barTitle}>Choose stickers</Text>
-          <TouchableOpacity onPress={handleDone} disabled={picked.length === 0} hitSlop={12}>
-            <Text style={[st.barDone, picked.length === 0 && st.barDoneOff]}>Done</Text>
+          <Text style={st.barTitle}>Stickers</Text>
+          <TouchableOpacity onPress={handleDone} hitSlop={12}>
+            <Text style={st.barDone}>Done</Text>
           </TouchableOpacity>
         </View>
 
         {stickers.length === 0 ? (
           <View style={st.empty}>
-            <Text style={st.emptyTxt}>Make stickers in Sticker Studio first.</Text>
+            <Text style={st.emptyTxt}>Make stickers in Sticker Studio first ✿</Text>
           </View>
         ) : (
           <ScrollView contentContainerStyle={st.grid} showsVerticalScrollIndicator={false}>
@@ -78,11 +85,7 @@ export function WidgetStickerPicker({ visible, stickers, maxPick, onClose, onDon
               return (
                 <Pressable key={s.id} onPress={() => toggle(s.id)} style={st.tileWrap}>
                   <View style={[st.tile, on && st.tileOn]}>
-                    <Image
-                      source={{ uri: s.uri }}
-                      style={[st.thumb, !on && st.thumbOff]}
-                      contentFit="contain"
-                    />
+                    <Image source={{ uri: s.uri }} style={[st.thumb, !on && st.thumbOff]} contentFit="contain" />
                     {on && (
                       <View style={st.check}>
                         <Text style={st.checkMark}>✓</Text>
@@ -96,7 +99,7 @@ export function WidgetStickerPicker({ visible, stickers, maxPick, onClose, onDon
         )}
 
         <Text style={st.footer}>
-          Selected {selected.size}/{maxPick}
+          {selected.size}/{maxPick} selected
         </Text>
       </SafeAreaView>
     </Modal>
@@ -104,7 +107,7 @@ export function WidgetStickerPicker({ visible, stickers, maxPick, onClose, onDon
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1, backgroundColor: '#fdf8f5' },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -112,32 +115,25 @@ const st = StyleSheet.create({
     paddingHorizontal: PAD,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
-  barGhost: { fontSize: 15, fontWeight: '600', color: '#666' },
-  barTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
-  barDone: { fontSize: 15, fontWeight: '700', color: '#111' },
-  barDoneOff: { color: '#bbb' },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: GAP,
-    padding: PAD,
-    paddingBottom: 24,
-  },
+  barGhost: { fontSize: 15, fontWeight: '600', color: '#9a8fa8' },
+  barTitle: { fontSize: 16, fontWeight: '700', color: '#4a4258' },
+  barDone: { fontSize: 15, fontWeight: '700', color: '#b07a9a' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, padding: PAD, paddingBottom: 24 },
   tileWrap: { width: TILE },
   tile: {
     width: TILE,
     height: TILE,
-    borderRadius: 12,
-    backgroundColor: '#f4f4f4',
+    borderRadius: 14,
+    backgroundColor: '#fff',
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: 'rgba(199,146,198,0.2)',
   },
-  tileOn: { borderColor: '#e85d5d' },
+  tileOn: { borderColor: '#c792c6' },
   thumb: { width: '100%', height: '100%' },
-  thumbOff: { opacity: 0.45 },
+  thumbOff: { opacity: 0.5 },
   check: {
     position: 'absolute',
     top: 6,
@@ -145,18 +141,12 @@ const st = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#e85d5d',
+    backgroundColor: '#c792c6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkMark: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  footer: {
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#888',
-    paddingBottom: 10,
-  },
+  footer: { textAlign: 'center', fontSize: 13, fontWeight: '600', color: '#9a8fa8', paddingBottom: 10 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTxt: { fontSize: 15, color: '#666', textAlign: 'center' },
+  emptyTxt: { fontSize: 15, color: '#9a8fa8', textAlign: 'center' },
 });

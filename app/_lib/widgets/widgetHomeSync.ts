@@ -74,6 +74,8 @@ export async function syncWidgetsToHomeScreen(
         widgets.map(w => ({
           id: w.id,
           templateId: w.templateId,
+          family: w.family,
+          kind: w.kind,
           caption: w.caption?.text ?? null,
           createdAt: w.createdAt,
         })),
@@ -83,12 +85,14 @@ export async function syncWidgetsToHomeScreen(
     if (active) {
       storage.set(WIDGET_STORAGE_KEYS.activeId, active.id);
       storage.set(WIDGET_STORAGE_KEYS.activeCaption, active.caption?.text ?? '');
+      storage.set(WIDGET_STORAGE_KEYS.activeKind, active.kind);
       const copied = await copyPreviewToAppGroup(active.id, active.previewUri);
       if (!copied) await storeActivePreviewBase64(active.previewUri, storage);
       else storage.remove(WIDGET_STORAGE_KEYS.activePreviewB64);
     } else {
       storage.remove(WIDGET_STORAGE_KEYS.activeId);
       storage.remove(WIDGET_STORAGE_KEYS.activeCaption);
+      storage.remove(WIDGET_STORAGE_KEYS.activeKind);
       storage.remove(WIDGET_STORAGE_KEYS.activePreviewB64);
     }
 

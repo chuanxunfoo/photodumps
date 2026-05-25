@@ -48,6 +48,9 @@ type ThemeSlice = {
 
 type Props = {
   cameraRef: React.RefObject<CameraView | null>;
+  /** Gallery pick in live mode — show this instead of camera when camera is off. */
+  stillUri?: string | null;
+  showCamera?: boolean;
   trace: TraceSettings;
   onTraceChange: (t: TraceSettings) => void;
   cutout: CutoutResult | null;
@@ -73,6 +76,8 @@ function frameTopForLayout(screenH: number, topBarBottom: number, bottomOccupied
 
 export function LiveStickerCamera({
   cameraRef,
+  stillUri = null,
+  showCamera = true,
   trace,
   onTraceChange,
   cutout,
@@ -244,7 +249,13 @@ export function LiveStickerCamera({
 
   return (
     <View style={st.root}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+      {showCamera ? (
+        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+      ) : stillUri ? (
+        <Image source={{ uri: stillUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, st.noCameraBg]} />
+      )}
 
       <Animated.View style={[st.scanAnchor, { top: frameTopAnim }]} pointerEvents="box-none">
         <View ref={frameRef} collapsable={false} style={st.frameBox} pointerEvents="none">
@@ -427,6 +438,7 @@ export function LiveStickerCamera({
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
+  noCameraBg: { backgroundColor: '#12121a' },
   tapLayer: { ...StyleSheet.absoluteFillObject, zIndex: 8 },
   scanAnchor: {
     position: 'absolute',

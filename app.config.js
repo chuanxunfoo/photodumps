@@ -57,6 +57,13 @@ module.exports = ({ config }) => ({
   },
   scheme: 'dumpit',
   plugins: [
+    [
+      'expo-build-properties',
+      {
+        ios: { newArchEnabled: true },
+        android: { newArchEnabled: true },
+      },
+    ],
     'expo-router',
     [
       'expo-media-library',

@@ -11,7 +11,8 @@
     "ios": "cross-env EXPO_PUBLIC_NATIVE_CUTOUT=1 expo run:ios",
     "web": "expo start --web",
     "serve:promo": "npx --yes serve public -l 3456",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "postinstall": "node scripts/patch-rn-remove-image-bg.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -25,6 +26,7 @@
     "expo": "~54.0.33",
     "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",
+    "expo-build-properties": "~1.0.10",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
@@ -52,6 +54,7 @@
     "react-native-compressor": "^1.18.2",
     "react-native-deck-swiper": "^2.0.19",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-nitro-modules": "^0.35.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
@@ -59,7 +62,8 @@
     "react-native-view-shot": "4.0.3",
     "react-native-web": "~0.21.0",
     "react-native-webview": "13.15.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "rn-remove-image-bg": "^0.0.32"
   },
   "devDependencies": {
     "@bacons/apple-targets": "^4.0.7",

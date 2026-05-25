@@ -1,23 +1,17 @@
 import type { ImageSourcePropType } from 'react-native';
+import type { WidgetFamily } from './widgetSizes';
 
-/** Normalized 0–1 rect on template image (empty area for stickers). */
-export type PlacementZone = {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
-
-export type WidgetPlacementMode = 'free' | 'zones';
+export type WidgetTemplateKind = 'full' | 'cutout';
 
 export type WidgetTemplate = {
   id: string;
   name: string;
-  image: ImageSourcePropType;
-  /** width / height */
-  aspectRatio: number;
-  placementMode: WidgetPlacementMode;
-  zones?: PlacementZone[];
+  kind: WidgetTemplateKind;
+  /** iOS widget sizes this template supports */
+  families: WidgetFamily[];
+  /** PNG per family — exact iOS aspect, transparent outside cutout art */
+  images: Record<WidgetFamily, ImageSourcePropType>;
+  placementMode: 'free';
   maxStickers: number;
   captionEnabled: boolean;
 };
@@ -34,23 +28,28 @@ export type WidgetPlacedSticker = {
 
 import type { CaptionColorId, CaptionFontId } from './captionPresets';
 
+export type CaptionWeight = '400' | '500' | '600' | '700' | '800';
+export type CaptionSlant = 'normal' | 'italic';
+
 export type WidgetCaption = {
   text: string;
-  /** Normalized center X on canvas */
   nx: number;
-  /** Normalized center Y */
   ny: number;
   fontSize: number;
   fontId?: CaptionFontId;
   colorId?: CaptionColorId;
+  fontWeight?: CaptionWeight;
+  fontSlant?: CaptionSlant;
 };
 
 export type SavedWidget = {
   id: string;
   templateId: string;
-  /** Permanent PNG in app documents — used in-app and by the home screen widget extension. */
+  family: WidgetFamily;
+  kind: WidgetTemplateKind;
   previewUri: string;
   stickers: WidgetPlacedSticker[];
   caption?: WidgetCaption;
   createdAt: number;
+  updatedAt?: number;
 };

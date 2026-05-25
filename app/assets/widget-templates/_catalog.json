@@ -1,0 +1,376 @@
+[
+  {
+    "id": "digicam-pink",
+    "name": "Pink digicam",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "gingham-bow-blue",
+    "name": "Blue gingham bow",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "denim-flowers",
+    "name": "Denim flowers",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "digicam-film",
+    "name": "Film digicam",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "pink-scrap-card",
+    "name": "Pink scrap card",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "gingham-pearl",
+    "name": "Pearl gingham",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "digicam-lavender",
+    "name": "Lavender digicam",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "wave-scrapbook",
+    "name": "Wave journal",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "starry-sky",
+    "name": "Starry sky",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "lockers",
+    "name": "Lockers",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "clipboard-penco",
+    "name": "Clipboard",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "archive-gingham",
+    "name": "Archive tag",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "gingham-center",
+    "name": "Gingham center",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "denim-frame",
+    "name": "Denim frame",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "grid-paper",
+    "name": "Grid notes",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "picnic-table",
+    "name": "Picnic",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "digicam-classic",
+    "name": "Classic digicam",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "digicam-green",
+    "name": "Green digicam",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "digicam-yellow",
+    "name": "Yellow digicam",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "doodle-flowers",
+    "name": "Doodle flowers",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "ribbon-bows",
+    "name": "Ribbon bows",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "dreamy-stars",
+    "name": "Dreamy stars",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "butterfly-glow",
+    "name": "Butterfly glow",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "coastal-happen",
+    "name": "Make it happen",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "meadow-time",
+    "name": "Good things take time",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "reminder-gingham",
+    "name": "Reminder card",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "fish-once",
+    "name": "Only once",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "ease-journal",
+    "name": "Feel ease",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "study-gingham",
+    "name": "Study now",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "quote-good-things",
+    "name": "Good things",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "quote-be-kind",
+    "name": "Be kind",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "quote-small-steps",
+    "name": "Small steps",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "quote-works-out",
+    "name": "Works out",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "quote-favorite",
+    "name": "Favorite things",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "ios-reminder",
+    "name": "Proud reminder",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "polaroid-stack",
+    "name": "Polaroid stack",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "pastel-doodles",
+    "name": "Pastel doodles",
+    "kind": "full",
+    "families": [
+      "medium"
+    ]
+  },
+  {
+    "id": "quote-breathe",
+    "name": "Breathe",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "quote-self-love",
+    "name": "Self love",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "tape-photos",
+    "name": "Tape photos",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "quote-you-got-this",
+    "name": "You got this",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "heart-frame",
+    "name": "Heart frame",
+    "kind": "cutout",
+    "families": [
+      "small",
+      "large"
+    ]
+  },
+  {
+    "id": "cloud-soft",
+    "name": "Soft clouds",
+    "kind": "full",
+    "families": [
+      "small",
+      "large"
+    ]
+  }
+]

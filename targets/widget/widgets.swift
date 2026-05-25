@@ -69,6 +69,7 @@ struct PhotodumpsWidgetView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 LinearGradient(
                     colors: [Color(red: 0.23, green: 0.36, blue: 0.99), Color(red: 0.08, green: 0.08, blue: 0.13)],
@@ -90,7 +91,7 @@ struct PhotodumpsWidgetView: View {
         }
         .clipped()
         .containerBackground(for: .widget) {
-            Color(red: 0.08, green: 0.08, blue: 0.13)
+            Color.clear
         }
     }
 }
@@ -105,6 +106,7 @@ struct PhotodumpsStickerWidget: Widget {
         .configurationDisplayName("Dumplt")
         .description("Shows a sticker widget you saved in Dumplt.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
     }
 }
 
