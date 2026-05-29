@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connecting Gmail…</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0b1020; color: #e8ecff; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+    p { opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <p>Returning to photodumps…</p>
+  <script>
+    (function () {
+      var q = window.location.search || '';
+      var hash = window.location.hash || '';
+      var target = 'dumpit://gmail-callback' + q + (hash && hash.indexOf('code=') !== -1 ? hash.replace(/^#/, q ? '&' : '?') : '');
+      window.location.replace(target);
+      setTimeout(function () {
+        document.querySelector('p').textContent = 'If the app did not open, switch back to photodumps and tap Start scan again.';
+      }, 2500);
+    })();
+  </script>
+</body>
+</html>
