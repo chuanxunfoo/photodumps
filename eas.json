@@ -21,8 +21,19 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_NATIVE_CUTOUT": "1"
+        "EXPO_PUBLIC_NATIVE_CUTOUT": "1",
+        "EXPO_PUBLIC_IOS_IAP_WEEKLY_PRODUCT_ID": "com.yourname.dumpitapp.pro.weekly",
+        "EXPO_PUBLIC_IOS_IAP_MONTHLY_PRODUCT_ID": "com.yourname.dumpitapp.pro.monthly",
+        "EXPO_PUBLIC_IOS_IAP_YEARLY_PRODUCT_ID": "com.yourname.dumpitapp.pro.yearly"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6773178882"
       }
     }
   }

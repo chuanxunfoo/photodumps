@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import {
+  Mail,
   RefreshCw,
   Sparkles,
   TrendingUp,
@@ -26,6 +27,7 @@ import { GlassTicker } from '../components/GlassTicker';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { getLocaleUi } from '../_lib/localeUi';
 import { resetStatsSession, getOrCreateStatsSessionId, getStatsSessionId } from '../_lib/statsSession';
+import { fetchEmailDetoxStats, type EmailDetoxStats } from '../_lib/emailDetoxStats';
 import {
   estimateAssetBytes,
   fetchUserStatsTotals,
@@ -33,6 +35,8 @@ import {
   resolveAuthUserId,
   type UserStatsAggregateRow,
 } from '../_lib/userStatsSupabase';
+import { tickerHuesForTheme, tickerTextColorForTheme } from '../components/hub/exploreUi';
+import { insightsHeroGradient, insightsHeroText } from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
 
 function fmtBytes(bytes: number): string {
@@ -64,7 +68,7 @@ export default function InsightsScreen() {
   const navigation = useNavigation();
   const params = useLocalSearchParams<{ from?: string }>();
   const goBack = useExploreAwareBack();
-  const { theme, language, user } = useTheme();
+  const { theme, themeId, language, user } = useTheme();
   const u = getLocaleUi(language);
 
   const [loading, setLoading] = useState(true);
@@ -72,6 +76,7 @@ export default function InsightsScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [totals, setTotals] = useState({ allTimeBytes: 0, allTimeItems: 0, sessionBytes: 0, sessionItems: 0 });
   const [aggregate, setAggregate] = useState<UserStatsAggregateRow | null>(null);
+  const [emailStats, setEmailStats] = useState<EmailDetoxStats>({ bytes: 0, count: 0, batches: 0 });
 
   const [analytics, setAnalytics] = useState({
     totalMB: 0,
@@ -92,6 +97,8 @@ export default function InsightsScreen() {
   const loadSupabase = useCallback(async () => {
     const sid = await getOrCreateStatsSessionId();
     setSessionId(sid);
+    const email = await fetchEmailDetoxStats();
+    setEmailStats(email);
     const effectiveUid = await resolveAuthUserId(user?.uid ?? '');
     if (!effectiveUid) {
       setTotals({ allTimeBytes: 0, allTimeItems: 0, sessionBytes: 0, sessionItems: 0 });
@@ -192,13 +199,16 @@ export default function InsightsScreen() {
     await loadSupabase();
   };
 
-  const maxVal = Math.max(analytics.photoMB, analytics.ssMB, analytics.vidMB, analytics.liveMB, 1);
+  const maxVal = Math.max(analytics.photoMB, analytics.ssMB, analytics.vidMB, analytics.liveMB, emailStats.bytes / (1024 * 1024), 1);
+  const emailMb = emailStats.bytes / (1024 * 1024);
   const accountDeletedItems = aggregate?.total_photos_deleted ?? totals.allTimeItems;
   const accountDeletedMb =
     aggregate?.total_storage_freed_mb != null
       ? aggregate.total_storage_freed_mb
       : totals.allTimeBytes / (1024 * 1024);
   const pulseScale = heroPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] });
+  const heroGrad = insightsHeroGradient(themeId, theme);
+  const heroTxt = insightsHeroText(theme, heroGrad);
 
   if (loading) {
     return (
@@ -229,28 +239,28 @@ export default function InsightsScreen() {
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Animated.View style={{ opacity: heroEntrance, transform: [{ scale: pulseScale }] }}>
-            <LinearGradient colors={['#0f172a', '#4c1d95', '#be123c']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-              {Platform.OS === 'ios' ? (
+            <LinearGradient colors={heroGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, { borderColor: heroTxt.border }]}>
+              {Platform.OS === 'ios' && theme.isDark ? (
                 <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
               ) : null}
               <View style={styles.heroContent}>
                 <View style={styles.heroBadge}>
-                  <Sparkles size={16} color="#FDE68A" />
-                  <Text style={styles.heroBadgeTxt}>{u.insightsStorageReclaimed}</Text>
+                  <Sparkles size={16} color={heroTxt.badge} />
+                  <Text style={[styles.heroBadgeTxt, { color: heroTxt.badge }]}>{u.insightsStorageReclaimed}</Text>
                 </View>
-                <Text style={styles.heroKicker}>{u.insightsSession}</Text>
-                <Text style={styles.heroBig}>{fmtBytes(totals.sessionBytes)}</Text>
-                <Text style={styles.heroSub}>
+                <Text style={[styles.heroKicker, { color: heroTxt.kicker }]}>{u.insightsSession}</Text>
+                <Text style={[styles.heroBig, { color: heroTxt.big }]}>{fmtBytes(totals.sessionBytes)}</Text>
+                <Text style={[styles.heroSub, { color: heroTxt.sub }]}>
                   {totals.sessionItems} {u.insightsDeletedCount} · {fmtStorageFromMb(totals.sessionBytes / (1024 * 1024))} {u.insightsDeletedSpace}
                 </Text>
-                <View style={styles.heroDivider} />
-                <Text style={styles.heroKicker}>{u.insightsAllTime}</Text>
-                <Text style={[styles.heroMid, { color: '#E9D5FF' }]}>{fmtStorageFromMb(accountDeletedMb)}</Text>
-                <Text style={styles.heroSub}>
+                <View style={[styles.heroDivider, { backgroundColor: heroTxt.divider }]} />
+                <Text style={[styles.heroKicker, { color: heroTxt.kicker }]}>{u.insightsAllTime}</Text>
+                <Text style={[styles.heroMid, { color: heroTxt.mid }]}>{fmtStorageFromMb(accountDeletedMb)}</Text>
+                <Text style={[styles.heroSub, { color: heroTxt.sub }]}>
                   {accountDeletedItems} {u.insightsDeletedCount} · {fmtStorageFromMb(accountDeletedMb)} {u.insightsDeletedSpace}
                 </Text>
-                <TouchableOpacity style={styles.heroBtn} onPress={() => void handleNewSession()}>
-                  <Text style={styles.heroBtnTxt}>{u.insightsNewSession}</Text>
+                <TouchableOpacity style={[styles.heroBtn, { backgroundColor: heroTxt.btnBg }]} onPress={() => void handleNewSession()}>
+                  <Text style={[styles.heroBtnTxt, { color: heroTxt.btnTxt }]}>{u.insightsNewSession}</Text>
                 </TouchableOpacity>
               </View>
             </LinearGradient>
@@ -258,7 +268,9 @@ export default function InsightsScreen() {
 
           <GlassTicker
             text={`${u.insightsLibraryPulse} · ${analytics.totalCount} · ${u.insightsScreenshots} ${analytics.ssCount}`}
-            hues={[theme.accent, '#7c3aed', '#00E5FF']}
+            hues={tickerHuesForTheme(themeId, theme)}
+            textColor={tickerTextColorForTheme(themeId)}
+            blurTint={theme.isDark ? 'dark' : 'light'}
             speed={9500}
           />
 
@@ -296,6 +308,11 @@ export default function InsightsScreen() {
                     {aggregate?.total_sessions ? ` · ${aggregate.total_sessions} sessions` : ''}
                   </Text>
                 ) : null}
+                {emailStats.count > 0 ? (
+                  <Text style={[styles.actSrc, { color: theme.accent, marginTop: 6 }]}>
+                    {u.insightsGmail}: {emailStats.count.toLocaleString()} emails · {fmtStorageFromMb(emailMb)} · {emailStats.batches} batch{emailStats.batches === 1 ? '' : 'es'}
+                  </Text>
+                ) : null}
                 {aggregate?.updated_at ? (
                   <Text style={[styles.actSrc, { color: theme.textMuted, marginTop: 4 }]}>
                     updated {fmtWhen(aggregate.updated_at)}
@@ -310,7 +327,7 @@ export default function InsightsScreen() {
           <Text style={[styles.sectionTitle, { color: theme.textMuted, marginTop: 18 }]}>{u.insightsLibrary}</Text>
           <View style={styles.grid}>
             <MetricTile theme={theme} label={u.insightsAllMedia} value={fmtStorageFromMb(analytics.totalMB)} sub={`${analytics.totalCount}`} color="#a78bfa" icon={<TrendingUp size={16} color="#a78bfa" />} />
-            <MetricTile theme={theme} label={u.insightsPhotos} value={fmtStorageFromMb(analytics.photoMB)} sub={`${analytics.photoCount}`} color="#c084fc" icon={<TrendingUp size={16} color="#c084fc" />} />
+            <MetricTile theme={theme} label={u.insightsGmail} value={fmtStorageFromMb(emailMb)} sub={`${emailStats.count} emails`} color={theme.accent} icon={<Mail size={16} color={theme.accent} />} />
           </View>
 
           <View style={[styles.barCard, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
@@ -319,6 +336,15 @@ export default function InsightsScreen() {
             <BarLine label={u.insightsScreenshots} mb={analytics.ssMB} max={maxVal} color="#22d3ee" n={analytics.ssCount} theme={theme} />
             <BarLine label={u.insightsLivePhotos} mb={analytics.liveMB} max={maxVal} color="#f472b6" n={analytics.liveCount} theme={theme} />
             <BarLine label={u.insightsVideos} mb={analytics.vidMB} max={maxVal} color="#fb923c" n={analytics.vidCount} theme={theme} />
+            <BarLine
+              label={u.insightsGmail}
+              mb={emailMb}
+              max={maxVal}
+              color={theme.accent}
+              n={emailStats.count}
+              theme={theme}
+              hint={emailStats.count > 0 ? u.insightsGmailHint : 'Run Inbox Detox from Features'}
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -339,8 +365,8 @@ function MetricTile({ theme, label, value, sub, color, icon }: any) {
   );
 }
 
-function BarLine({ label, mb, max, color, n, theme }: any) {
-  const pct = Math.max(5, Math.min(100, (mb / max) * 100));
+function BarLine({ label, mb, max, color, n, theme, hint }: any) {
+  const pct = mb > 0 ? Math.max(5, Math.min(100, (mb / max) * 100)) : 0;
   return (
     <View style={{ marginBottom: 14 }}>
       <View style={styles.barHead}>
@@ -348,9 +374,11 @@ function BarLine({ label, mb, max, color, n, theme }: any) {
         <Text style={[styles.barN, { color: theme.textSub }]}>{n}</Text>
       </View>
       <View style={[styles.barTrack, { backgroundColor: theme.border }]}>
-        <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+        <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color, minWidth: mb > 0 ? 4 : 0 }]} />
       </View>
-      <Text style={[styles.barMb, { color }]}>{fmtStorageFromMb(mb)}</Text>
+      <Text style={[styles.barMb, { color: mb > 0 ? color : theme.textMuted }]}>
+        {mb > 0 ? fmtStorageFromMb(mb) : hint ?? '—'}
+      </Text>
     </View>
   );
 }
@@ -381,21 +409,20 @@ const styles = StyleSheet.create({
   },
   heroContent: { padding: 22 },
   heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  heroBadgeTxt: { color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '900', letterSpacing: 2 },
-  heroKicker: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '800', letterSpacing: 2 },
-  heroBig: { color: '#fff', fontSize: 44, fontWeight: '900', marginTop: 4 },
+  heroBadgeTxt: { fontSize: 10, fontWeight: '900', letterSpacing: 2 },
+  heroKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
+  heroBig: { fontSize: 44, fontWeight: '900', marginTop: 4 },
   heroMid: { fontSize: 26, fontWeight: '900', marginTop: 4 },
-  heroSub: { color: 'rgba(255,255,255,0.65)', fontSize: 13, fontWeight: '600', marginTop: 4 },
-  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginVertical: 14 },
+  heroSub: { fontSize: 13, fontWeight: '600', marginTop: 4 },
+  heroDivider: { height: 1, marginVertical: 14 },
   heroBtn: {
     alignSelf: 'flex-start',
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.14)',
   },
-  heroBtnTxt: { color: '#fff', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
+  heroBtnTxt: { fontWeight: '900', fontSize: 12, letterSpacing: 1 },
   singleTicker: {
     flexDirection: 'row',
     alignItems: 'center',

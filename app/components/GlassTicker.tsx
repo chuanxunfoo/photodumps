@@ -11,6 +11,9 @@ type Props = {
   speed?: number;
   height?: number;
   fontSize?: number;
+  /** High-contrast ticker label (default white). */
+  textColor?: string;
+  blurTint?: 'light' | 'dark' | 'default';
 };
 
 export function GlassTicker({
@@ -19,9 +22,10 @@ export function GlassTicker({
   speed = 10000,
   height = 32,
   fontSize = 11,
+  textColor = 'rgba(255,255,255,0.98)',
+  blurTint = 'dark',
 }: Props) {
   const scroll = useRef(new Animated.Value(0)).current;
-  const hue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const run = () => {
@@ -37,36 +41,29 @@ export function GlassTicker({
     return () => scroll.stopAnimation();
   }, [scroll, speed]);
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(hue, { toValue: 1, duration: 5000, easing: Easing.linear, useNativeDriver: false }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [hue]);
-
-  const overlayOp = hue.interpolate({ inputRange: [0, 0.33, 0.66, 1], outputRange: [0.55, 0.2, 0.45, 0.55] });
-
   const full = `${text}   ◆   ${text}   ◆   ${text}   ◆   `;
 
   const inner = (
     <View style={st.inner}>
-      <LinearGradient colors={[hues[0], hues[1], hues[2]]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: overlayOp }]}>
-        <LinearGradient colors={[hues[2], hues[0], hues[1]]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-      </Animated.View>
-      <LinearGradient
-        colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0.18)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={st.topSheen} />
-      <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: scroll }] }}>
-        {[0, 1, 2, 3].map(i => (
-          <Text key={i} style={[st.txt, { fontSize }]}>{full}</Text>
-        ))}
-      </Animated.View>
+      <View style={st.bgLayer} pointerEvents="none">
+        <LinearGradient colors={[hues[0], hues[1], hues[2]]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.12)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={st.topSheen} />
+      </View>
+      <View style={st.textLayer}>
+        <Animated.View style={{ flexDirection: 'row', alignItems: 'center', transform: [{ translateX: scroll }] }}>
+          {[0, 1].map((i) => (
+            <Text key={i} numberOfLines={1} style={[st.txt, { fontSize, color: textColor }]}>
+              {full}
+            </Text>
+          ))}
+        </Animated.View>
+      </View>
     </View>
   );
 
@@ -75,7 +72,7 @@ export function GlassTicker({
       {Platform.OS === 'web' ? (
         <View style={[st.blurFallback, StyleSheet.absoluteFill]}>{inner}</View>
       ) : (
-        <BlurView intensity={48} tint="dark" style={StyleSheet.absoluteFill}>
+        <BlurView intensity={48} tint={blurTint} style={StyleSheet.absoluteFill}>
           {inner}
         </BlurView>
       )}
@@ -92,7 +89,14 @@ const st = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   blurFallback: { backgroundColor: 'rgba(18,18,28,0.82)' },
-  inner: { flex: 1, justifyContent: 'center', overflow: 'hidden' },
+  inner: { flex: 1, justifyContent: 'center', overflow: 'hidden', position: 'relative' },
+  bgLayer: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
+  textLayer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    zIndex: 2,
+    overflow: 'hidden',
+  },
   topSheen: {
     position: 'absolute',
     top: 0,
@@ -112,8 +116,5 @@ const st = StyleSheet.create({
       default: 'System',
     }),
     fontStyle: 'italic',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
   },
 });

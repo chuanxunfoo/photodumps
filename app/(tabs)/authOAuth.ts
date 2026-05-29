@@ -6,12 +6,14 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 
+import { connectGmailAccount } from '../_lib/gmailConnect';
+
 import { supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
 /** Parse query + hash (OAuth tokens may live in the fragment). */
-function parseOAuthRedirectParams(url: string): Record<string, string> {
+export function parseOAuthRedirectParams(url: string): Record<string, string> {
   const out: Record<string, string> = {};
   const ingest = (segment: string) => {
     const raw = segment.startsWith('?') || segment.startsWith('#') ? segment.slice(1) : segment;
@@ -38,6 +40,11 @@ export function getAuthRedirectUri(): string {
   return Linking.createURL('auth-callback');
 }
 
+export function getResetPasswordRedirectUri(): string {
+  // Keep recovery redirects on the existing callback route, then route to /reset-password in-app.
+  return Linking.createURL('auth-callback');
+}
+
 export async function createSessionFromUrl(url: string) {
   const params = parseOAuthRedirectParams(url);
   if (params.error) {
@@ -59,11 +66,19 @@ export async function createSessionFromUrl(url: string) {
   return null;
 }
 
-async function signInWithOAuthProvider(provider: 'google' | 'apple') {
+async function signInWithOAuthProvider(
+  provider: 'google' | 'apple',
+  options?: { scopes?: string; queryParams?: Record<string, string> },
+) {
   const redirectTo = getAuthRedirectUri();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo, skipBrowserRedirect: true },
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+      scopes: options?.scopes,
+      queryParams: options?.queryParams,
+    },
   });
   if (error) throw error;
   if (!data.url) throw new Error('No OAuth URL returned. Enable the provider in Supabase (Authentication → Providers).');
@@ -80,6 +95,14 @@ async function signInWithOAuthProvider(provider: 'google' | 'apple') {
 
 export async function signInWithGoogle() {
   return signInWithOAuthProvider('google');
+}
+
+/** Gmail-only OAuth (separate from Supabase login). Returns ok/error. */
+export async function reconnectGoogleWithGmailScopes() {
+  const res = await connectGmailAccount();
+  if (!res.ok) throw new Error(res.error);
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
 }
 
 /** Apple via Supabase OAuth in the system browser (no expo-crypto / expo-apple-authentication). */

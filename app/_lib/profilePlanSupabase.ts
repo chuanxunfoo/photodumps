@@ -55,6 +55,8 @@ export async function ensureProfileRow(params: {
   userId: string;
   email: string;
   username: string;
+  fullName?: string;
+  phone?: string;
   planType?: ProfilePlanType;
 }): Promise<ProfileRow | null> {
   const existing = await fetchProfileByUserId(params.userId);
@@ -62,7 +64,12 @@ export async function ensureProfileRow(params: {
     if (!existing.email || existing.email !== params.email) {
       await supabase
         .from('profiles')
-        .update({ email: params.email, username: params.username })
+        .update({
+          email: params.email,
+          username: params.username,
+          full_name: params.fullName ?? null,
+          phone: params.phone ?? null,
+        })
         .eq('id', params.userId);
     }
     return existing;
@@ -74,6 +81,8 @@ export async function ensureProfileRow(params: {
       id: params.userId,
       email: params.email,
       username: params.username,
+      full_name: params.fullName ?? null,
+      phone: params.phone ?? null,
       plan_type: plan,
     })
     .select('id, email, username, plan_type')
@@ -132,7 +141,10 @@ export async function adminSetPlanByEmail(
   if (!row) {
     return { ok: false, error: 'No profile found for that email. User must sign in once first.' };
   }
-  const res = await updateProfilePlanType(row.id, planType);
-  if (!res.ok) return res;
+  const { error } = await supabase.rpc('admin_set_user_plan', {
+    target_user: row.id,
+    next_plan: planType,
+  });
+  if (error) return { ok: false, error: error.message };
   return { ok: true, profile: { ...row, plan_type: planType } };
 }

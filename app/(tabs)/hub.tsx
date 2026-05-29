@@ -13,8 +13,10 @@ function pageToIndex(page?: string): number {
   return 0;
 }
 
+let launchSubPrompted = false;
+
 export default function HubScreen() {
-  const { theme } = useTheme();
+  const { theme, isPro, isAdmin, user, openSubscription } = useTheme();
   const params = useLocalSearchParams<{ page?: string }>();
   const pagerRef = useRef<HubPagerHandle>(null);
   const initialIndex = pageToIndex(params.page);
@@ -26,6 +28,22 @@ export default function HubScreen() {
       setPageIndex(i);
       pagerRef.current?.scrollToIndex(i, false);
     }, [params.page]),
+  );
+
+  /** Once per app launch: signed-in Hobby users see subscription on app entry. */
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid || isPro || isAdmin || launchSubPrompted) return;
+      let cancelled = false;
+      launchSubPrompted = true;
+      const t = setTimeout(() => {
+        if (!cancelled) openSubscription();
+      }, 1200);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+      };
+    }, [user?.uid, isPro, isAdmin, openSubscription]),
   );
 
   return (

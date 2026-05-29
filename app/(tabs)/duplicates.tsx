@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
 import { useExploreAwareBack } from '../_lib/exploreBack';
+import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import { setDuplicateSwiperPayload, type SwiperAssetPayload } from './duplicateNavPayload';
 import { useTheme } from './ThemeContext';
 
@@ -97,6 +98,7 @@ function StackCell({ uris, count, onPress }: { uris: string[]; count: number; on
 }
 
 export default function DuplicatesScreen() {
+  useRequireProFeature();
   const router = useRouter();
   const goBack = useExploreAwareBack();
   const { theme } = useTheme();

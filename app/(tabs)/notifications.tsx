@@ -32,6 +32,7 @@ import {
   setNotificationHandler,
 } from '../_lib/notificationsNative';
 import { useExploreAwareBack } from '../_lib/exploreBack';
+import { notificationsHeroGradient, textOnPair } from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
 
 const PREFS_KEY = '@dumpit_notification_prefs_v1';
@@ -237,7 +238,9 @@ const tc = StyleSheet.create({
 
 export default function NotificationsScreen() {
   const goBack = useExploreAwareBack();
-  const { theme, language } = useTheme();
+  const { theme, themeId, language } = useTheme();
+  const heroGrad = notificationsHeroGradient(themeId, theme);
+  const heroInk = textOnPair([heroGrad[0], heroGrad[1]]);
   const u = getLocaleUi(language);
   const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_PREFS);
   const [ready, setReady] = useState(false);
@@ -297,10 +300,10 @@ export default function NotificationsScreen() {
         <AppHeader variant="detail" onBack={goBack} subtitle={u.notificationsSubtitle} />
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={['#4F46E5', '#7C3AED', '#EC4899']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-            <Bell size={32} color="#FFF" />
-            <Text style={styles.heroTitle}>{u.notificationsTitle}</Text>
-            <Text style={styles.heroLead}>{u.notificationsSubtitle}</Text>
+          <LinearGradient colors={heroGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+            <Bell size={32} color={heroInk} />
+            <Text style={[styles.heroTitle, { color: heroInk }]}>{u.notificationsTitle}</Text>
+            <Text style={[styles.heroLead, { color: heroInk === '#111111' ? theme.textSub : 'rgba(255,255,255,0.92)' }]}>{u.notificationsSubtitle}</Text>
           </LinearGradient>
 
           {!ready ? null : (
@@ -373,8 +376,8 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     gap: 8,
   },
-  heroTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', letterSpacing: 3 },
-  heroLead: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  heroTitle: { fontSize: 22, fontWeight: '900', letterSpacing: 3 },
+  heroLead: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
   reset: {
     marginTop: 8,
     paddingVertical: 14,

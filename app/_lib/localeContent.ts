@@ -88,8 +88,7 @@ export type SubscriptionCopy = {
   planHead: string;
   freeSub: string;
   ctaFree: string;
-  ctaWeekly: string;
-  ctaTrial: string;
+  ctaSubscribe: string;
   trustSecure: string;
   trustCancel: string;
   trustFees: string;
@@ -127,7 +126,7 @@ const EN: Bundle = {
     sectionEveryone: 'FOR EVERYONE',
     sectionEveryoneHint: 'Core flows and good vibes — no paywall to open these doors.',
     sectionPro: 'PRO UNLOCKS',
-    sectionProHint: 'Signature themes, extra languages, and power tools — crown marks what Hobby can preview but not keep.',
+    sectionProHint: 'Pro unlocks everything. Hobby gets free stats, one video trim, and two stickers — crown marks Pro-only tools.',
     sectionProLooks: 'PRO LOOKS',
     sectionProLooksHint: 'Six signature skins — typography, chrome, and motion follow your pick. Pro only (Hobby keeps Dark & Light).',
     sectionLegal: 'LEGAL',
@@ -172,7 +171,7 @@ const EN: Bundle = {
     appIcon: 'app icon',
     appIconSub: 'Free: Classic & Stealth · Pro: eight alternate marks',
     languages: 'languages',
-    languagesSub: 'Free: English · Pro: Español, 中文, 한국어, Melayu…',
+    languagesSub: 'Free: All languages',
     notifications: 'notifications',
     notificationsSub: 'Gentle cleanup reminders — free for everyone',
     terms: 'terms of service',
@@ -198,8 +197,7 @@ const EN: Bundle = {
     planHead: 'CHOOSE YOUR PLAN',
     freeSub: `${HOBBY_WEEKLY_SWIPES} swipes/week · Dark & Light themes · Notifications included`,
     ctaFree: 'CONTINUE WITH HOBBY',
-    ctaWeekly: 'START 3-DAY FREE TRIAL',
-    ctaTrial: 'START 7-DAY FREE TRIAL',
+    ctaSubscribe: 'SUBSCRIBE WITH APPLE PAY',
     trustSecure: 'Secure & Encrypted',
     trustCancel: 'Cancel Anytime',
     trustFees: 'No Hidden Fees',
@@ -209,18 +207,20 @@ const EN: Bundle = {
     proFeatures: [
       'Unlimited swipes — every day, forever',
       'Supercut, Deep Clean & batch delete',
+      'Sticker Studio — full unlock',
+      'Widgets — full unlock',
       'Photobooth — filters, frames & stickers',
       'Duplicates finder — burst & junk stacks',
       'AI duplicate & blur photo detection',
       'Full storage analytics & history',
-      '9 exclusive premium colour themes',
-      'All 13 languages unlocked',
+      '4 exclusive premium colour themes',
       'Priority support · Zero ads, ever',
     ],
     hobbyFeatures: [
       `${HOBBY_WEEKLY_SWIPES} swipes every week — reset each Monday`,
       'Dark & Light colour themes',
-      'English interface · Settings, FAQ & bookmarks',
+      '6 languages included',
+      'Settings, FAQ & bookmarks',
       'Notifications & gentle cleanup reminders',
       'Spin wheel for bonus swipes',
       'Swipe, queue & confirm deletions on-device',
@@ -233,8 +233,8 @@ const EN: Bundle = {
     { q: 'What is Supercut?', a: 'Supercut is the Pro batch assistant: scan for screenshots and duplicate-style shots, then clear them in one confirmed batch — faster than swiping every frame.' },
     { q: 'What are Bookmarks?', a: 'While you swipe, tap the bookmark on a photo to keep it and skip ahead — saved shots collect on the Bookmarks screen in Explore.' },
     { q: 'What is Deep Clean mode?', a: 'Deep Clean scans your entire library with AI-style heuristics, surfaces the largest files first, and lets you review and clear clutter at scale.' },
-    { q: 'Which themes are free?', a: 'Dark and Light themes are on Hobby. Six signature Pro colour looks unlock with Pro.' },
-    { q: 'Which languages are free?', a: 'English is included on Hobby. Every other language pack unlocks with Pro.' },
+    { q: 'Which themes are free?', a: 'Dark and Light themes are on Hobby. Four signature Pro colour looks unlock with Pro.' },
+    { q: 'Which languages are free?', a: 'Hobby includes six languages.' },
     { q: 'Are notifications free?', a: 'Yes. Cleanup reminders, digests, and streak nudges are available on Hobby — you control each toggle.' },
     { q: 'Will deleting photos free storage immediately?', a: 'Items stay in your delete queue until you confirm on the review screen — you always get a last look before anything is removed.' },
     { q: 'How do I restore a purchase?', a: 'Open Subscribe from Explore and tap Restore Purchase, or use your store account’s subscription settings.' },
@@ -299,7 +299,7 @@ const MS: Bundle = {
     appIcon: 'ikon apl',
     appIconSub: 'Percuma: Classic & Stealth · Pro: lapan ikon',
     languages: 'bahasa',
-    languagesSub: 'Percuma: English · Pro: Español, 中文, 한국어…',
+    languagesSub: 'Percuma: Semua bahasa',
   },
   subscription: {
     ...EN.subscription,
@@ -395,7 +395,7 @@ const ES: Bundle = {
     appIcon: 'icono de la app',
     appIconSub: 'Gratis: Classic y Stealth · Pro: ocho iconos',
     languages: 'idiomas',
-    languagesSub: 'Gratis: inglés · Pro: español, 中文, 한국어…',
+    languagesSub: 'Gratis: todos los idiomas',
   },
   subscription: {
     ...EN.subscription,
@@ -466,7 +466,7 @@ const FR = bundleFromEn({
     supercut: 'supercut', supercutSub: 'Nettoyage par lots IA',
     appTheme: 'thème', appThemeSub: 'Gratuit : Sombre & Clair · Pro : six skins',
     appIcon: 'icône', appIconSub: 'Gratuit : Classic & Stealth · Pro : huit icônes',
-    languages: 'langues', languagesSub: 'Gratuit : anglais · Pro : toutes les langues',
+    languages: 'langues', languagesSub: 'Gratuit : toutes les langues',
     terms: 'terms of service', termsSub: 'English legal document',
     privacy: 'privacy policy', privacySub: 'English legal document',
     tickerText: 'PHOTODUMPS • EXPLORER • PERSONNALISER • RESTER ORGANISÉ',
@@ -500,7 +500,7 @@ const DE = bundleFromEn({
     supercut: 'supercut', supercutSub: 'KI-Stapelreinigung',
     appTheme: 'app-theme', appThemeSub: 'Gratis: Dunkel & Hell · Pro: sechs Skins',
     appIcon: 'app-icon', appIconSub: 'Gratis: Classic & Stealth · Pro: acht Icons',
-    languages: 'sprachen', languagesSub: 'Gratis: Englisch · Pro: alle Sprachen',
+    languages: 'sprachen', languagesSub: 'Gratis: alle Sprachen',
     terms: 'terms of service', termsSub: 'English legal document',
     privacy: 'privacy policy', privacySub: 'English legal document',
     tickerText: 'PHOTODUMPS • ENTDECKEN • PERSONALISIEREN • ORGANISIERT BLEIBEN',

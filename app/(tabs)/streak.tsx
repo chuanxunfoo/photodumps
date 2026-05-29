@@ -6,26 +6,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StreakCalendarContent } from '../components/StreakCalendarContent';
 import { AppHeader } from '../components/AppHeader';
+import { calendarBannerGradient } from '../components/hub/exploreUi';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 export default function StreakScreen() {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, themeId } = useTheme();
   const fonts = resolveTypeface(theme);
+  const wash = calendarBannerGradient(themeId, theme);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
       <LinearGradient
-        colors={theme.isDark ? ['#0c1220', theme.bg, '#120810'] : ['#FFF5F0', theme.bg, '#F0F9FF']}
+        colors={[wash[0] + '22', theme.bg, theme.bg2]}
+        locations={[0, 0.35, 1]}
         style={StyleSheet.absoluteFill}
       />
       <SafeAreaView style={styles.safe} edges={['top']}>
         <AppHeader variant="detail" onBack={() => router.back()} subtitle="Your streak" />
 
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Text style={[styles.sub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
             Open photodumps daily to build your streak. Every day you show up is a win for a lighter library.
           </Text>

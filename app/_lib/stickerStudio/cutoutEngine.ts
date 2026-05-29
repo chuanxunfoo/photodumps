@@ -90,13 +90,13 @@ type RemoveBgSize = 'preview' | 'small' | 'auto';
 async function nativeSubjectCutout(
   uri: string,
   onProgress?: (pct: number) => void,
-  maxDimension = 720,
+  maxDimension = 1024,
 ): Promise<string> {
   try {
     return await removeBgImage(uri, {
       maxDimension,
       format: 'PNG',
-      quality: 92,
+      quality: 98,
       useCache: true,
       onProgress: n => onProgress?.(Math.round(n)),
     });
@@ -195,7 +195,7 @@ export async function prepareLiveScanPhoto(uri: string): Promise<string> {
 async function nativeCutoutResult(
   fileUri: string,
   onProgress?: CutoutProgress,
-  maxDimension = 512,
+  maxDimension = 1024,
 ): Promise<CutoutResult> {
   onProgress?.(12, '');
   const outUri = await nativeSubjectCutout(
@@ -218,7 +218,7 @@ export async function cutoutFromPreparedFile(
   options?: { cloudSize?: RemoveBgSize; nativeMaxDimension?: number },
 ): Promise<CutoutResult> {
   const cloudSize = options?.cloudSize ?? 'preview';
-  const nativeMax = options?.nativeMaxDimension ?? 512;
+  const nativeMax = options?.nativeMaxDimension ?? 1024;
   const useNative = nativeCutoutBundled() && Platform.OS !== 'web';
 
   if (useNative) {

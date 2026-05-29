@@ -8,9 +8,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Flame,
   Scan,
-  Sparkles,
   Trash2,
   X,
   Zap,
@@ -32,6 +30,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Image } from 'expo-image';
 import {
   AlertStrip,
   BLUE,
@@ -48,6 +47,9 @@ import {
   ScreenShake,
   ShockRing,
 } from '../components/onboarding/OnboardFx';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const BRAND_LOGO = require('../assets/brand-icon.png');
 import { CountUpText } from '../components/onboarding/CountUp';
 
 const SC_TARGET_END = 14821;
@@ -63,8 +65,8 @@ const STATS_PHOTOS_GB = 312;
 const STATS_VIDEOS_GB = 198;
 
 const { width } = Dimensions.get('window');
-const SLIDE_COUNT = 6;
-const BG = '#000000';
+const SLIDE_COUNT = 4;
+const BG = '#FFFFFF';
 const SYNE = Platform.select({ ios: 'AvenirNext-Heavy', android: 'sans-serif-black', default: undefined });
 const NAV_H = 96;
 
@@ -75,6 +77,7 @@ const HOBBY_UNLOCKS = [
   `${HOBBY_WEEKLY_SWIPES} swipes every week`,
   'Swipe left trash · right keep',
   'Dark & Light themes',
+  '6 languages included',
   'Stats & streak sync when signed in',
   'Notifications & spin wheel bonuses',
   'On-device — your photos stay private',
@@ -83,11 +86,13 @@ const HOBBY_UNLOCKS = [
 const PRO_UNLOCKS = [
   'Unlimited swipes every day',
   'Supercut · Deep clean & batch delete',
+  'Sticker studio (full unlock)',
+  'Widgets (full unlock)',
   'Photobooth — filters, frames & stickers',
   'Duplicates finder — burst & junk stacks',
   'Full storage analytics & history',
-  '9 premium colour themes',
-  'All languages · priority support · zero ads',
+  '4 premium colour themes',
+  'Priority support · zero ads',
 ];
 
 function SlidePage({ children }: { children: React.ReactNode }) {
@@ -190,42 +195,33 @@ function CopyBlock({
   );
 }
 
-function OnboardNav({
-  index,
-  onSkip,
-  onNext,
-}: {
-  index: number;
-  onSkip: () => void;
-  onNext: () => void;
-}) {
+function OnboardSkipButton({ onSkip }: { onSkip: () => void }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[nav.wrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      <View style={nav.dots}>
-        {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              nav.dot,
-              i === index ? { width: 18, opacity: 1, backgroundColor: HOT } : { width: 6, opacity: 0.25 },
-            ]}
-          />
-        ))}
-      </View>
-      <View style={nav.btns}>
-        <TouchableOpacity onPress={onSkip} style={nav.skipPill} activeOpacity={0.85}>
-          <Text style={nav.skipTxt}>Jump to end</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={onNext} activeOpacity={0.9}>
-          <LinearGradient colors={[HOT, PURPLE]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={nav.nextBtn}>
-            <View style={nav.nextInner}>
-              <Text style={nav.nextTxt}>NEXT</Text>
-              <ChevronRight size={14} color="#fff" strokeWidth={3} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+    <TouchableOpacity
+      onPress={onSkip}
+      activeOpacity={0.75}
+      style={[nav.skipTop, { top: Math.max(insets.top, 8) + 6 }]}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+    >
+      <Text style={nav.skipTopTxt}>Skip</Text>
+    </TouchableOpacity>
+  );
+}
+
+function OnboardDots({ index }: { index: number }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[nav.dotsWrap, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+      {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            nav.dot,
+            i === index ? { width: 18, opacity: 1, backgroundColor: HOT } : { width: 6, opacity: 0.28 },
+          ]}
+        />
+      ))}
     </View>
   );
 }
@@ -259,7 +255,8 @@ function Slide1({ bottomPad }: SlideProps) {
         <FloatParticle key={i} top={p.top} left={p.l} color={p.c} size={p.s} delay={p.d} duration={p.dur} />
       ))}
       <View style={ob.slide1Body}>
-        <View style={ob.heroStage}>
+        <View style={ob.slide1Top}>
+          <View style={ob.heroStage}>
           <WelcomeGlow />
           <View style={ob.orbitWrap}>
             <Animated.View style={[ob.orbitRing, { transform: [{ rotate: rot }] }]}>
@@ -272,6 +269,7 @@ function Slide1({ bottomPad }: SlideProps) {
               <Trash2 size={36} color="#fff" strokeWidth={2.2} />
             </Animated.View>
           </View>
+        </View>
         </View>
         <CopyBlock
           bottomPad={bottomPad}
@@ -315,7 +313,8 @@ function Slide2({ bottomPad }: SlideProps) {
   return (
     <SlidePage>
       <View style={ob.slide2Body}>
-        <View style={ob.cardClip}>
+        <View style={ob.slide2Top}>
+          <View style={ob.cardClip}>
           <View style={[ob.cardArena, { width: arenaW, height: cardW * 1.35 + 24 }]}>
             <View style={[ob.demoCard, ob.dcBack, { width: cardW, height: cardW * 1.26, marginLeft: -cardW / 2 }]} />
             <View style={[ob.demoCard, ob.dcMid, { width: cardW, height: cardW * 1.26, marginLeft: -cardW / 2 }]} />
@@ -351,6 +350,7 @@ function Slide2({ bottomPad }: SlideProps) {
             </View>
           </View>
         </View>
+        </View>
         <CopyBlock
           bottomPad={bottomPad}
           eyebrow="THE FLOW"
@@ -364,193 +364,8 @@ function Slide2({ bottomPad }: SlideProps) {
 }
 
 function Slide3({ bottomPad }: SlideProps) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const shake = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    ).start();
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shake, { toValue: 1, duration: 50, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: -1, duration: 50, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: 0, duration: 50, useNativeDriver: true }),
-        Animated.delay(2400),
-      ]),
-    ).start();
-  }, [pulse, shake]);
-  const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
-  const jx = shake.interpolate({ inputRange: [-1, 0, 1], outputRange: [-3, 0, 3] });
-
-  return (
-    <ScreenShake active>
-      <SlidePage>
-        <GridBg />
-        <Scanlines opacity={0.14} />
-        <View style={[ob.fullPage, { paddingBottom: bottomPad }]}>
-          <AlertStrip label="BATCH SCAN ARMED" tone="gold" />
-          <Animated.View style={[ob.scanMain, { transform: [{ translateX: jx }] }]}>
-            <View style={ob.zapHub}>
-              <ShockRing color="rgba(255,200,0,0.55)" size={150} />
-              <ShockRing color="rgba(255,0,85,0.35)" size={110} />
-              <Animated.View style={[ob.zapTile, { opacity: glow }]}>
-                <LinearGradient colors={['#FF8C00', GOLD]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-                <Zap size={38} color="#1a0a00" strokeWidth={2.5} fill={GOLD} />
-              </Animated.View>
-            </View>
-            <View style={ob.neonRow}>
-              <NeonStatCard value="2,847" label="TARGETS" accent={GOLD} />
-              <NeonStatCard value="18.3 GB" label="EST. FREED" accent={GREEN} />
-            </View>
-            <Text style={ob.shockCaption}>AI flagged junk waiting in your library</Text>
-          </Animated.View>
-          <CopyBlock
-            bottomPad={0}
-            eyebrow="PRO TOOLKIT"
-            title="Supercut & deep scan"
-            body="Batch scan flags screenshots, dupes, and burst stacks. One confirmed run clears hundreds in seconds."
-            chip="Supercut · Duplicates · Deep clean"
-          />
-        </View>
-      </SlidePage>
-    </ScreenShake>
-  );
-}
-
-function Slide4() {
-  const beat = useRef(new Animated.Value(1)).current;
-  const [live, setLive] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setLive(true), 350);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(beat, { toValue: 1.04, duration: 500, useNativeDriver: true }),
-        Animated.timing(beat, { toValue: 1, duration: 500, useNativeDriver: true }),
-      ]),
-    ).start();
-    return () => clearTimeout(t);
-  }, [beat]);
-
-  return (
-    <ScreenShake active>
-      <SlidePage>
-        <Scanlines opacity={0.1} />
-        <View style={ob.fullPage}>
-          <AlertStrip label={live ? 'STORAGE ALERT — CRITICAL MASS' : 'SCANNING LIBRARY…'} tone="hot" />
-          <View style={ob.statsTopBar}>
-            <Text style={ob.statsBrand}>photodumps</Text>
-            <View style={ob.streakPill}>
-              <Flame size={11} color="#fff" />
-              <Text style={ob.streakTxt}>247</Text>
-            </View>
-          </View>
-          <Text style={ob.statsSection}>MY STATS</Text>
-          <Animated.View style={[ob.statsHeroWrap, { transform: [{ scale: beat }] }]}>
-            <LinearGradient colors={['#3B0080', '#8B1A6B', '#FF3366']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={ob.statsHero}>
-              <View style={ob.heroRingHub}>
-                <ShockRing color="rgba(255,255,255,0.22)" size={220} />
-              </View>
-              <Text style={ob.storageLabel}>STORAGE RECLAIMED</Text>
-              <Text style={ob.storageSession}>This session</Text>
-              <View style={ob.countRow}>
-                <CountUpText
-                  active={live}
-                  to={STATS_SESSION_GB}
-                  decimals={1}
-                  duration={2600}
-                  style={ob.storageBig}
-                />
-                <Text style={ob.storageBigSpan}> GB</Text>
-              </View>
-              <Text style={ob.storageSub}>
-                <CountUpText
-                  active={live}
-                  to={STATS_ITEMS_SESSION}
-                  duration={2600}
-                  delay={200}
-                  style={ob.storageSubInline}
-                />
-                {' items deleted · '}
-                <CountUpText active={live} to={STATS_SESSION_GB} decimals={0} duration={2600} delay={350} style={ob.storageSubInline} />
-                {' GB cleared'}
-              </Text>
-              <View style={ob.storageDivider} />
-              <Text style={ob.storageSession}>All time</Text>
-              <View style={ob.countRow}>
-                <CountUpText active={live} to={STATS_ALLTIME_TB} decimals={1} duration={2800} delay={400} style={ob.storageAlltime} />
-                <Text style={ob.storageBigSpan}> TB</Text>
-              </View>
-              <Text style={ob.storageSub}>
-                <CountUpText active={live} to={STATS_ITEMS_ALL} duration={2800} delay={500} style={ob.storageSubInline} />
-                {' items deleted · lifetime total'}
-              </Text>
-            </LinearGradient>
-          </Animated.View>
-          <LinearGradient colors={[BLUE, PURPLE]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={ob.pulseStrip}>
-            <Scan size={14} color="#fff" strokeWidth={2.5} />
-            <View style={ob.pulseStripInner}>
-              <Text style={ob.pulseStripText}>LIBRARY PULSE · </Text>
-              <CountUpText active={live} to={STATS_FILES_PULSE} duration={2400} delay={300} style={ob.pulseStripText} />
-              <Text style={ob.pulseStripText}> FILES · </Text>
-              <CountUpText active={live} to={STATS_SCREENSHOTS} duration={2400} delay={450} style={ob.pulseStripText} />
-              <Text style={ob.pulseStripText}> SCREENSHOTS</Text>
-            </View>
-          </LinearGradient>
-          <View style={ob.miniStats}>
-            <View style={ob.miniStat}>
-              <Text style={ob.miniStatLabel}>All media</Text>
-              <CountUpText active={live} to={STATS_ALL_MEDIA_GB} duration={2500} delay={500} style={ob.miniStatVal} suffix=" GB" />
-              <CountUpText active={live} to={STATS_ITEMS_ALL} duration={2500} delay={600} style={ob.miniStatSub} suffix=" files" />
-            </View>
-            <View style={ob.miniStat}>
-              <Text style={ob.miniStatLabel}>Photos</Text>
-              <CountUpText active={live} to={STATS_PHOTOS_GB} duration={2500} delay={650} style={[ob.miniStatVal, { color: GREEN }]} suffix=" GB" />
-              <Text style={ob.miniStatSub}>47,891 files</Text>
-            </View>
-          </View>
-          <View style={ob.miniStatWide}>
-            <Text style={ob.miniStatLabel}>Videos</Text>
-            <CountUpText active={live} to={STATS_VIDEOS_GB} duration={2500} delay={700} style={[ob.miniStatVal, { color: CYAN }]} suffix=" GB" />
-            <Text style={ob.miniStatSub}>12,400 files · screenshots {STATS_SCREENSHOTS.toLocaleString()}</Text>
-          </View>
-        </View>
-      </SlidePage>
-    </ScreenShake>
-  );
-}
-
-function Slide5() {
   const [analysed, setAnalysed] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const hintBounce = useRef(new Animated.Value(0)).current;
-  const runPulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (analysed) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(hintBounce, { toValue: 8, duration: 650, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(hintBounce, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [analysed, hintBounce]);
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(runPulse, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(runPulse, { toValue: 0, duration: 800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    ).start();
-  }, [runPulse]);
-
-  const runScale = runPulse.interpolate({ inputRange: [0, 1], outputRange: [1, analysed ? 1.05 : 1.02] });
 
   const onAnalyse = () => {
     if (scanning || analysed) return;
@@ -565,82 +380,138 @@ function Slide5() {
     ? `${SC_TARGET_END.toLocaleString()} TARGETS LOCKED`
     : scanning
       ? 'SCANNING LIBRARY…'
-      : '0 TARGETS — TAP ANALYSE BELOW';
+      : '0 TARGETS · 0 GB — TAP TO PREVIEW';
 
   return (
     <SlidePage>
-      <GridBg />
-      <Scanlines opacity={scanning ? 0.22 : 0.12} />
-      <View style={ob.centeredPage}>
-        <AlertStrip label={alertLabel} tone={analysed ? 'cyan' : 'hot'} />
-        <View style={ob.statsTopBar}>
-          <Text style={ob.statsBrand}>photodumps</Text>
-          <View style={ob.streakPill}>
-            <Flame size={11} color="#fff" />
-            <Text style={ob.streakTxt}>247</Text>
-          </View>
-        </View>
-        <View style={ob.supercutCluster}>
-          <Text style={ob.scEyebrow}>ONE-TAP BATCH CLEANING</Text>
-          <LinearGradient colors={['#4B0082', '#8B1A6B', '#FF4500']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={ob.supercutCard}>
+      <View style={ob.slide3Body}>
+        <View style={ob.slide3Top}>
+          <AlertStrip label={alertLabel} tone={analysed ? 'cyan' : 'hot'} />
+          <LinearGradient colors={['#4B0082', '#8B1A6B', '#FF4500']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={ob.supercutCardCompact}>
             <View style={ob.supercutRow}>
-              <Zap size={18} color={GOLD} strokeWidth={2.5} />
-              <Scan size={18} color={CYAN} strokeWidth={2.5} />
+              <Zap size={16} color={GOLD} strokeWidth={2.5} />
+              <Scan size={16} color={CYAN} strokeWidth={2.5} />
             </View>
-            <Text style={ob.supercutTitle}>SUPERCUT</Text>
-            <Text style={ob.supercutBody}>
-              Heuristic scan flags screenshots and burst duplicates. Review the batch, then clear in one tap.
-            </Text>
+            <Text style={ob.supercutTitleCompact}>SUPERCUT</Text>
+            <View style={ob.scMetrics}>
+              <View style={ob.scMetric}>
+                {analysed ? (
+                  <GlitchNumber value={SC_TARGET_END.toLocaleString()} size={20} color="#fff" />
+                ) : scanning ? (
+                  <CountUpText active to={SC_TARGET_END} duration={2600} style={ob.scMetricValCompact} />
+                ) : (
+                  <Text style={ob.scMetricValCompact}>0</Text>
+                )}
+                <Text style={ob.scMetricLbl}>targets</Text>
+              </View>
+              <View style={[ob.scMetric, ob.scMetricBorder]}>
+                {analysed ? (
+                  <GlitchNumber value="127" suffix="GB" size={20} color={GREEN} />
+                ) : scanning ? (
+                  <View style={ob.countRow}>
+                    <CountUpText active to={SC_GB_END} duration={2600} style={[ob.scMetricValCompact, { color: GREEN }]} />
+                    <Text style={ob.scMetricGb}> GB</Text>
+                  </View>
+                ) : (
+                  <Text style={[ob.scMetricValCompact, { color: GREEN }]}>
+                    0<Text style={ob.scMetricGb}> GB</Text>
+                  </Text>
+                )}
+                <Text style={ob.scMetricLbl}>est. freed</Text>
+              </View>
+            </View>
           </LinearGradient>
-          <View style={ob.scMetrics}>
-            <View style={ob.scMetric}>
-              {analysed ? (
-                <GlitchNumber value={SC_TARGET_END.toLocaleString()} size={24} color="#fff" />
-              ) : scanning ? (
-                <CountUpText active to={SC_TARGET_END} duration={2600} style={ob.scMetricVal} />
-              ) : (
-                <Text style={ob.scMetricVal}>0</Text>
-              )}
-              <Text style={ob.scMetricLbl}>targets</Text>
-            </View>
-            <View style={[ob.scMetric, ob.scMetricBorder]}>
-              {analysed ? (
-                <GlitchNumber value="127" suffix="GB" size={24} color={GREEN} />
-              ) : scanning ? (
-                <View style={ob.countRow}>
-                  <CountUpText active to={SC_GB_END} duration={2600} style={[ob.scMetricVal, { color: GREEN }]} />
-                  <Text style={ob.scMetricGb}> GB</Text>
-                </View>
-              ) : (
-                <Text style={[ob.scMetricVal, { color: GREEN }]}>
-                  0<Text style={ob.scMetricGb}> GB</Text>
-                </Text>
-              )}
-              <Text style={ob.scMetricLbl}>est. freed</Text>
-            </View>
-          </View>
           {!analysed && (
-            <Animated.View style={[ob.analyseHintWrap, { transform: [{ translateY: hintBounce }] }]}>
-              <Text style={ob.analyseHintTxt}>TAP TO SCAN</Text>
-              <ChevronDown size={18} color={CYAN} strokeWidth={2.5} />
-            </Animated.View>
+            <TouchableOpacity activeOpacity={0.9} onPress={onAnalyse} disabled={scanning}>
+              <LinearGradient colors={['#2244e8', BLUE]} style={[ob.actionBtnCompact, scanning && ob.actionBtnDim]}>
+                <Scan size={14} color="#fff" strokeWidth={2.5} />
+                <Text style={ob.actionTxt}>{scanning ? 'SCANNING…' : 'TAP TO PREVIEW SCAN'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           )}
-          <TouchableOpacity activeOpacity={0.9} onPress={onAnalyse} disabled={scanning || analysed}>
-            <LinearGradient colors={['#2244e8', BLUE]} style={[ob.actionBtn, (scanning || analysed) && ob.actionBtnDim]}>
-              <Scan size={16} color="#fff" strokeWidth={2.5} />
-              <Text style={ob.actionTxt}>{scanning ? 'SCANNING…' : analysed ? 'LIBRARY ANALYSED' : 'ANALYSE LIBRARY'}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <Animated.View style={{ transform: [{ scale: runScale }], opacity: analysed ? 1 : 0.35 }}>
-            <LinearGradient colors={['#FF4500', HOT]} style={[ob.actionBtn, ob.runBtn]}>
-              <Zap size={16} color="#fff" strokeWidth={2.5} fill="#fff" />
-              <Text style={ob.actionTxt}>RUN SUPERCUT</Text>
-            </LinearGradient>
-          </Animated.View>
-          <Text style={ob.legalTiny}>On-device only. Review counts before confirming.</Text>
         </View>
+        <CopyBlock
+          bottomPad={bottomPad}
+          eyebrow="PRO TOOLKIT"
+          title="Supercut & deep scan"
+          body="Batch scan flags screenshots, dupes, and burst stacks. One confirmed run clears hundreds in seconds."
+          chip="Supercut · Duplicates · Deep clean"
+        />
       </View>
     </SlidePage>
+  );
+}
+
+function Slide4({ bottomPad }: SlideProps) {
+  const beat = useRef(new Animated.Value(1)).current;
+  const swipeGuide = useRef(new Animated.Value(0)).current;
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLive(true), 350);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(beat, { toValue: 1.04, duration: 500, useNativeDriver: true }),
+        Animated.timing(beat, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+    ).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(swipeGuide, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(swipeGuide, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    ).start();
+    return () => clearTimeout(t);
+  }, [beat, swipeGuide]);
+  const guideX = swipeGuide.interpolate({ inputRange: [0, 1], outputRange: [0, 10] });
+
+  return (
+    <ScreenShake active>
+      <SlidePage>
+        <Scanlines opacity={0.1} />
+        <View style={ob.slide4Body}>
+          <View style={ob.slide4Top}>
+            <AlertStrip label={live ? 'STORAGE ALERT — CRITICAL MASS' : 'SCANNING LIBRARY…'} tone="hot" />
+            <Text style={ob.statsSection}>MY STATS</Text>
+            <Animated.View style={[ob.statsHeroWrapCompact, { transform: [{ scale: beat }] }]}>
+              <LinearGradient colors={['#3B0080', '#8B1A6B', '#FF3366']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={ob.statsHeroCompact}>
+                <Text style={ob.storageLabel}>STORAGE RECLAIMED</Text>
+                <View style={ob.countRow}>
+                  <CountUpText active={live} to={STATS_SESSION_GB} decimals={1} duration={2600} style={ob.storageBigCompact} />
+                  <Text style={ob.storageBigSpanCompact}> GB</Text>
+                </View>
+                <Text style={ob.storageSub}>
+                  <CountUpText active={live} to={STATS_ITEMS_SESSION} duration={2600} delay={200} style={ob.storageSubInline} />
+                  {' deleted this session'}
+                </Text>
+                <View style={ob.storageDivider} />
+                <View style={ob.countRow}>
+                  <CountUpText active={live} to={STATS_ALLTIME_TB} decimals={1} duration={2800} delay={400} style={ob.storageAlltimeCompact} />
+                  <Text style={ob.storageBigSpanCompact}> TB all time</Text>
+                </View>
+              </LinearGradient>
+            </Animated.View>
+            <LinearGradient colors={[BLUE, PURPLE]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={ob.pulseStripCompact}>
+              <Scan size={12} color="#fff" strokeWidth={2.5} />
+              <Text style={ob.pulseStripText} numberOfLines={1}>
+                {STATS_FILES_PULSE.toLocaleString()} files · {STATS_SCREENSHOTS.toLocaleString()} screenshots
+              </Text>
+            </LinearGradient>
+          </View>
+          <CopyBlock
+            bottomPad={bottomPad}
+            eyebrow="YOUR PROGRESS"
+            title="Stats that motivate"
+            body="Track storage reclaimed, streaks, and library pulse — synced when you sign in."
+            chip="Session + lifetime totals"
+          />
+          <Animated.View pointerEvents="none" style={[ob.supercutNextHint, { transform: [{ translateX: guideX }] }]}>
+            <ChevronRight size={28} color="rgba(17,20,26,0.5)" strokeWidth={2.4} />
+            <Text style={ob.supercutNextHintTxt}>SWIPE</Text>
+          </Animated.View>
+        </View>
+      </SlidePage>
+    </ScreenShake>
   );
 }
 
@@ -756,70 +627,18 @@ function AnimatedFeatureRow({ text, accent, index }: { text: string; accent: str
   );
 }
 
-function Slide6({ onFinish }: { onFinish: () => void }) {
-  const insets = useSafeAreaInsets();
-  const [plan, setPlan] = useState<PlanId>('hobby');
-  const spin = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(Animated.timing(spin, { toValue: 1, duration: 12000, easing: Easing.linear, useNativeDriver: true })).start();
-  }, [spin]);
-  const rot = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-
-  const stars = [
-    { t: 24, l: 32, s: 2 }, { t: 48, l: width - 48, s: 3 }, { t: 72, l: width * 0.4, s: 2 },
-    { t: 100, l: 64, s: 2 }, { t: 36, l: width * 0.55, s: 3 },
-  ];
-
-  return (
-    <SlidePage>
-      {stars.map((st, i) => (
-        <View key={i} style={[ob.star, { top: st.t, left: st.l, width: st.s, height: st.s }]} />
-      ))}
-      <View style={[ob.finalPage, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View style={ob.finalHero}>
-          <Animated.View style={[ob.finalOrbit, { transform: [{ rotate: rot }] }]} />
-          <View style={ob.iconTile}>
-            <LinearGradient colors={[HOT, PURPLE]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-            <Sparkles size={32} color="#fff" strokeWidth={2} />
-          </View>
-        </View>
-        <Text style={ob.readyLabel}>READY</Text>
-        <Text style={ob.readyTitle}>Let's roll</Text>
-        <Text style={ob.readyBody}>Tap a plan to see what you unlock — start free, upgrade anytime.</Text>
-
-        <View style={ob.planRow}>
-          <PlanCard id="hobby" selected={plan === 'hobby'} onPress={() => setPlan('hobby')} />
-          <PlanCard id="pro" selected={plan === 'pro'} onPress={() => setPlan('pro')} />
-        </View>
-
-        <PlanFeaturePanel plan={plan} />
-
-        <TouchableOpacity onPress={onFinish} activeOpacity={0.9}>
-          <LinearGradient colors={[HOT, PURPLE]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={nav.createBtn}>
-            <View style={nav.nextInner}>
-              <Text style={nav.createTxt}>CREATE ACCOUNT</Text>
-              <ChevronRight size={18} color="#fff" strokeWidth={3} />
-            </View>
-          </LinearGradient>
-          <Text style={nav.freeNote}>Free to start · No card required</Text>
-        </TouchableOpacity>
-      </View>
-    </SlidePage>
-  );
-}
-
 const SLIDES: ((p: SlideProps) => React.ReactNode)[] = [
   (p) => <Slide1 {...p} />,
   (p) => <Slide2 {...p} />,
   (p) => <Slide3 {...p} />,
-  () => <Slide4 />,
-  () => <Slide5 />,
+  (p) => <Slide4 {...p} />,
 ];
 
 export default function OnboardingScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
-  const showNav = index < 3;
+  const lastIndexRef = useRef(0);
+  const bottomPad = NAV_H;
 
   const goTo = useCallback((i: number) => {
     const clamped = Math.max(0, Math.min(SLIDE_COUNT - 1, i));
@@ -828,7 +647,9 @@ export default function OnboardingScreen() {
   }, []);
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+    const next = Math.round(e.nativeEvent.contentOffset.x / width);
+    setIndex(next);
+    lastIndexRef.current = next;
   };
 
   const finish = async () => {
@@ -836,59 +657,71 @@ export default function OnboardingScreen() {
     router.replace('/auth');
   };
 
+  const skip = () => {
+    if (index >= SLIDE_COUNT - 1) void finish();
+    else goTo(SLIDE_COUNT - 1);
+  };
+
+  const onEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const vx = e.nativeEvent.velocity?.x ?? 0;
+    if (lastIndexRef.current === SLIDE_COUNT - 1 && vx > 0.1) {
+      void finish();
+    }
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <OnboardSkipButton onSkip={skip} />
         <ScrollView
           ref={scrollRef}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={onMomentumEnd}
+          onScrollEndDrag={onEndDrag}
           decelerationRate="fast"
           bounces={false}
         >
           {SLIDES.map((Render, i) => (
             <View key={i} style={ob.slideOuter}>
-              <Render bottomPad={showNav && i < 3 ? NAV_H + 8 : 24} />
+              <Render bottomPad={i < SLIDE_COUNT - 1 ? bottomPad + 8 : 24} />
             </View>
           ))}
-          <View style={ob.slideOuter}>
-            <Slide6 onFinish={finish} />
-          </View>
         </ScrollView>
-        {showNav && <OnboardNav index={index} onSkip={() => goTo(SLIDE_COUNT - 1)} onNext={() => goTo(index + 1)} />}
+        {index < SLIDE_COUNT - 1 && <OnboardDots index={index} />}
       </SafeAreaView>
     </View>
   );
 }
 
 const nav = StyleSheet.create({
-  wrap: {
+  skipTop: {
+    position: 'absolute',
+    right: PAD,
+    zIndex: 30,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  skipTopTxt: { fontSize: 14, fontWeight: '700', color: 'rgba(17,20,26,0.75)', letterSpacing: 0.3 },
+  dotsWrap: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: PAD,
-    paddingTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+    paddingTop: 10,
     zIndex: 20,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.82)',
   },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 5, marginBottom: 10 },
-  dot: { height: 4, borderRadius: 2, backgroundColor: '#fff' },
-  btns: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  skipPill: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
-    flex: 1,
-    maxWidth: '42%',
-  },
-  skipTxt: { fontSize: 13, color: 'rgba(255,255,255,0.45)', fontWeight: '600', textAlign: 'center' },
-  nextBtn: { borderRadius: 22, paddingHorizontal: 22, paddingVertical: 12, flex: 1 },
+  dot: { height: 4, borderRadius: 2, backgroundColor: '#12141A' },
   nextInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  nextTxt: { fontSize: 14, fontWeight: '900', color: '#fff', letterSpacing: 1 },
   createBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -903,7 +736,7 @@ const nav = StyleSheet.create({
 
 const ob = StyleSheet.create({
   fill: { flex: 1, backgroundColor: BG },
-  slidePage: { flex: 1, backgroundColor: BG, overflow: 'hidden' },
+  slidePage: { flex: 1, backgroundColor: BG, overflow: 'hidden', paddingTop: 44 },
   slideOuter: { width, flex: 1, backgroundColor: BG, overflow: 'hidden' },
   fullPage: {
     flex: 1,
@@ -912,8 +745,70 @@ const ob = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 20,
   },
-  slide1Body: { flex: 1, justifyContent: 'space-between' },
-  slide2Body: { flex: 1 },
+  slide1Body: { flex: 1, justifyContent: 'flex-start', paddingHorizontal: PAD, gap: 10 },
+  slide1Top: { flex: 1, justifyContent: 'center' },
+  slide2Body: { flex: 1, justifyContent: 'flex-start', paddingHorizontal: PAD, gap: 10 },
+  slide2Top: { flex: 1, justifyContent: 'center' },
+  slide3Body: { flex: 1, justifyContent: 'flex-start', paddingHorizontal: PAD, gap: 10 },
+  slide3Top: { height: '56%', justifyContent: 'flex-start', paddingTop: 8, gap: 10 },
+  slide4Body: { flex: 1, justifyContent: 'flex-start', paddingHorizontal: PAD, gap: 10 },
+  slide4Top: { height: '56%', justifyContent: 'flex-start', paddingTop: 8, gap: 10 },
+  slide5Body: { flex: 1, justifyContent: 'flex-start', paddingHorizontal: PAD, gap: 10 },
+  slide5Top: { justifyContent: 'flex-start', paddingTop: 8, gap: 10 },
+  scanMainCompact: { alignItems: 'center', width: '100%', paddingVertical: 8 },
+  zapHubCompact: { width: 100, height: 100, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  zapTileCompact: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    zIndex: 2,
+  },
+  statsHeroWrapCompact: { marginVertical: 4 },
+  statsHeroCompact: { borderRadius: 18, padding: 16, overflow: 'hidden', alignItems: 'center', width: '100%' },
+  storageBigCompact: { fontFamily: SYNE, fontSize: 40, fontWeight: '800', color: '#fff', letterSpacing: -1 },
+  storageBigSpanCompact: { fontFamily: SYNE, fontSize: 18, fontWeight: '800', color: 'rgba(255,255,255,0.65)', marginBottom: 6 },
+  storageAlltimeCompact: { fontFamily: SYNE, fontSize: 26, fontWeight: '800', color: '#fff' },
+  pulseStripCompact: {
+    marginTop: 6,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supercutCardCompact: { borderRadius: 16, padding: 14 },
+  supercutTitleCompact: { fontFamily: SYNE, fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: 0.5, marginTop: 4 },
+  scMetricValCompact: { fontFamily: SYNE, fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  actionBtnCompact: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, paddingVertical: 12 },
+  supercutNextHint: {
+    position: 'absolute',
+    right: 6,
+    top: '48%',
+    alignItems: 'center',
+    opacity: 0.5,
+  },
+  supercutNextHintTxt: {
+    marginTop: 2,
+    fontSize: 8,
+    letterSpacing: 1.6,
+    fontWeight: '800',
+    color: 'rgba(17,20,26,0.7)',
+  },
+  finalLogoWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: HOT,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  finalLogo: { width: 88, height: 88 },
   cardClip: { flex: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', paddingHorizontal: PAD },
   dirRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 14, paddingHorizontal: 8 },
   dirCue: { alignItems: 'center' },
@@ -923,7 +818,25 @@ const ob = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
   },
-  supercutCluster: { gap: 10, width: '100%' },
+  supercutPage: {
+    flex: 1,
+    paddingHorizontal: PAD,
+    paddingTop: 8,
+    paddingBottom: 12,
+    justifyContent: 'space-between',
+  },
+  supercutTop: { gap: 10, width: '100%' },
+  supercutMid: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    gap: 14,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    paddingVertical: 12,
+  },
+  supercutBottom: { gap: 10, width: '100%', maxWidth: 400, alignSelf: 'center' },
   finalPage: { flex: 1, paddingHorizontal: PAD, paddingTop: 8 },
   heroStage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   s1GlowOrb: {
@@ -971,7 +884,7 @@ const ob = StyleSheet.create({
   },
   planTag: { fontSize: 9, fontWeight: '800', letterSpacing: 2, color: 'rgba(255,255,255,0.45)' },
   planTagOn: { color: 'rgba(255,255,255,0.85)' },
-  planVal: { fontFamily: SYNE, fontSize: 28, fontWeight: '800', color: '#fff', marginTop: 4 },
+  planVal: { fontFamily: SYNE, fontSize: 28, fontWeight: '800', color: '#12141A', marginTop: 4 },
   planSub: { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
   planSubOn: { color: 'rgba(255,255,255,0.75)' },
   featPanel: { marginTop: 12, marginBottom: 8 },
@@ -979,19 +892,19 @@ const ob = StyleSheet.create({
   featPanelTitle: { fontSize: 10, fontWeight: '900', letterSpacing: 2.5, marginBottom: 10 },
   copy: { paddingHorizontal: PAD },
   eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 4, color: HOT, marginBottom: 8 },
-  bigTitle: { fontFamily: SYNE, fontSize: 36, fontWeight: '800', color: '#fff', lineHeight: 40, letterSpacing: -1, marginBottom: 10 },
-  bodySm: { fontSize: 15, color: 'rgba(255,255,255,0.52)', lineHeight: 23 },
+  bigTitle: { fontFamily: SYNE, fontSize: 36, fontWeight: '800', color: '#12141A', lineHeight: 40, letterSpacing: -1, marginBottom: 10 },
+  bodySm: { fontSize: 15, color: 'rgba(18,20,26,0.78)', lineHeight: 23 },
   pillTag: {
     alignSelf: 'flex-start',
     marginTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(59,91,252,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(59,91,252,0.2)',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  pillTxt: { fontSize: 12, color: 'rgba(255,255,255,0.62)', fontWeight: '600', letterSpacing: 0.3 },
+  pillTxt: { fontSize: 12, color: 'rgba(17,20,26,0.8)', fontWeight: '600', letterSpacing: 0.3 },
   orbitRing: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 70,
@@ -1046,7 +959,7 @@ const ob = StyleSheet.create({
   cardFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 52, padding: 10, justifyContent: 'flex-end' },
   cardDate: { color: 'rgba(255,255,255,0.48)', fontSize: 10, letterSpacing: 1, fontWeight: '600' },
   cardMb: { color: GOLD, fontSize: 11, fontWeight: '900', marginTop: 2 },
-  dirArrow: { fontSize: 16, fontWeight: '900', color: '#fff', textAlign: 'center' },
+  dirArrow: { fontSize: 16, fontWeight: '900', color: '#12141A', textAlign: 'center' },
   dirWord: { fontSize: 9, fontWeight: '900', letterSpacing: 2, textAlign: 'center', marginTop: 2 },
   zapTile: {
     width: 80,
@@ -1071,28 +984,10 @@ const ob = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
   },
-  statsTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 4,
-    width: '100%',
-  },
-  statsBrand: { fontFamily: SYNE, fontSize: 15, fontWeight: '800', color: '#fff' },
-  streakPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FF4500',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  streakTxt: { fontSize: 12, fontWeight: '800', color: '#fff' },
   statsSection: {
     fontSize: 10,
     letterSpacing: 4,
-    color: 'rgba(255,255,255,0.32)',
+    color: 'rgba(17,20,26,0.5)',
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 8,
@@ -1165,12 +1060,12 @@ const ob = StyleSheet.create({
   actionBtnDim: { opacity: 0.55 },
   runBtn: { shadowColor: HOT, shadowOpacity: 0.5, shadowRadius: 16, elevation: 8 },
   actionTxt: { fontSize: 12, fontWeight: '800', color: '#fff', letterSpacing: 1.2 },
-  legalTiny: { fontSize: 10, color: 'rgba(255,255,255,0.22)', textAlign: 'center', marginTop: 8 },
+  legalTiny: { fontSize: 10, color: 'rgba(17,20,26,0.52)', textAlign: 'center', marginTop: 8 },
   readyLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 4, color: HOT, textAlign: 'center', marginTop: 4 },
-  readyTitle: { fontFamily: SYNE, fontSize: 34, fontWeight: '800', color: '#fff', textAlign: 'center', marginTop: 6 },
+  readyTitle: { fontFamily: SYNE, fontSize: 34, fontWeight: '800', color: '#12141A', textAlign: 'center', marginTop: 6 },
   readyBody: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(17,20,26,0.75)',
     textAlign: 'center',
     paddingHorizontal: PAD + 8,
     lineHeight: 22,
@@ -1184,5 +1079,5 @@ const ob = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  featText: { flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.72)', lineHeight: 18 },
+  featText: { flex: 1, fontSize: 13, color: 'rgba(17,20,26,0.82)', lineHeight: 18 },
 });

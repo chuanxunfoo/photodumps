@@ -1,6 +1,7 @@
 import WidgetKit
 import SwiftUI
 import UIKit
+import ImageIO
 
 private let appGroupId = "group.com.yourname.dumpitapp.widgets"
 private let activeIdKey = "pd_active_widget_id"
@@ -38,12 +39,21 @@ struct PhotodumpsProvider: AppIntentTimelineProvider {
         return PhotodumpsWidgetEntry(date: Date(), image: image, caption: caption)
     }
 
+    /// Decode PNG so alpha is preserved (WidgetKit shows wallpaper through transparent areas).
+    private func decodePngWithAlpha(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return UIImage(data: data)
+        }
+        return UIImage(cgImage: cgImage, scale: UIScreen.main.scale, orientation: .up)
+    }
+
     private func loadImage(widgetId: String?, defaults: UserDefaults?) -> UIImage? {
         guard let widgetId = widgetId, widgetId != "none" else { return nil }
 
         if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) {
             let url = container.appendingPathComponent("previews/\(widgetId).png")
-            if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+            if let data = try? Data(contentsOf: url), let img = decodePngWithAlpha(data) {
                 return img
             }
         }
@@ -52,7 +62,7 @@ struct PhotodumpsProvider: AppIntentTimelineProvider {
            widgetId == defaults.string(forKey: activeIdKey),
            let b64 = defaults.string(forKey: activePreviewB64Key),
            let data = Data(base64Encoded: b64),
-           let img = UIImage(data: data) {
+           let img = decodePngWithAlpha(data) {
             return img
         }
 
@@ -64,12 +74,16 @@ struct PhotodumpsWidgetView: View {
     var entry: PhotodumpsProvider.Entry
 
     var body: some View {
-        ZStack {
+        Color.clear
+            .overlay {
             if let image = entry.image {
                 Image(uiImage: image)
+                    .renderingMode(.original)
+                    .interpolation(.high)
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.clear)
             } else {
                 LinearGradient(
                     colors: [Color(red: 0.23, green: 0.36, blue: 0.99), Color(red: 0.08, green: 0.08, blue: 0.13)],
@@ -88,7 +102,7 @@ struct PhotodumpsWidgetView: View {
                 }
                 .padding(10)
             }
-        }
+            }
         .clipped()
         .containerBackground(for: .widget) {
             Color.clear

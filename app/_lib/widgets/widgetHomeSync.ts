@@ -43,7 +43,7 @@ async function storeActivePreviewBase64(localUri: string, storage: ExtensionStor
     const result = await ImageManipulator.manipulateAsync(
       withFileScheme(localUri),
       [{ resize: { width: 480 } }],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.PNG, base64: true },
+      { compress: 1, format: ImageManipulator.SaveFormat.PNG, base64: true },
     );
     if (result.base64) {
       storage.set(WIDGET_STORAGE_KEYS.activePreviewB64, result.base64);

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Crown, Mail, Shield, User } from 'lucide-react-native';
@@ -21,6 +20,9 @@ import {
   adminSetPlanByEmail,
   type ProfilePlanType,
 } from '../_lib/profilePlanSupabase';
+import { textOnAccent } from '../_lib/themeContrast';
+import { useSplashReplay } from '../_lib/splashReplay';
+import { supabase } from './supabase';
 import { useTheme } from './ThemeContext';
 
 function InfoRow({
@@ -47,6 +49,7 @@ function InfoRow({
 const ADMIN_PLANS: ProfilePlanType[] = ['hobby', 'pro', 'admin'];
 
 export default function SettingsScreen() {
+  const { replaySplash } = useSplashReplay();
   const goBack = useExploreAwareBack();
   const { theme, user, isPro, isAdmin, swipesLeft, openSubscription, setUser, language } = useTheme();
   const u = getLocaleUi(language);
@@ -121,7 +124,7 @@ export default function SettingsScreen() {
             onPress={openSubscription}
             activeOpacity={0.88}
           >
-            <Text style={s.primaryBtnText}>{u.settingsUpgrade}</Text>
+            <Text style={[s.primaryBtnText, { color: textOnAccent(theme) }]}>{u.settingsUpgrade}</Text>
           </TouchableOpacity>
         )}
 
@@ -181,9 +184,9 @@ export default function SettingsScreen() {
         <TouchableOpacity
           style={[s.secondaryBtn, { borderColor: theme.border }]}
           onPress={async () => {
-            await AsyncStorage.removeItem('@dumpit_onboard');
+            await supabase.auth.signOut();
             await setUser(null);
-            router.replace('/landing');
+            replaySplash(() => router.replace('/onboarding'));
           }}
           activeOpacity={0.88}
         >

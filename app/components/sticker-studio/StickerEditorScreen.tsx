@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MinimalBackButton } from '../MinimalBackButton';
-import type { CutoutResult, TraceSettings } from '../../_lib/stickerStudio/types';
+import { STICKER_CATEGORIES } from '../../_lib/stickerStudio/stickerCategory';
+import type { CutoutResult, StickerCategory, TraceSettings } from '../../_lib/stickerStudio/types';
 import { FramedCutout } from './FramedCutout';
 import { StickerStepBar } from './StickerStepBar';
 import { TraceControls } from './TraceControls';
@@ -53,6 +54,8 @@ export function StickerEditorScreen({
   trace,
   onTraceChange,
   onBack,
+  category,
+  onCategoryChange,
   onSave,
   onNew,
   saving,
@@ -211,6 +214,40 @@ const st = StyleSheet.create({
     marginBottom: 4,
   },
   panelTitle: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  catLbl: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: 18,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  catRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  catChipOn: {
+    borderColor: 'rgba(255,213,71,0.55)',
+    backgroundColor: 'rgba(255,213,71,0.14)',
+  },
+  catEmoji: { fontSize: 14 },
+  catTxt: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '700' },
+  catTxtOn: { color: '#FFE566' },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

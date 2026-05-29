@@ -18,7 +18,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useExploreAwareBack } from '../_lib/exploreBack';
 import { getLocaleUi } from '../_lib/localeUi';
 import {
   deleteWidget,
@@ -45,8 +44,11 @@ const CARD_W = (SW - PAD * 2 - GAP) / COLS;
 const SIZE_FILTERS: WidgetFamily[] = ['small', 'medium', 'large'];
 
 export default function WidgetsScreen() {
-  const goBack = useExploreAwareBack();
   const router = useRouter();
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace({ pathname: '/hub', params: { page: 'features' } });
+  }, [router]);
   const { theme, language } = useTheme();
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
@@ -97,26 +99,37 @@ export default function WidgetsScreen() {
   const openEdit = (w: SavedWidget) => {
     router.push({
       pathname: '/widget-editor',
-      params: { widgetId: w.id, templateId: w.templateId, family: w.family ?? 'medium' },
+      params: {
+        mode: 'edit',
+        widgetId: w.id,
+        templateId: w.templateId,
+        family: w.family ?? 'medium',
+        session: String(Date.now()),
+      },
     });
   };
 
   const openNew = (templateId: string) => {
     router.push({
       pathname: '/widget-editor',
-      params: { templateId, family: sizeFilter },
+      params: {
+        mode: 'new',
+        templateId,
+        family: sizeFilter,
+        session: String(Date.now()),
+      },
     });
   };
 
   return (
-    <View style={[st.root, { backgroundColor: '#faf7f4' }]}>
+    <View style={[st.root, { backgroundColor: theme.bg }]}>
       <SafeAreaView style={st.flex} edges={['top']}>
         <AppHeader variant="detail" onBack={goBack} subtitle={u.widgetsHeader} />
 
         <ScrollView
           contentContainerStyle={st.scroll}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#c792c6" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.accent} />}
         >
           <Text style={[st.title, { fontFamily: fonts.titleFont }]}>{u.widgetsTitle}</Text>
           <Text style={st.hint}>{u.widgetsHint}</Text>
@@ -140,7 +153,7 @@ export default function WidgetsScreen() {
                         contentFit="cover"
                       />
                       {isActive && (
-                        <View style={st.activeBadge}>
+                        <View style={[st.activeBadge, { backgroundColor: theme.accent }]}>
                           <Check size={11} color="#fff" strokeWidth={3} />
                           <Text style={st.activeTxt}>{u.widgetOnHome}</Text>
                         </View>
@@ -155,7 +168,7 @@ export default function WidgetsScreen() {
                           <Pencil size={15} color="#9a8fa8" />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => setHome(w)} hitSlop={8}>
-                          <Home size={15} color={isActive ? '#c792c6' : '#9a8fa8'} />
+                          <Home size={15} color={isActive ? theme.accent : theme.textMuted} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => confirmDelete(w)} hitSlop={8}>
                           <Trash2 size={15} color="#d4a0a8" />
@@ -176,7 +189,7 @@ export default function WidgetsScreen() {
               return (
                 <TouchableOpacity
                   key={f}
-                  style={[st.filterPill, on && st.filterPillOn]}
+                  style={[st.filterPill, on && [st.filterPillOn, { backgroundColor: theme.accent, borderColor: theme.accent }]]}
                   onPress={() => setSizeFilter(f)}
                   activeOpacity={0.88}
                 >

@@ -32,17 +32,28 @@ export function spawnBodies(
   diameter: number = STICKER_D,
 ): PhysicsBody[] {
   const r = diameter * 0.48;
-  const pad = r + 6;
-  return stickers.map((s, i) => ({
-    id: s.id,
-    uri: s.uri,
-    x: pad + Math.random() * Math.max(1, width - pad * 2),
-    y: pad + (i % 3) * 18,
-    vx: (Math.random() - 0.5) * 30,
-    vy: Math.random() * 20,
-    r,
-    rotation: (Math.random() - 0.5) * 14,
-  }));
+  const pad = r + 8;
+  const innerW = Math.max(diameter, width - pad * 2);
+  const innerH = Math.max(diameter, height - pad * 2);
+  const cols = Math.max(1, Math.floor(innerW / (diameter * 0.72)));
+  const cellW = innerW / cols;
+
+  return stickers.map((s, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = pad + col * cellW + cellW * 0.5 + (Math.random() - 0.5) * 10;
+    const y = pad + row * (r * 1.2) + Math.random() * 8;
+    return {
+      id: s.id,
+      uri: s.uri,
+      x: Math.min(width - pad - r, Math.max(pad + r, x)),
+      y: Math.min(height - pad - r, Math.max(pad + r, y)),
+      vx: (Math.random() - 0.5) * 48,
+      vy: Math.random() * 24,
+      r,
+      rotation: (Math.random() - 0.5) * 16,
+    };
+  });
 }
 
 function resolveWall(b: PhysicsBody, w: number, h: number) {

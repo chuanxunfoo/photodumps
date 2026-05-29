@@ -17,7 +17,21 @@
       "bundleIdentifier": "com.yourname.dumpitapp",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow Dumplt to access photos.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "dumpit",
+          "googlegmail",
+          "instagram",
+          "mailto"
+        ],
+        "NSPhotoLibraryAddUsageDescription": "photodumps saves your photo booth strips to your library when you tap Save."
+      },
+      "appleTeamId": "75356Q29L5",
+      "supportsTablet": false,
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.yourname.dumpitapp.widgets"
+        ]
       }
     },
     "android": {

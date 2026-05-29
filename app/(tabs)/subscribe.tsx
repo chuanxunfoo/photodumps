@@ -12,6 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PaymentModal } from './PaymentModal';
 import type { PlanType } from './ThemeContext';
+import {
+  calloutTextStyle,
+  planCardSurface,
+  subscriptionHeroStyle,
+  textOnHex,
+} from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
 
 const { width } = Dimensions.get('window');
@@ -42,27 +48,29 @@ type PlanDef = {
 
 const PLANS: PlanDef[] = [
   {
-    id: 'weekly',   label: 'WEEKLY',  badge: '3-DAY FREE TRIAL',
+    id: 'weekly',   label: 'WEEKLY',  badge: null,
     myr: 'MYR 19.99', usd: 'USD 4.99', perDay: 'MYR 2.85/day',
     sub: 'Cancel anytime · billed weekly',
-    color: '#00E5FF', highlight: false, trial: '3-day free trial',
+    color: '#00E5FF', highlight: false, trial: null,
   },
   {
     id: 'monthly',  label: 'MONTHLY', badge: '⭐ BEST VALUE',
     myr: 'MYR 39.99', usd: 'USD 9.99', perDay: 'MYR 1.33/day',
     sub: 'Save 53% vs weekly · billed monthly',
-    color: '#FFD600', highlight: true, trial: '7-day free trial',
+    color: '#FFD600', highlight: true, trial: null,
   },
   {
     id: 'yearly',   label: 'YEARLY',  badge: '🔥 LOWEST PRICE',
     myr: 'MYR 199.99', usd: 'USD 49.99', perDay: 'MYR 0.55/day',
     sub: 'Save 81% vs weekly · billed yearly',
-    color: '#FF0055', highlight: false, trial: '7-day free trial',
+    color: '#FF0055', highlight: false, trial: null,
   },
 ];
 
 export default function SubscribePage() {
-  const { setPlan } = useTheme();
+  const { theme, themeId, refreshPlanFromSupabase } = useTheme();
+  const heroStyle = subscriptionHeroStyle(themeId, theme);
+  const callout = calloutTextStyle(theme);
   const [selected, setSelected] = useState<PlanType>('monthly');
   const [showPayment, setShowPayment] = useState(false);
   const glow = useRef(new Animated.Value(0)).current;
@@ -90,16 +98,16 @@ export default function SubscribePage() {
   const plan = PLANS.find(p => p.id === selected)!;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#030303' }}>
-      <LinearGradient colors={['#030303', '#0A0020', '#030303']} style={StyleSheet.absoluteFill} />
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <LinearGradient colors={heroStyle.gradient} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* NAV */}
         <View style={s.nav}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <ChevronLeft size={22} color="rgba(255,255,255,0.6)" />
+          <TouchableOpacity onPress={() => router.back()} style={[s.backBtn, { backgroundColor: theme.bg3 }]}>
+            <ChevronLeft size={22} color={theme.textSub} />
           </TouchableOpacity>
-          <Text style={s.navTitle}>Upgrade to Pro</Text>
+          <Text style={[s.navTitle, { color: theme.text }]}>Upgrade to Pro</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -112,8 +120,8 @@ export default function SubscribePage() {
                 <Crown size={40} color="#FFF" />
               </LinearGradient>
             </Animated.View>
-            <Text style={s.heroTitle}>PHOTODUMPS PRO</Text>
-            <Text style={s.heroSub}>
+            <Text style={[s.heroTitle, { color: heroStyle.title }]}>PHOTODUMPS PRO</Text>
+            <Text style={[s.heroSub, { color: heroStyle.sub }]}>
               Join 50,000+ users who've reclaimed{'\n'}gigabytes of storage — for good.
             </Text>
 
@@ -122,15 +130,15 @@ export default function SubscribePage() {
               <View style={s.stars}>
                 {[0,1,2,3,4].map(i => <Text key={i} style={{ fontSize: 14 }}>⭐</Text>)}
               </View>
-              <Text style={s.proofText}>4.9 · 12,400 ratings</Text>
+              <Text style={[s.proofText, { color: heroStyle.rating }]}>4.9 · 12,400 ratings</Text>
             </View>
           </View>
 
           {/* FEATURES */}
-          <View style={s.featCard}>
+          <View style={[s.featCard, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
             <View style={s.featHeader}>
               <Sparkles size={14} color="#FFD600" />
-              <Text style={s.featHeading}>EVERYTHING IN PRO</Text>
+              <Text style={[s.featHeading, { color: theme.textSub }]}>EVERYTHING IN PRO</Text>
             </View>
             <View style={s.featGrid}>
               {FEATURES.map((feat, i) => (
@@ -138,27 +146,27 @@ export default function SubscribePage() {
                   <LinearGradient colors={[feat.color + '30', feat.color + '10']} style={s.featIconWrap}>
                     <feat.icon size={14} color={feat.color} />
                   </LinearGradient>
-                  <Text style={s.featLabel}>{feat.label}</Text>
+                  <Text style={[s.featLabel, { color: theme.text }]}>{feat.label}</Text>
                 </View>
               ))}
             </View>
           </View>
 
           {/* VS FREE BANNER */}
-          <LinearGradient colors={['rgba(255,0,85,0.12)', 'rgba(255,0,85,0.04)']} style={s.vsBanner}>
-            <Text style={s.vsFree}>Free plan: only <Text style={{ color: '#FF0055', fontWeight: '900' }}>100 swipes/week</Text></Text>
-            <Text style={s.vsArrow}>↓ Upgrade for unlimited ↓</Text>
+          <LinearGradient colors={[theme.accentSoft, theme.bg2]} style={[s.vsBanner, { borderColor: theme.border, borderWidth: 1 }]}>
+            <Text style={[s.vsFree, { color: theme.textSub }]}>Free plan: only <Text style={{ color: theme.accent, fontWeight: '900' }}>100 swipes/week</Text></Text>
+            <Text style={[s.vsArrow, { color: theme.textMuted }]}>↓ Upgrade for unlimited ↓</Text>
           </LinearGradient>
 
           {/* PLANS */}
-          <Text style={s.planHeading}>CHOOSE YOUR PLAN</Text>
+          <Text style={[s.planHeading, { color: theme.textSub }]}>CHOOSE YOUR PLAN</Text>
           {PLANS.map((p, i) => {
             const isSel = selected === p.id;
+            const surface = planCardSurface(theme, isSel, p.color, false);
             return (
               <Animated.View key={p.id} style={{ transform: [{ scale: planAnims[i] }] }}>
                 <TouchableOpacity onPress={() => tap(p.id, i)} activeOpacity={0.9}>
-                  <View style={[s.planCard, { borderColor: isSel ? p.color : 'rgba(255,255,255,0.08)',
-                    backgroundColor: isSel ? (p.color + '10') : 'rgba(255,255,255,0.03)' }]}>
+                  <View style={[s.planCard, { borderColor: surface.border, backgroundColor: surface.bg }]}>
                     {p.badge && (
                       <LinearGradient
                         colors={p.highlight ? ['#FFD600', '#FF8C00'] : p.id === 'yearly' ? ['#FF0055', '#FF5500'] : ['#00E5FF', '#006FFF']}
@@ -169,17 +177,17 @@ export default function SubscribePage() {
                       </LinearGradient>
                     )}
                     <View style={s.planBody}>
-                      <View style={[s.planRadio, { borderColor: isSel ? p.color : 'rgba(255,255,255,0.2)' }]}>
+                      <View style={[s.planRadio, { borderColor: surface.radioBorder }]}>
                         {isSel && <View style={[s.planDot, { backgroundColor: p.color }]} />}
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[s.planLabel, { color: isSel ? p.color : 'rgba(255,255,255,0.7)' }]}>{p.label}</Text>
-                        <Text style={s.planSub}>{p.sub}</Text>
+                        <Text style={[s.planLabel, { color: surface.label }]}>{p.label}</Text>
+                        <Text style={[s.planSub, { color: surface.sub }]}>{p.sub}</Text>
                         {p.trial && <Text style={[s.planTrial, { color: p.color }]}>✓ {p.trial} included</Text>}
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={[s.planMyr, { color: isSel ? '#FFF' : 'rgba(255,255,255,0.7)' }]}>{p.myr}</Text>
-                        <Text style={s.planUsd}>{p.usd}</Text>
+                        <Text style={[s.planMyr, { color: surface.price }]}>{p.myr}</Text>
+                        <Text style={[s.planUsd, { color: surface.usd }]}>{p.usd}</Text>
                         <View style={[s.perDayBadge, { backgroundColor: p.color + '20', borderColor: p.color + '50' }]}>
                           <Text style={[s.perDayText, { color: p.color }]}>{p.perDay}</Text>
                         </View>
@@ -192,11 +200,11 @@ export default function SubscribePage() {
           })}
 
           {/* VALUE CALLOUT */}
-          <View style={s.callout}>
+          <View style={[s.callout, { backgroundColor: theme.bg2, borderColor: theme.border, borderWidth: 1 }]}>
             <Text style={s.calloutEmoji}>💡</Text>
-            <Text style={s.calloutText}>
+            <Text style={[s.calloutText, { color: callout.body }]}>
               Monthly plan = less than a cup of coffee per day.{'\n'}
-              <Text style={{ color: '#FFD600', fontWeight: '800' }}>Start free, cancel anytime.</Text>
+              <Text style={{ color: callout.bold, fontWeight: '800' }}>Start free, cancel anytime.</Text>
             </Text>
           </View>
 
@@ -207,20 +215,28 @@ export default function SubscribePage() {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={s.cta}
             >
-              <Zap size={20} color={plan.id === 'monthly' ? '#000' : '#FFF'} />
-              <Text style={[s.ctaText, { color: plan.id === 'monthly' ? '#000' : '#FFF' }]}>
-                {plan.trial ? `START ${plan.trial.toUpperCase()}` : 'SUBSCRIBE NOW'}
+              {(() => {
+                const ctaColors = plan.id === 'monthly' ? ['#FFD600', '#FF8C00'] as [string, string] : plan.id === 'yearly' ? ['#FF0055', '#FF5500'] as [string, string] : ['#00E5FF', '#006FFF'] as [string, string];
+                const ctaInk = textOnHex(ctaColors[0]);
+                return (
+                  <>
+              <Zap size={20} color={ctaInk} />
+              <Text style={[s.ctaText, { color: ctaInk }]}>
+                SUBSCRIBE WITH APPLE PAY
               </Text>
+                  </>
+                );
+              })()}
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={s.ctaNote}>
-            {plan.trial ? `Free trial · then ${plan.myr}/period · cancel anytime` : `${plan.myr} · cancel anytime`}
+          <Text style={[s.ctaNote, { color: theme.textMuted }]}>
+            {plan.myr} · Apple Pay · cancel anytime
           </Text>
 
           {/* LEGAL */}
           <View style={s.legal}>
             {['Terms of Service', 'Privacy Policy', 'Restore Purchase'].map(l => (
-              <TouchableOpacity key={l}><Text style={s.legalLink}>{l}</Text></TouchableOpacity>
+              <TouchableOpacity key={l}><Text style={[s.legalLink, { color: theme.textMuted }]}>{l}</Text></TouchableOpacity>
             ))}
           </View>
           <View style={{ height: 30 }} />
@@ -232,13 +248,15 @@ export default function SubscribePage() {
         visible={showPayment}
         item={{
           title: `photodumps Pro · ${plan.label}`,
-          subtitle: plan.trial ? `${plan.trial} included — cancel anytime` : plan.sub,
+          subtitle: `${plan.sub} · Apple Pay`,
           amount: plan.myr,
           usd: plan.usd,
+          planId: selected === 'free' ? undefined : selected,
+          checkoutMode: 'subscription',
         }}
         onClose={() => setShowPayment(false)}
         onSuccess={async () => {
-          await setPlan(selected);
+          await refreshPlanFromSupabase();
           setShowPayment(false);
           router.replace('/hub');
         }}

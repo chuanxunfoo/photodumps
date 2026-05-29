@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { readFileBytes, withFileScheme, writeFileBytes } from './pngIo';
 import type { SavedWidget } from './types';
 
 export function widgetDocumentsDir(): string {
@@ -13,12 +14,6 @@ export function widgetDir(): string {
 
 function manifestPath(): string {
   return `${widgetDir()}manifest.json`;
-}
-
-function withFileScheme(path: string): string {
-  if (path.startsWith('file://')) return path;
-  if (path.startsWith('/')) return `file://${path}`;
-  return path;
 }
 
 export function defaultPreviewUri(widgetId: string): string {
@@ -53,11 +48,15 @@ export async function persistWidgetPreview(tmpUri: string, widgetId: string): Pr
   const destPath = `${dir}${widgetId}.png`;
   const dest = withFileScheme(destPath);
 
+  if (await widgetPreviewExists(dest)) {
+    await FileSystem.deleteAsync(dest, { idempotent: true });
+  }
+
   try {
-    await FileSystem.copyAsync({ from: src, to: destPath });
+    await FileSystem.copyAsync({ from: src, to: dest });
   } catch {
-    const base64 = await FileSystem.readAsStringAsync(src, { encoding: FileSystem.EncodingType.Base64 });
-    await FileSystem.writeAsStringAsync(destPath, base64, { encoding: FileSystem.EncodingType.Base64 });
+    const bytes = await readFileBytes(src);
+    await writeFileBytes(destPath, bytes);
   }
 
   if (!(await widgetPreviewExists(dest))) throw new Error('PREVIEW_WRITE_FAILED');

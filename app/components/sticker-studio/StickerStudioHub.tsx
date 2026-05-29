@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../AppHeader';
 import type { SavedSticker } from '../../_lib/stickerStudio/types';
+import { textOnAccent } from '../../_lib/themeContrast';
 import { StickerPhysicsJar } from './StickerPhysicsJar';
 import {
   filterStickerLibrary,
@@ -125,8 +126,8 @@ export function StickerStudioHub({
             onPress={onNew}
             style={[st.primary, { backgroundColor: theme.accent }]}
           >
-            <Plus size={20} color="#fff" strokeWidth={2.2} />
-            <Text style={st.primaryTxt}>New sticker</Text>
+            <Plus size={20} color={textOnAccent(theme)} strokeWidth={2.2} />
+            <Text style={[st.primaryTxt, { color: textOnAccent(theme) }]}>New sticker</Text>
           </TouchableOpacity>
 
           <View style={st.actionRow}>

@@ -16,6 +16,7 @@ import { takeDuplicateSwiperPayload } from './duplicateNavPayload';
 import { useTheme } from './ThemeContext';
 import { AppHeader } from '../components/AppHeader';
 import { addBookmark } from '../_lib/bookmarks';
+import { initMobileAds, showInterstitialAd, showRewardedAd } from '../_lib/ads/admob';
 import {
   fetchAssetsPaged,
   fetchDeepCleanCandidates,
@@ -26,6 +27,8 @@ import {
 import { recordUserStatsDeletion } from '../_lib/userStatsSupabase';
 
 const { width, height } = Dimensions.get('window');
+const SWIPES_PER_INTERSTITIAL = 30;
+const REWARDED_SWIPE_BONUS = 20;
 
 function MediaCard({ card, isActive, cardW, cardH }: { card: any; isActive: boolean; cardW: number; cardH: number }) {
   const isVideo = card.mediaType === 'video';
@@ -65,7 +68,7 @@ function DeleteQueueModal({ visible, queue, onUndo, onConfirm, onClose }: any) {
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
         <Animated.View style={{ height: height * 0.88, borderTopLeftRadius: 36, borderTopRightRadius: 36, backgroundColor: theme.bg, overflow: 'hidden', transform: [{ translateY: slideAnim }] }}>
-          <LinearGradient colors={['#220000', theme.bg]} style={{ paddingTop: 16, paddingBottom: 4 }}>
+          <LinearGradient colors={[theme.bg3, theme.bg]} style={{ paddingTop: 16, paddingBottom: 4 }}>
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: theme.border, alignSelf: 'center', marginBottom: 16 }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24 }}>
               <View>
@@ -74,7 +77,7 @@ function DeleteQueueModal({ visible, queue, onUndo, onConfirm, onClose }: any) {
                   {queue.length} {t.photos.toLowerCase()} · {queue.reduce((a: number, p: any) => a + (p.sizeMB || 0), 0).toFixed(1)} MB
                 </Text>
               </View>
-              <TouchableOpacity onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' }}>
+              <TouchableOpacity onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.bg3, justifyContent: 'center', alignItems: 'center' }}>
                 <X size={18} color={theme.text} />
               </TouchableOpacity>
             </View>
@@ -92,7 +95,7 @@ function DeleteQueueModal({ visible, queue, onUndo, onConfirm, onClose }: any) {
             renderItem={({ item }: any) => (
               <TouchableOpacity style={{ width: (width - 36) / 3, height: (width - 36) / 3, margin: 2, borderRadius: 12, overflow: 'hidden' }} onPress={() => onUndo(item.id)}>
                 <Image source={{ uri: item.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,85,0.3)', justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: theme.accentSoft, justifyContent: 'center', alignItems: 'center' }}>
                   <RotateCcw size={18} color="#FFF" />
                 </View>
               </TouchableOpacity>
@@ -103,7 +106,7 @@ function DeleteQueueModal({ visible, queue, onUndo, onConfirm, onClose }: any) {
               <Text style={{ color: theme.textSub, fontSize: 12, fontWeight: '900', letterSpacing: 1 }}>{t.back}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ flex: 2, borderRadius: 20, overflow: 'hidden' }} onPress={onConfirm} disabled={queue.length === 0}>
-              <LinearGradient colors={['#FF0055', '#FF5500']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 16, alignItems: 'center' }}>
+              <LinearGradient colors={[theme.accent, theme.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 16, alignItems: 'center' }}>
                 <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '900', letterSpacing: 1 }}>{t.deleteAll} ({queue.length})</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -116,8 +119,38 @@ function DeleteQueueModal({ visible, queue, onUndo, onConfirm, onClose }: any) {
 
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────
 export default function SwiperScreen() {
-  const { theme, useSwipe, swipesLeft, isPro, openSubscription, t, user } = useTheme();
+  const { theme, useSwipe, swipesLeft, isPro, openSubscription, t, user, addBonusSwipes } = useTheme();
   const { router: _r } = (() => { try { return require('expo-router'); } catch { return { router: null }; } })();
+  const swipeCounterRef = useRef(0);
+  const [rewardBusy, setRewardBusy] = useState(false);
+
+  useEffect(() => {
+    void initMobileAds();
+  }, []);
+
+  const maybeShowInterstitialForSwipe = () => {
+    if (isPro) return;
+    swipeCounterRef.current += 1;
+    if (swipeCounterRef.current % SWIPES_PER_INTERSTITIAL !== 0) return;
+    void showInterstitialAd();
+  };
+
+  const watchRewardedForSwipes = async () => {
+    if (rewardBusy) return;
+    setRewardBusy(true);
+    try {
+      const rewarded = await showRewardedAd(async () => {
+        await addBonusSwipes(REWARDED_SWIPE_BONUS);
+      });
+      if (rewarded) {
+        Alert.alert('Bonus unlocked', `+${REWARDED_SWIPE_BONUS} swipes added.`);
+      } else {
+        Alert.alert('Ad not ready', 'No reward was granted. Please try again in a moment.');
+      }
+    } finally {
+      setRewardBusy(false);
+    }
+  };
 
   const _handleOutOfSwipes = () => {
     if (isPro) return;
@@ -128,6 +161,7 @@ export default function SwiperScreen() {
       'You\'ve used your 100 free swipes this week. Get more now!',
       [
         { text: 'Subscribe for Unlimited', style: 'default', onPress: () => openSubscription() },
+        { text: rewardBusy ? 'Loading Ad…' : `Watch Ad (+${REWARDED_SWIPE_BONUS} swipes)`, onPress: () => { void watchRewardedForSwipes(); } },
         { text: 'Spin for Swipes 🎡', onPress: () => { const { router } = require('expo-router'); router.push('/spin-wheel'); } },
         { text: 'Cancel', style: 'cancel' },
       ]
@@ -262,6 +296,7 @@ export default function SwiperScreen() {
     setSessionSaved(prev => +(prev + (photos[idx]?.sizeMB || 0)).toFixed(2));
     setCurrentIndex(prev => prev + 1);
     flashScreen('delete');
+    maybeShowInterstitialForSwipe();
   };
 
   const handleSwipedRight = (idx: number) => {
@@ -286,6 +321,7 @@ export default function SwiperScreen() {
     }
     setCurrentIndex(prev => prev + 1);
     flashScreen('keep');
+    maybeShowInterstitialForSwipe();
   };
 
   const handleBookmarkPress = () => {
@@ -390,8 +426,8 @@ export default function SwiperScreen() {
     return <MediaCard card={card} isActive={isActive} cardW={CARD_W} cardH={CARD_H} />;
   };
 
-  const deleteFlashBg = deleteFlash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(255,0,85,0)', 'rgba(255,0,85,0.22)'] });
-  const keepFlashBg   = keepFlash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,255,163,0)', 'rgba(0,255,163,0.22)'] });
+  const deleteFlashBg = deleteFlash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', theme.accentSoft] });
+  const keepFlashBg   = keepFlash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(52,211,153,0.18)'] });
   const progressWidth = progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
   return (
@@ -416,13 +452,13 @@ export default function SwiperScreen() {
                 </TouchableOpacity>
                 <Animated.View style={{ transform: [{ scale: counterScale }] }}>
                   <TouchableOpacity
-                    style={[ms.trashBtn, { backgroundColor: deleteQueue.length > 0 ? 'rgba(255,0,85,0.1)' : theme.bg2, borderColor: deleteQueue.length > 0 ? '#FF0055' : theme.border }]}
+                    style={[ms.trashBtn, { backgroundColor: deleteQueue.length > 0 ? theme.accentSoft : theme.bg2, borderColor: deleteQueue.length > 0 ? theme.accent : theme.border }]}
                     onPress={() => deleteQueue.length > 0 && setShowQueue(true)}
                     activeOpacity={0.85}
                   >
-                    <Trash2 size={18} color={deleteQueue.length > 0 ? '#FF0055' : theme.textMuted} />
+                    <Trash2 size={18} color={deleteQueue.length > 0 ? theme.accent : theme.textMuted} />
                     {deleteQueue.length > 0 && (
-                      <View style={ms.badge}><Text style={ms.badgeText}>{deleteQueue.length}</Text></View>
+                      <View style={[ms.badge, { backgroundColor: theme.accent }]}><Text style={ms.badgeText}>{deleteQueue.length}</Text></View>
                     )}
                   </TouchableOpacity>
                 </Animated.View>
@@ -435,7 +471,7 @@ export default function SwiperScreen() {
           <View style={[ms.swiperArea, { position: 'relative' }]}>
             {loading ? (
               <View style={ms.loader}>
-                <ActivityIndicator size="large" color="#FF0055" />
+                <ActivityIndicator size="large" color={theme.accent} />
                 <Text style={[ms.loadingText, { color: theme.textMuted }]}>
                   {dupMode ? 'OPENING SET…' : 'SCANNING GALLERY...'}
                 </Text>
@@ -450,7 +486,7 @@ export default function SwiperScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => router.push('/duplicates')}
-                  style={{ backgroundColor: '#FF0055', paddingHorizontal: 22, paddingVertical: 14, borderRadius: 20 }}
+                  style={{ backgroundColor: theme.accent, paddingHorizontal: 22, paddingVertical: 14, borderRadius: 20 }}
                 >
                   <Text style={{ color: '#FFF', fontWeight: '900', letterSpacing: 1 }}>BACK TO DUPLICATES</Text>
                 </TouchableOpacity>
@@ -485,7 +521,7 @@ export default function SwiperScreen() {
                     left: {
                       element: (
                         <View style={{ transform: [{ rotate: '-8deg' }] }}>
-                          <LinearGradient colors={['#FF0055', '#FF4400']} style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 14, borderWidth: 2, borderColor: '#FF0055' }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                          <LinearGradient colors={[theme.accent, theme.accent2]} style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 14, borderWidth: 2, borderColor: theme.accent }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                             <Text style={{ color: '#FFF', fontSize: 22, fontWeight: '900', letterSpacing: 2 }}>TRASH</Text>
                           </LinearGradient>
                         </View>
@@ -533,16 +569,16 @@ export default function SwiperScreen() {
           <View style={[ms.bottomBar, { backgroundColor: theme.bg, borderTopColor: theme.border, paddingBottom: 12 + insets.bottom }]}>
             <View style={[ms.progressTrack, { backgroundColor: theme.bg3 ?? theme.bg2 }]}>
               <Animated.View style={[ms.progressFill, { width: progressWidth }]}>
-                <LinearGradient colors={['#FF0055', '#FF5500']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, borderRadius: 2 }} />
+                <LinearGradient colors={[theme.accent, theme.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, borderRadius: 2 }} />
               </Animated.View>
             </View>
             <View style={ms.actionRow}>
-              <View style={[ms.miniStat, { backgroundColor: theme.bg2, borderColor: '#FF005540' }]}>
-                <Trash2 size={10} color="#FF0055" />
-                <Text style={{ color: '#FF0055', fontSize: 11, fontWeight: '900' }}>{deleteQueue.length}</Text>
+              <View style={[ms.miniStat, { backgroundColor: theme.bg2, borderColor: theme.accentSoft }]}>
+                <Trash2 size={10} color={theme.accent} />
+                <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '900' }}>{deleteQueue.length}</Text>
               </View>
               <TouchableOpacity style={[ms.dumpBtn, deleteQueue.length === 0 && { opacity: 0.35 }]} disabled={deleteQueue.length === 0} onPress={() => setShowQueue(true)} activeOpacity={0.85}>
-                <LinearGradient colors={deleteQueue.length > 0 ? ['#FF0055', '#FF5500'] : [theme.bg2, theme.bg2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={ms.dumpBtnGrad}>
+                <LinearGradient colors={deleteQueue.length > 0 ? [theme.accent, theme.accent2] : [theme.bg2, theme.bg2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={ms.dumpBtnGrad}>
                   <Trash2 size={15} color={deleteQueue.length > 0 ? '#FFF' : theme.textMuted} />
                   <Text style={{ color: deleteQueue.length > 0 ? '#FFF' : theme.textMuted, fontSize: 12, fontWeight: '900', letterSpacing: 1.5 }}>
                     {t.dump}{deleteQueue.length > 0 ? ` (${deleteQueue.length})` : ''}
@@ -574,7 +610,7 @@ export default function SwiperScreen() {
                 { l: 'SIZE', v: `${photos[currentIndex].sizeMB} MB`, c: '#FFD600' },
                 { l: 'DATE', v: photos[currentIndex].dateStr, c: '#BF5AF2' },
                 { l: 'DEVICE', v: photos[currentIndex].device, c: '#00E5FF' },
-                { l: 'DIMENSIONS', v: `${photos[currentIndex].width} × ${photos[currentIndex].height}`, c: '#FF0055' },
+                { l: 'DIMENSIONS', v: `${photos[currentIndex].width} × ${photos[currentIndex].height}`, c: theme.accent },
                 ...(photos[currentIndex].mediaType === 'video' && photos[currentIndex].duration
                   ? [{ l: 'DURATION', v: `${Math.round(photos[currentIndex].duration)} sec`, c: '#00FFA3' }]
                   : []),
@@ -605,12 +641,12 @@ function DoneScreen({ deleteCount, savedMB, onReview, theme, duplicateMode }: an
   }, []);
   return (
     <View style={{ alignItems: 'center', paddingVertical: 40, gap: 16, paddingHorizontal: 30 }}>
-      <Animated.View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,0,85,0.1)', borderWidth: 1, borderColor: 'rgba(255,0,85,0.3)', justifyContent: 'center', alignItems: 'center', transform: [{ scale: pulse }] }}>
+      <Animated.View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: theme.accentSoft, borderWidth: 1, borderColor: theme.border, justifyContent: 'center', alignItems: 'center', transform: [{ scale: pulse }] }}>
         <Text style={{ fontSize: 52 }}>🎉</Text>
       </Animated.View>
       <Text style={{ color: theme.text, fontSize: 40, fontWeight: '900', letterSpacing: -2 }}>ALL DONE!</Text>
       <Text style={{ color: theme.textSub, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>{deleteCount} item(s) in queue</Text>
-      <Text style={{ color: '#00FFA3', fontSize: 24, fontWeight: '900' }}>{savedMB} MB freed</Text>
+      <Text style={{ color: theme.success, fontSize: 24, fontWeight: '900' }}>{savedMB} MB freed</Text>
       {duplicateMode && (
         <Text style={{ color: theme.textMuted, fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
           Finished this set. Open Duplicates and tap another stack — each pick loads a new session right away.
@@ -618,7 +654,7 @@ function DoneScreen({ deleteCount, savedMB, onReview, theme, duplicateMode }: an
       )}
       {deleteCount > 0 && (
         <TouchableOpacity style={{ borderRadius: 26, overflow: 'hidden', width: '100%', marginTop: 8 }} onPress={onReview}>
-          <LinearGradient colors={['#FF0055', '#FF5500']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 18, alignItems: 'center' }}>
+          <LinearGradient colors={[theme.accent, theme.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 18, alignItems: 'center' }}>
             <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '900', letterSpacing: 1 }}>REVIEW & DELETE ({deleteCount})</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -639,7 +675,7 @@ const ms = StyleSheet.create({
   dupRibbonSub: { fontSize: 11, fontWeight: '700', lineHeight: 16 },
   dupRibbonId: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   trashBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
-  badge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#FF0055', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  badge: { position: 'absolute', top: -5, right: -5, borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
   badgeText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
   swiperArea: { flex: 1, justifyContent: 'center', overflow: 'hidden' },
   cardActions: {

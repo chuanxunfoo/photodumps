@@ -31,6 +31,10 @@ import {
   isVideoProcessingAvailable,
   trimVideoFile,
 } from '../_lib/videoProcessingGate';
+import {
+  consumeVideoTrimTrial,
+  hasVideoTrimTrial,
+} from '../_lib/hobbyFeatureAccess';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 const { width: W } = Dimensions.get('window');
@@ -52,6 +56,8 @@ const NATIVE_VIDEO_EXPORT_FALLBACK =
   'Could not export. Trimming and exporting need the native VideoProcessing module (expo-video-processing). Use a development or production build of this app — not Expo Go.';
 const NATIVE_VIDEO_COMPRESS_FALLBACK =
   'Could not compress. Compression uses the same native module (expo-video-processing). Use a development or production build — not Expo Go.';
+const ICLOUD_IMPORT_HELP =
+  'This clip is only in iCloud right now. Keep this screen open on Wi-Fi and we will try downloading it automatically. If Apple still blocks access, open the video in Photos once until download completes, then import again.';
 
 type QualityId = 'smart' | '144' | '360' | '720' | '1080' | '4k';
 
@@ -109,6 +115,52 @@ async function resolvePickedVideoUri(asset: ImagePicker.ImagePickerAsset): Promi
   return fallback;
 }
 
+function isLikelyICloudErrorMessage(msg: string): boolean {
+  return /3164/i.test(msg) || /networkAccessRequired/i.test(msg) || /PHPhotosErrorDomain/i.test(msg);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Best effort: ask Photos to download the original from iCloud and return a local URI. */
+async function ensureLocalAssetUri(assetId: string, retries = 5): Promise<string | null> {
+  try {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted' && status !== 'limited') return null;
+  } catch {
+    return null;
+  }
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const info = await MediaLibrary.getAssetInfoAsync(assetId, { shouldDownloadFromNetwork: true });
+      if (info.localUri) return info.localUri;
+      if (info.uri?.startsWith('file://')) return info.uri;
+    } catch {
+      // Retry in case iCloud fetch is still in progress.
+    }
+    await sleep(700 + i * 450);
+  }
+  return null;
+}
+
+function normalizeToFileUri(uriOrPath: string): string {
+  if (uriOrPath.startsWith('file://')) return uriOrPath;
+  return `file://${uriOrPath}`;
+}
+
+function extractOutputFileFromCompressResult(result: unknown): string | null {
+  if (typeof result === 'string' && result.length > 0) return result;
+  if (!result || typeof result !== 'object') return null;
+  const rec = result as Record<string, unknown>;
+  const candidates = [rec.outputPath, rec.path, rec.output, rec.uri, rec.file, rec.filePath];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 0) return c;
+  }
+  return null;
+}
+
 const Q_LABELS: Record<QualityId, string> = {
   smart: 'Smart',
   '144': '144p',
@@ -120,11 +172,31 @@ const Q_LABELS: Record<QualityId, string> = {
 
 export default function ExploreTrimScreen() {
   const goBack = useExploreAwareBack();
-  const { theme } = useTheme();
+  const { theme, isPro, isAdmin, openSubscription, user } = useTheme();
   const fonts = resolveTypeface(theme);
+  const isPaid = isPro || isAdmin;
+
+  const guardHobbyExport = async (): Promise<boolean> => {
+    if (isPaid) return true;
+    const uid = user?.uid;
+    if (!uid) {
+      openSubscription();
+      return false;
+    }
+    if (await hasVideoTrimTrial(uid)) return true;
+    openSubscription();
+    return false;
+  };
+
+  const markHobbyExportUsed = async () => {
+    if (isPaid) return;
+    const uid = user?.uid;
+    if (uid) await consumeVideoTrimTrial(uid);
+  };
   const videoRef = useRef<Video>(null);
 
   const [pickedUri, setPickedUri] = useState<string | null>(null);
+  const [pickedAssetId, setPickedAssetId] = useState<string | null>(null);
   const [fsPath, setFsPath] = useState<string | null>(null);
   const [durationMs, setDurationMs] = useState(1);
   const [startMs, setStartMs] = useState(0);
@@ -133,8 +205,10 @@ export default function ExploreTrimScreen() {
   const [playing, setPlaying] = useState(true);
   const [quality, setQuality] = useState<QualityId>('smart');
   const [busy, setBusy] = useState(false);
+  const [importingFromIcloud, setImportingFromIcloud] = useState(false);
   const [trackW, setTrackW] = useState(Math.max(200, W - 32));
   const [qualityOpen, setQualityOpen] = useState(false);
+  const canNativeProcess = isVideoProcessingAvailable();
 
   const durationRef = useRef(1);
   const startRef = useRef(0);
@@ -220,12 +294,13 @@ export default function ExploreTrimScreen() {
         videoMaxDuration: 0,
         ...(Platform.OS === 'android' ? { defaultTab: 'videos' as const } : {}),
         ...(Platform.OS === 'ios'
-          ? { preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Automatic }
+          ? { preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current }
           : {}),
       });
 
       if (res.canceled || !res.assets?.[0]) return;
       const a = res.assets[0];
+      setPickedAssetId(a.assetId ?? null);
       const u = await resolvePickedVideoUri(a);
       if (!u) {
         Alert.alert('Import failed', 'No file URI was returned for this video.');
@@ -253,17 +328,32 @@ export default function ExploreTrimScreen() {
           outPath = dest;
         } catch (e: any) {
           const msg = typeof e?.message === 'string' ? e.message : 'Could not copy video to app storage.';
-          const icloud =
-            /3164/i.test(msg) ||
-            /networkAccessRequired/i.test(msg) ||
-            /PHPhotosErrorDomain/i.test(msg);
+          const icloud = isLikelyICloudErrorMessage(msg);
+          if (icloud && a.assetId) {
+            setImportingFromIcloud(true);
+            try {
+              const localUri = await ensureLocalAssetUri(a.assetId, 8);
+              if (localUri) {
+                try {
+                  await FileSystem.copyAsync({ from: localUri, to: dest });
+                  outPath = dest;
+                } catch {
+                  outPath = localUri;
+                }
+              }
+            } finally {
+              setImportingFromIcloud(false);
+            }
+          }
+          if (!outPath) {
           Alert.alert(
             'Import copy failed',
             icloud
-              ? 'This video is not fully downloaded from iCloud. Open it in Photos and wait for the download to finish, then try again (Wi‑Fi helps).'
+              ? ICLOUD_IMPORT_HELP
               : `${msg}\n\nPreview may still work; export needs a file the device can read.`,
           );
-          outPath = u;
+            outPath = u;
+          }
         }
       } else {
         outPath = u;
@@ -286,14 +376,12 @@ export default function ExploreTrimScreen() {
       setPlaying(true);
     } catch (e: any) {
       const msg = typeof e?.message === 'string' ? e.message : String(e);
-      const icloud =
-        /3164/i.test(msg) ||
-        /networkAccessRequired/i.test(msg) ||
-        /PHPhotosErrorDomain/i.test(msg);
+      const icloud = isLikelyICloudErrorMessage(msg);
+      setImportingFromIcloud(false);
       Alert.alert(
         'Could not import video',
         icloud
-          ? 'This clip is only in iCloud right now. Open the video in Photos and wait until it finishes downloading, then try again. On cellular, allow Photos to use network data in Settings → Photos.'
+          ? ICLOUD_IMPORT_HELP
           : (msg || 'Unknown error while opening the library.'),
       );
     }
@@ -453,12 +541,29 @@ export default function ExploreTrimScreen() {
     } catch { /* ignore */ }
   };
 
-  const exportVideo = async () => {
+  const saveToLibrary = async (outputPath: string, replaceOriginal: boolean): Promise<void> => {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted' && status !== 'limited') {
+      throw new Error('Photos permission is required to save exported videos.');
+    }
+    const created = await MediaLibrary.createAssetAsync(normalizeToFileUri(outputPath));
+    if (replaceOriginal && pickedAssetId) {
+      try {
+        await MediaLibrary.deleteAssetsAsync([pickedAssetId]);
+      } catch {
+        // Keep the new file even if original deletion fails.
+      }
+    }
+    if (!created?.id) throw new Error('Could not save exported video to Photos.');
+  };
+
+  const exportVideo = async (replaceOriginal: boolean) => {
     if (!fsPath && !pickedUri) {
       Alert.alert('Import a video', 'Tap “Import video” and choose a clip from your gallery.');
       return;
     }
-    if (!isVideoProcessingAvailable()) {
+    if (!(await guardHobbyExport())) return;
+    if (!canNativeProcess) {
       alertNativeVideoProcessingUnavailable();
       return;
     }
@@ -468,14 +573,19 @@ export default function ExploreTrimScreen() {
       const input = stripFileScheme(inputPath);
       const trimmed = await trimVideoFile(input, startMs, endMs);
       const comp = qualityToCompression(quality, durationMs / 1000);
-      await compressVideoFile({
+      const compressResult = await compressVideoFile({
         inputPath: stripFileScheme(trimmed),
         ...comp,
-        saveToPhoto: true,
-        removeAfterSavedToPhoto: true,
+        saveToPhoto: false,
+        removeAfterSavedToPhoto: false,
       });
+      const outputPath = extractOutputFileFromCompressResult(compressResult);
+      if (!outputPath) throw new Error('Export completed but output path was not returned.');
+      await saveToLibrary(outputPath, replaceOriginal);
       await deleteVideoProcessingFile(stripFileScheme(trimmed));
-      Alert.alert('Saved', 'Compressed clip saved to your gallery.');
+      await deleteVideoProcessingFile(stripFileScheme(outputPath));
+      await markHobbyExportUsed();
+      Alert.alert('Saved', replaceOriginal ? 'Video saved and original replaced.' : 'New trimmed video saved to your gallery.');
     } catch (e: any) {
       Alert.alert(
         'Export failed',
@@ -486,12 +596,25 @@ export default function ExploreTrimScreen() {
     }
   };
 
+  const promptExportMode = () => {
+    Alert.alert(
+      'Export video',
+      'Choose how to save your trimmed clip.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Save as new video', onPress: () => { void exportVideo(false); } },
+        { text: 'Save (replace original)', style: 'destructive', onPress: () => { void exportVideo(true); } },
+      ],
+    );
+  };
+
   const smartCompressFullLength = async () => {
     if (!fsPath && !pickedUri) {
       Alert.alert('Import a video', 'Pick a clip first.');
       return;
     }
-    if (!isVideoProcessingAvailable()) {
+    if (!(await guardHobbyExport())) return;
+    if (!canNativeProcess) {
       alertNativeVideoProcessingUnavailable();
       return;
     }
@@ -506,6 +629,7 @@ export default function ExploreTrimScreen() {
         saveToPhoto: true,
         removeAfterSavedToPhoto: true,
       });
+      await markHobbyExportUsed();
       Alert.alert('Saved', 'Smaller full-length copy saved to your gallery. Trim handles were not applied.');
     } catch (e: any) {
       Alert.alert(
@@ -544,15 +668,21 @@ export default function ExploreTrimScreen() {
               <Text style={styles.qualityPillTxt}>{Q_LABELS[quality]}</Text>
               <ChevronDown size={16} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.exportTop, busy && { opacity: 0.5 }]} disabled={busy} onPress={() => void exportVideo()}>
+            <TouchableOpacity
+              style={[styles.exportTop, (busy || !canNativeProcess) && { opacity: 0.5 }]}
+              disabled={busy || !canNativeProcess}
+              onPress={promptExportMode}
+            >
               {busy ? <ActivityIndicator color="#fff" size="small" /> : null}
-              <Text style={styles.exportTopTxt}>{busy ? '…' : 'Export'}</Text>
+              <Text style={styles.exportTopTxt}>{busy ? '…' : (canNativeProcess ? 'Export' : 'Build req.')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <Text style={styles.screenSub}>
-          Drag the white line to scrub. Timeline length comes from the player once the file loads — picker times are often wrong.
+          {importingFromIcloud
+            ? 'Downloading original from iCloud… keep this screen open.'
+            : 'Drag the white line to scrub. Timeline length comes from the player once the file loads — picker times are often wrong.'}
         </Text>
 
         {!pickedUri ? (
@@ -644,15 +774,19 @@ export default function ExploreTrimScreen() {
 
               <View style={styles.compressRow}>
                 <TouchableOpacity
-                  style={[styles.compressFullBtn, busy && { opacity: 0.55 }]}
-                  disabled={busy}
+                  style={[styles.compressFullBtn, (busy || !canNativeProcess) && { opacity: 0.55 }]}
+                  disabled={busy || !canNativeProcess}
                   onPress={() => void smartCompressFullLength()}
                   activeOpacity={0.85}
                 >
                   <Sparkles size={16} color="#7dd3fc" />
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={styles.compressFullTitle}>Smart compress (full video)</Text>
-                    <Text style={styles.compressFullSub}>Skip trimming — same length, smaller file with your quality preset.</Text>
+                    <Text style={styles.compressFullSub}>
+                      {canNativeProcess
+                        ? 'Skip trimming — same length, smaller file with your quality preset.'
+                        : 'Requires a dev or production build (not Expo Go).'}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               </View>

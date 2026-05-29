@@ -58,6 +58,8 @@ export type LocaleUi = {
   insightsLibraryPulse: string;
   insightsEmptyHint: string;
   insightsAllMedia: string;
+  insightsGmail: string;
+  insightsGmailHint: string;
   dumpQueuePhotos: string;
   hubFeatures: string;
   hubGenerals: string;
@@ -161,6 +163,8 @@ const EN: LocaleUi = {
   insightsLibraryPulse: 'LIBRARY PULSE',
   insightsEmptyHint: 'Sign in, then delete from Swipe or Supercut — every removal through photodumps counts toward your totals.',
   insightsAllMedia: 'ALL MEDIA',
+  insightsGmail: 'Gmail (Inbox Detox)',
+  insightsGmailHint: 'Cleared via Inbox Detox batches',
   dumpQueuePhotos: 'photos',
   hubFeatures: 'Features',
   hubGenerals: 'Generals',
@@ -206,9 +210,9 @@ const EN: LocaleUi = {
   stickerStudioSubtitle: 'Sticker studio',
   collageSubtitle: 'Collage',
   langModalTitle: 'LANGUAGES',
-  langModalHint: 'English is included on Hobby. Every other language unlocks with Pro.',
-  langIncluded: 'INCLUDED',
-  langPro: 'PRO LANGUAGES',
+  langModalHint: 'Choose any language.',
+  langIncluded: 'LANGUAGES',
+  langPro: 'LANGUAGES',
 };
 
 const MS: Partial<LocaleUi> = {

@@ -20,7 +20,7 @@ async function addPendingCloudMirror(bytes: number, items: number): Promise<void
   ]);
 }
 
-export type UserStatsSource = 'dump' | 'insights' | 'supercut';
+export type UserStatsSource = 'dump' | 'insights' | 'supercut' | 'email_detox';
 
 export async function resolveAuthUserId(fallbackUserId: string): Promise<string | null> {
   try {

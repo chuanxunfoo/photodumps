@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
-import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Calendar, ChevronDown, Flame, Image as ImageIcon, Shuffle, Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -16,24 +16,30 @@ import {
   monthRange,
   RANDOM_VAULT,
 } from '../_lib/mediaArchive';
+import {
+  CALENDAR_SLOT,
+  calendarDeepCleanGradient,
+  contrastOnGradient,
+} from '../components/hub/hubBarThemes';
+import { calendarBannerGradient, monthRowGradient, tickerHuesForTheme, tickerTextColorForTheme } from '../components/hub/exploreUi';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
 // ─── MONTH DATA ───────────────────────────────────────────────────────
 const MONTH_DATA = [
-  { name: 'JANUARY',   short: 'JAN', num: 1,  colors: ['#0D0033','#3D00D4','#6C00FF'] as const },
-  { name: 'FEBRUARY',  short: 'FEB', num: 2,  colors: ['#200033','#8B00A8','#FF00D4'] as const },
-  { name: 'MARCH',     short: 'MAR', num: 3,  colors: ['#002210','#006640','#00FF85'] as const },
-  { name: 'APRIL',     short: 'APR', num: 4,  colors: ['#220008','#880030','#FF005C'] as const },
-  { name: 'MAY',       short: 'MAY', num: 5,  colors: ['#221800','#886600','#FFD600'] as const },
-  { name: 'JUNE',      short: 'JUN', num: 6,  colors: ['#000A22','#003088','#00A3FF'] as const },
-  { name: 'JULY',      short: 'JUL', num: 7,  colors: ['#220500','#882200','#FF5500'] as const },
-  { name: 'AUGUST',    short: 'AUG', num: 8,  colors: ['#220022','#880088','#FF00FF'] as const },
-  { name: 'SEPTEMBER', short: 'SEP', num: 9,  colors: ['#221500','#885500','#FF8A00'] as const },
-  { name: 'OCTOBER',   short: 'OCT', num: 10, colors: ['#111100','#446600','#CCFF00'] as const },
-  { name: 'NOVEMBER',  short: 'NOV', num: 11, colors: ['#220A00','#882800','#FF3D00'] as const },
-  { name: 'DECEMBER',  short: 'DEC', num: 12, colors: ['#001510','#005540','#00FFC8'] as const },
+  { name: 'JANUARY', short: 'JAN', num: 1 },
+  { name: 'FEBRUARY', short: 'FEB', num: 2 },
+  { name: 'MARCH', short: 'MAR', num: 3 },
+  { name: 'APRIL', short: 'APR', num: 4 },
+  { name: 'MAY', short: 'MAY', num: 5 },
+  { name: 'JUNE', short: 'JUN', num: 6 },
+  { name: 'JULY', short: 'JUL', num: 7 },
+  { name: 'AUGUST', short: 'AUG', num: 8 },
+  { name: 'SEPTEMBER', short: 'SEP', num: 9 },
+  { name: 'OCTOBER', short: 'OCT', num: 10 },
+  { name: 'NOVEMBER', short: 'NOV', num: 11 },
+  { name: 'DECEMBER', short: 'DEC', num: 12 },
 ];
 
 const YEARS = [2026, 2025, 2024, 2023, 2022];
@@ -55,9 +61,9 @@ function YearPicker({ visible, year, onSelect, onClose, theme, t }: any) {
             {YEARS.map(y => (
               <TouchableOpacity key={y} onPress={() => { onSelect(y); onClose(); }}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 28, borderBottomWidth: 1, borderBottomColor: theme.border }}>
-                <Text style={{ flex: 1, color: y === year ? '#FF0055' : theme.text, fontSize: 26, fontWeight: '900' }}>{y}</Text>
+                <Text style={{ flex: 1, color: y === year ? theme.accent : theme.text, fontSize: 26, fontWeight: '900' }}>{y}</Text>
                 {y === year && (
-                  <View style={{ backgroundColor: '#FF0055', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+                  <View style={{ backgroundColor: theme.accent, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
                     <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '900' }}>{t.current}</Text>
                   </View>
                 )}
@@ -72,12 +78,13 @@ function YearPicker({ visible, year, onSelect, onClose, theme, t }: any) {
 
 // ─── MONTH ROW ────────────────────────────────────────────────────────
 // Full-width coloured rows like the reference image, each row = one month
-function MonthRow({ item, count, onPress, delay, year, isRandom = false }: {
+function MonthRow({ item, count, onPress, delay, year, colors, isRandom = false }: {
   item: typeof MONTH_DATA[0] | typeof RANDOM_VAULT;
   count: number;
   onPress: () => void;
   delay: number;
   year: number;
+  colors: [string, string];
   isRandom?: boolean;
 }) {
   const entrance  = useRef(new Animated.Value(0)).current;
@@ -98,6 +105,7 @@ function MonthRow({ item, count, onPress, delay, year, isRandom = false }: {
   const isCurrentYear = year === cy;
   const isPast        = isCurrentYear && item.num < cm;
   const isCurrent     = isCurrentYear && item.num === cm;
+  const tone = contrastOnGradient(colors);
 
   return (
     <Animated.View style={{
@@ -118,24 +126,30 @@ function MonthRow({ item, count, onPress, delay, year, isRandom = false }: {
         <Animated.View style={{ transform: [{ scale: pressScale }] }}>
           <View style={{ position: 'relative' }}>
             <LinearGradient
-              colors={item.colors}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              colors={colors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={[mr.row, { opacity: isPast ? 0.9 : 1 }]}
             >
-              <View style={mr.orb} />
+              <View style={mr.orb} pointerEvents="none" />
 
-              <View style={{ flex: 1 }}>
-                <Text style={mr.monthName}>
+              <View style={mr.textCol}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                  style={[mr.monthName, { color: tone.titleColor }]}
+                >
                   {isRandom ? item.name : `${item.short} '${String(year).slice(2)}`}
                 </Text>
                 {isRandom ? (
-                  <Text style={mr.countLabel}>{RANDOM_VAULT.tagline}</Text>
+                  <Text numberOfLines={2} style={[mr.countLabel, { color: tone.subtitleColor }]}>{RANDOM_VAULT.tagline}</Text>
                 ) : count > 0 ? (
-                  <Text style={mr.countLabel}>{count} items</Text>
+                  <Text style={[mr.countLabel, { color: tone.subtitleColor }]}>{count} items</Text>
                 ) : null}
               </View>
 
-              <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
+              <View style={mr.badgeCol}>
                 {isRandom ? (
                   <View style={mr.currentBadge}>
                     <Shuffle size={16} color="#FFF" />
@@ -149,7 +163,7 @@ function MonthRow({ item, count, onPress, delay, year, isRandom = false }: {
                     <Text style={mr.photoBadgeText}>{count}</Text>
                   </View>
                 ) : (
-                  <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 18 }}>·</Text>
+                  <Text style={{ color: tone.subtitleColor, fontSize: 18, opacity: 0.45 }}>·</Text>
                 )}
               </View>
             </LinearGradient>
@@ -182,15 +196,16 @@ const mr = StyleSheet.create({
     position: 'absolute', top: -30, right: -30,
     width: 110, height: 110, borderRadius: 55,
     backgroundColor: 'rgba(255,255,255,0.06)',
+    zIndex: 0,
   },
+  textCol: { flex: 1, minWidth: 0, zIndex: 2, paddingRight: 8 },
+  badgeCol: { alignItems: 'flex-end', justifyContent: 'center', gap: 4, flexShrink: 0, zIndex: 2 },
   monthName: {
-    color: '#FFFFFF', fontSize: 26, fontWeight: '900',
+    fontSize: 24,
+    fontWeight: '900',
     letterSpacing: -0.5,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
   },
-  countLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', marginTop: 2 },
+  countLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
   currentBadge: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.3)',
@@ -203,13 +218,11 @@ const mr = StyleSheet.create({
   photoBadgeText: { color: '#FFF', fontSize: 13, fontWeight: '900' },
 });
 
-let appSubPromptedThisLaunch = false;
-
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────
 export function CalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme, t, isPro, isAdmin, openSubscription } = useTheme();
+  const { theme, themeId, t } = useTheme();
   const fonts = resolveTypeface(theme);
   const [year, setYear]       = useState(new Date().getFullYear());
   const [showYearPicker, setShowYearPicker] = useState(false);
@@ -217,15 +230,6 @@ export function CalendarScreen() {
   const [randomCount, setRandomCount] = useState(0);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale   = useRef(new Animated.Value(0.97)).current;
-
-  useFocusEffect(
-    useCallback(() => {
-      if (isPro || isAdmin || appSubPromptedThisLaunch) return;
-      appSubPromptedThisLaunch = true;
-      const timer = setTimeout(() => openSubscription(), 900);
-      return () => clearTimeout(timer);
-    }, [isPro, isAdmin, openSubscription]),
-  );
 
   useEffect(() => {
     Animated.parallel([
@@ -250,6 +254,10 @@ export function CalendarScreen() {
   };
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const capsuleGrad = calendarBannerGradient(themeId, theme);
+  const capsuleTone = contrastOnGradient(capsuleGrad);
+  const deepGrad = calendarDeepCleanGradient(themeId);
+  const deepTone = contrastOnGradient(deepGrad);
 
   const navigateToMonth = (monthName: string) => {
     router.push({
@@ -290,13 +298,13 @@ export function CalendarScreen() {
             />
 
             <LinearGradient
-              colors={['rgba(255,0,85,0.22)', 'rgba(120,0,80,0.12)', 'transparent']}
+              colors={capsuleGrad}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={cs.capsuleStrip}
+              style={[cs.capsuleStrip, { borderColor: capsuleTone.titleColor === '#FFFFFF' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.1)' }]}
             >
-              <Text style={cs.capsuleEyebrow}>{t.timeCapsule}</Text>
-              <Text style={cs.capsuleLine} numberOfLines={2}>{t.timeCapsuleLine}</Text>
+              <Text style={[cs.capsuleEyebrow, { color: capsuleTone.titleColor }]} numberOfLines={1}>{t.timeCapsule}</Text>
+              <Text style={[cs.capsuleLine, { color: capsuleTone.subtitleColor }]} numberOfLines={3}>{t.timeCapsuleLine}</Text>
             </LinearGradient>
 
             {/* Stats row */}
@@ -319,27 +327,37 @@ export function CalendarScreen() {
               ))}
             </View>
 
-            <GlassTicker text="PHOTODUMPS  •  AI PHOTO CLEANER  •  FREE YOUR STORAGE" speed={8000} />
+            <GlassTicker
+              text="PHOTODUMPS  •  AI PHOTO CLEANER  •  FREE YOUR STORAGE"
+              speed={8000}
+              hues={tickerHuesForTheme(themeId, theme)}
+              textColor={tickerTextColorForTheme(themeId)}
+              blurTint={theme.isDark ? 'dark' : 'light'}
+            />
 
             {/* Deep clean CTA */}
             <TouchableOpacity
-              style={[cs.deepBtn, { borderColor: 'rgba(255,0,85,0.3)' }]}
+              style={[cs.deepBtn, { borderColor: deepTone.titleColor === '#FFFFFF' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.12)' }]}
               onPress={() => router.push({ pathname: '/dump', params: { mode: 'deep_clean' } })}
               activeOpacity={0.86}
             >
-              <LinearGradient colors={['#220000', '#0D0000']} style={cs.deepInner}>
-                <View style={cs.deepIcon}><Flame size={24} color="#FF0055" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={cs.deepTitle}>{t.deepCleanMode}</Text>
-                  <Text style={cs.deepSub}>{t.deepCleanSub}</Text>
+              <LinearGradient colors={deepGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={cs.deepInner}>
+                <View style={[cs.deepIcon, { backgroundColor: deepTone.titleColor === '#FFFFFF' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.35)' }]}>
+                  <Flame size={24} color={deepTone.titleColor} />
                 </View>
-                <Zap size={18} color="#FF0055" />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[cs.deepTitle, { color: deepTone.titleColor }]} numberOfLines={2}>{t.deepCleanMode}</Text>
+                  <Text style={[cs.deepSub, { color: deepTone.subtitleColor }]} numberOfLines={3}>{t.deepCleanSub}</Text>
+                </View>
+                <Zap size={18} color={deepTone.titleColor} />
               </LinearGradient>
             </TouchableOpacity>
 
             <GlassTicker
               text={`JAN  FEB  MAR  APR  MAY  JUN  JUL  AUG  SEP  OCT  NOV  DEC  •  ${year}`}
-              hues={['#6C00FF', '#FF0055', '#00E5FF']}
+              hues={tickerHuesForTheme(themeId, theme)}
+              textColor={tickerTextColorForTheme(themeId)}
+              blurTint={theme.isDark ? 'dark' : 'light'}
               speed={12000}
             />
 
@@ -355,6 +373,7 @@ export function CalendarScreen() {
                 year={year}
                 delay={0}
                 isRandom
+                colors={monthRowGradient(themeId, CALENDAR_SLOT.random)}
                 onPress={navigateToRandom}
               />
             </View>
@@ -375,6 +394,7 @@ export function CalendarScreen() {
                   count={counts[m.short] ?? 0}
                   year={year}
                   delay={(i + 1) * 45}
+                  colors={monthRowGradient(themeId, CALENDAR_SLOT.jan + i)}
                   onPress={() => navigateToMonth(m.name)}
                 />
               ))}
@@ -404,17 +424,14 @@ const cs = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,0,85,0.25)',
   },
   capsuleEyebrow: {
-    color: '#FF3377',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 3,
     marginBottom: 4,
   },
   capsuleLine: {
-    color: 'rgba(255,255,255,0.88)',
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 19,
@@ -425,9 +442,9 @@ const cs = StyleSheet.create({
   statLbl:    { fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   deepBtn:    { marginHorizontal: 16, marginVertical: 10, borderRadius: 22, overflow: 'hidden', borderWidth: 1 },
   deepInner:  { flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 },
-  deepIcon:   { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,0,85,0.12)', justifyContent: 'center', alignItems: 'center' },
-  deepTitle:  { color: '#FFF', fontSize: 15, fontWeight: '900' },
-  deepSub:    { color: '#888', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  deepIcon:   { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  deepTitle:  { fontSize: 15, fontWeight: '900' },
+  deepSub:    { fontSize: 12, fontWeight: '600', marginTop: 2 },
   sectionLbl: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
   sectionLblText: { fontSize: 9, fontWeight: '900', letterSpacing: 4 },
 });

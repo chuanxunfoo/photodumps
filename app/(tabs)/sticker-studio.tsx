@@ -20,13 +20,13 @@ import {
 import type { CutoutPipeline } from '../_lib/stickerStudio/cutoutProgress';
 import { isExpoGo, nativeCutoutBundled } from '../_lib/stickerStudio/runtime';
 import { LiveStickerCamera } from '../components/sticker-studio/LiveStickerCamera';
-import { StickerEditorScreen } from '../components/sticker-studio/StickerEditorScreen';
 import { StickerCollectionSheet } from '../components/sticker-studio/StickerCollectionSheet';
 import { StickerPreviewModal } from '../components/sticker-studio/StickerPreviewModal';
 import { StickerSaveCelebration } from '../components/sticker-studio/StickerSaveCelebration';
 import { StickerStudioHub } from '../components/sticker-studio/StickerStudioHub';
 import { WasmCutoutEngine, type WasmCutoutJob } from '../components/sticker-studio/WasmCutoutEngine';
 import { loadCutouts, saveCutout } from '../_lib/stickerStudio/cutoutStorage';
+import { restoreStickerLibraryIfNeeded } from '../_lib/stickerStudio/stickerBackup';
 import type { SavedCutout } from '../_lib/stickerStudio/cutoutStorage';
 import { deleteSticker, loadStickers, saveSticker } from '../_lib/stickerStudio/storage';
 import type { CutoutResult, PlacedCutout, SavedSticker, TraceSettings } from '../_lib/stickerStudio/types';
@@ -57,13 +57,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { getExploreCopy } from '../_lib/localeContent';
 import { getLocaleUi } from '../_lib/localeUi';
+import {
+  canCreateSticker,
+  recordStickerCreated,
+} from '../_lib/hobbyFeatureAccess';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const CANVAS_W = SCREEN_W - 28;
 const CANVAS_H = Math.round(Math.min(SCREEN_H * 0.52, CANVAS_W * 1.28));
-const PREVIEW_SIZE = Math.min(SCREEN_W - 48, 320);
-
 type Phase = 'hub' | 'live' | 'camera' | 'processing' | 'frame' | 'collage-loading' | 'collage';
 
 const yieldToUi = () =>
@@ -73,7 +75,20 @@ const yieldToUi = () =>
 
 export default function StickerStudioScreen() {
   const goBack = useExploreAwareBack();
-  const { theme, language } = useTheme();
+  const { theme, language, isPro, isAdmin, openSubscription, user } = useTheme();
+  const isPaid = isPro || isAdmin;
+
+  const paywallStickerIfNeeded = async (): Promise<boolean> => {
+    if (isPaid) return false;
+    const uid = user?.uid;
+    if (!uid) {
+      openSubscription();
+      return true;
+    }
+    if (await canCreateSticker(uid)) return false;
+    openSubscription();
+    return true;
+  };
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
@@ -115,6 +130,7 @@ export default function StickerStudioScreen() {
   const [camPerm, requestCamPerm] = useCameraPermissions();
 
   const refreshLibrary = useCallback(async () => {
+    await restoreStickerLibraryIfNeeded();
     setLibrary(await loadStickers());
     setCutouts(await loadCutouts());
   }, []);
@@ -126,6 +142,10 @@ export default function StickerStudioScreen() {
   useEffect(() => {
     if (phase === 'frame' || phase === 'collage') void refreshLibrary();
   }, [phase, refreshLibrary]);
+
+  useEffect(() => {
+    if (phase === 'frame' && cutout) setPhase('live');
+  }, [phase, cutout]);
 
   const beginProcessing = useCallback((stage = 'Starting…') => {
     setPhase('processing');
@@ -149,12 +169,8 @@ export default function StickerStudioScreen() {
     setLiveScanning(false);
     await saveCutout({ uri: outUri, width, height });
     await refreshLibrary();
-    if (stayOnLive) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } else {
-      setPhase('frame');
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
+    if (phase !== 'live') setPhase('live');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const startWasmCutout = (fileUri: string) => {
@@ -209,6 +225,7 @@ export default function StickerStudioScreen() {
   );
 
   const runCutout = async (uri: string, stayOnLive = false): Promise<boolean> => {
+    if (await paywallStickerIfNeeded()) return false;
     const onProg = (pct: number, stage: string) => {
       if (stayOnLive) setProcessStage(stage);
       else {
@@ -242,8 +259,8 @@ export default function StickerStudioScreen() {
 
     try {
       const result = await cutoutFromPreparedFile(fileUri, onProg, {
-        cloudSize: stayOnLive ? 'preview' : 'small',
-        nativeMaxDimension: stayOnLive ? 480 : 640,
+        cloudSize: stayOnLive ? 'small' : 'auto',
+        nativeMaxDimension: stayOnLive ? 1024 : 1024,
       });
       const method = result.method === 'imported' ? 'wasm' : result.method;
       await finishCutout(result.uri, method, stayOnLive);
@@ -296,38 +313,28 @@ export default function StickerStudioScreen() {
     setPhase('live');
   }, [requestCamPerm]);
 
-  const pickFromGallery = useCallback(
-    async (mode: 'direct' | 'live' = 'direct') => {
-      try {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted' && status !== 'limited') {
-          Alert.alert('Permission needed', 'Allow photo library access to pick a sticker image.');
-          return;
-        }
-        const res = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: mode === 'direct' ? 0.85 : 0.55,
-          allowsEditing: false,
-          copyToCacheDirectory: true,
-        });
-        const uri = res.assets?.[0]?.uri;
-        if (res.canceled || !uri) return;
-
-        if (mode === 'direct') {
-          beginProcessing('Cutting out your sticker…');
-          await yieldToUi();
-          await runCutout(uri, false);
-          return;
-        }
-
-        await enterLive(uri);
-      } catch {
-        Alert.alert('Could not open gallery', 'Try again or use the camera.');
-        if (phase !== 'live') setPhase('hub');
+  const pickFromGallery = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted' && status !== 'limited') {
+        Alert.alert('Permission needed', 'Allow photo library access to pick a sticker image.');
+        return;
       }
-    },
-    [beginProcessing, enterLive, phase, runCutout],
-  );
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.55,
+        allowsEditing: false,
+        copyToCacheDirectory: true,
+      });
+      const uri = res.assets?.[0]?.uri;
+      if (res.canceled || !uri) return;
+
+      await enterLive(uri);
+    } catch {
+      Alert.alert('Could not open gallery', 'Try again or use the camera.');
+      if (phase !== 'live') setPhase('hub');
+    }
+  }, [enterLive, phase]);
 
   const runLiveScan = useCallback(async (focus?: { x: number; y: number }) => {
     if (liveScanLock.current && !focus) return;
@@ -346,7 +353,7 @@ export default function StickerStudioScreen() {
         uri = liveStillUri;
       } else if (cameraRef.current) {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: focus ? 0.48 : 0.38,
+          quality: focus ? 0.72 : 0.62,
           skipProcessing: true,
           shutterSound: false,
         });
@@ -357,7 +364,7 @@ export default function StickerStudioScreen() {
         uri = await cropPhotoAroundViewportPoint(uri, focus, {
           width: SCREEN_W,
           height: SCREEN_H,
-        }, 0.54);
+        }, 0.72);
       }
       if (gen !== liveScanGen.current) return;
       const ok = await runCutout(uri, true);
@@ -397,9 +404,7 @@ export default function StickerStudioScreen() {
       copyToCacheDirectory: true,
     });
     if (res.canceled || !res.assets[0]) return;
-    beginProcessing('Opening your photo…');
-    await yieldToUi();
-    await runCutout(res.assets[0].uri);
+    await enterLive(res.assets[0].uri);
   };
 
   const captureAndCutout = async () => {
@@ -413,6 +418,7 @@ export default function StickerStudioScreen() {
 
   const onSaveSticker = async () => {
     if (!cutout || !previewRef.current) return;
+    if (await paywallStickerIfNeeded()) return;
     setSaving(true);
     try {
       const uri = await captureRef(previewRef, {
@@ -421,6 +427,7 @@ export default function StickerStudioScreen() {
         result: 'tmpfile',
       });
       await saveSticker({ uri, trace, sourceUri: sourceUri ?? undefined });
+      if (!isPaid && user?.uid) await recordStickerCreated(user.uid);
       await refreshLibrary();
       setAbsorbUri(uri);
       setTimeout(() => setAbsorbUri(null), 900);
@@ -535,7 +542,7 @@ export default function StickerStudioScreen() {
       <LiveStickerCamera
         cameraRef={cameraRef}
         stillUri={liveStillUri}
-        showCamera={!liveStillUri || Boolean(camPerm?.granted)}
+        showCamera={Boolean(camPerm?.granted)}
         trace={trace}
         onTraceChange={setTrace}
         cutout={cutout}
@@ -546,7 +553,7 @@ export default function StickerStudioScreen() {
         theme={theme}
         stickerCount={library.length}
         onBack={exitLive}
-        onGallery={() => void pickFromGallery('live')}
+        onGallery={() => void pickFromGallery()}
         onScan={() => void runLiveScan()}
         onTapFocus={point => void runLiveScan(point)}
         onOpenCollection={() => setShowCollection(true)}
@@ -585,7 +592,7 @@ export default function StickerStudioScreen() {
             <Text style={st.camHint}>One cute subject in the frame ✨</Text>
           </View>
           <View style={st.camBottom}>
-            <TouchableOpacity style={st.camGallery} onPress={() => void pickFromGallery('direct')}>
+            <TouchableOpacity style={st.camGallery} onPress={() => void pickFromGallery()}>
               <ImageIcon size={24} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity style={st.shutter} onPress={() => void captureAndCutout()}>
@@ -609,21 +616,6 @@ export default function StickerStudioScreen() {
           </View>
         </SafeAreaView>
       </View>
-    );
-  } else if (phase === 'frame' && cutout) {
-    screen = (
-      <StickerEditorScreen
-        cutout={cutout}
-        trace={trace}
-        onTraceChange={setTrace}
-        onBack={() => setPhase('hub')}
-        onSave={() => void onSaveSticker()}
-        onNew={openNewCutout}
-        saving={saving}
-        previewRef={previewRef}
-        theme={theme}
-        titleFont={fonts.titleFont}
-      />
     );
   } else if (phase === 'collage' && bgUri) {
   // ─── COLLAGE ──────────────────────────────────────────────────────────────
@@ -700,7 +692,7 @@ export default function StickerStudioScreen() {
         theme={theme}
         onBack={goBack}
         onNew={openNewCutout}
-        onGallery={() => void pickFromGallery('direct')}
+        onGallery={() => void pickFromGallery()}
         onCollage={() => void startCollage()}
         onStickerPress={setPreviewSticker}
       />
@@ -893,7 +885,7 @@ const st = StyleSheet.create({
   },
   gridImg: { width: '100%', height: '100%' },
   gridDel: { position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  frameScroll: { alignItems: 'center', paddingBottom: 20 },
+  frameScroll: { paddingHorizontal: 20, paddingBottom: 24 },
   cutoutSection: { width: '100%', marginTop: 8, gap: 10, paddingHorizontal: 4 },
   cutoutEmpty: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
   cutoutStrip: { gap: 10, paddingVertical: 4, paddingRight: 8 },
@@ -922,7 +914,7 @@ const st = StyleSheet.create({
   previewHub: { marginTop: 4, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
   methodHint: { fontSize: 10, textAlign: 'center', paddingHorizontal: 24, marginBottom: 12, lineHeight: 14 },
   makeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16, width: '100%' },
-  makeBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 1.5 },
+  makeBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
   collageToolbar: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   toolChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   toolChipTxt: { fontSize: 12, fontWeight: '800' },

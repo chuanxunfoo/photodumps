@@ -42,3 +42,47 @@ export function stickerFilterCounts(library: SavedSticker[]): Record<string, num
   }
   return counts;
 }
+
+export type ShelfLayoutItem = {
+  sticker: SavedSticker;
+  initX: number;
+  initY: number;
+  targetX: number;
+  targetY: number;
+  rotation: number;
+  size: number;
+};
+
+/** Positions for falling-sticker shelf animation. */
+export function layoutStickersOnShelf(
+  stickers: SavedSticker[],
+  width: number,
+  height: number,
+  size: number,
+): ShelfLayoutItem[] {
+  if (width <= 0 || stickers.length === 0) return [];
+
+  const pad = 10;
+  const floorY = height - size - pad - 20;
+  const cols = Math.max(1, Math.floor((width - pad * 2) / (size + 6)));
+
+  return stickers.slice(0, 24).map((sticker, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const targetX = pad + col * (size + 6) + (i % 3) * 2;
+    const targetY = floorY - row * (size * 0.35);
+    const initX = targetX + ((i * 17) % 40) - 20;
+    const initY = -size - ((i * 11) % 80);
+    const rotation = ((i * 13) % 7) - 3;
+
+    return {
+      sticker,
+      initX,
+      initY,
+      targetX,
+      targetY,
+      rotation,
+      size,
+    };
+  });
+}

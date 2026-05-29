@@ -63,14 +63,14 @@ function PhysicsJarPage({
   }, [bodies]);
 
   useEffect(() => {
-    if (width < 1) return;
+    if (width < 80) return;
     const next = spawnBodies(stickers, width, JAR_H, STICKER_D);
     bodiesRef.current = next;
     setBodies(next);
   }, [stickers, width]);
 
   useEffect(() => {
-    if (!active || width < 1) return;
+    if (!active || width < 80) return;
 
     let sub: { remove: () => void } | null = null;
     const smooth = { x: 0, y: 0 };

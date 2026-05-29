@@ -7,12 +7,21 @@ import {
   Palette, Shield, Sparkles, Star, Zap,
 } from 'lucide-react-native';
 import { AppHeader } from '../components/AppHeader';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated, Dimensions, Easing, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '../_lib/legalUrls';
 import { getSubscriptionCopy } from '../_lib/localeContent';
+import {
+  calloutTextStyle,
+  planCardSurface,
+  subscriptionCtaInk,
+  subscriptionHeroStyle,
+} from '../_lib/themeContrast';
+import type { ThemeColors } from './ThemeContext';
 import { PaymentModal } from './PaymentModal';
 import type { PaymentItem } from './PaymentModal';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,13 +97,23 @@ function GoldShimmerCTA({
           />
         </Animated.View>
         {icon}
-        <Text style={[s.ctaTxt, { color: textDark ? '#000' : '#FFF' }]}>{label}</Text>
+        <Text style={[s.ctaTxt, { color: textDark ? '#111111' : '#FFFFFF' }]}>{label}</Text>
       </LinearGradient>
     </TouchableOpacity>
   );
 }
 
-function PlanCard({ plan, selected, onSelect }: { plan: PlanDef; selected: boolean; onSelect: () => void }) {
+function PlanCard({
+  plan,
+  selected,
+  onSelect,
+  theme,
+}: {
+  plan: PlanDef;
+  selected: boolean;
+  onSelect: () => void;
+  theme: ThemeColors;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const press = () => {
     Animated.sequence([
@@ -105,33 +124,32 @@ function PlanCard({ plan, selected, onSelect }: { plan: PlanDef; selected: boole
   };
 
   const isFree = plan.id === 'free';
-  const borderCol = selected ? plan.color : (isFree ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.09)');
-  const bgCol = selected && !isFree ? plan.color + '0E' : 'rgba(255,255,255,0.02)';
+  const surface = planCardSurface(theme, selected, plan.color, isFree);
 
   return (
     <TouchableOpacity onPress={press} activeOpacity={0.9}>
-      <Animated.View style={[pc.card, { borderColor: borderCol, backgroundColor: bgCol, transform: [{ scale }] }]}>
+      <Animated.View style={[pc.card, { borderColor: surface.border, backgroundColor: surface.bg, transform: [{ scale }] }]}>
         {plan.badge && (
           <LinearGradient colors={plan.badgeColors} style={pc.badge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
             <Text style={[pc.badgeTxt, { color: plan.badgeTextDark ? '#000' : '#FFF' }]}>{plan.badge}</Text>
           </LinearGradient>
         )}
         <View style={pc.row}>
-          <View style={[pc.radio, { borderColor: selected ? plan.color : 'rgba(255,255,255,0.2)' }]}>
+          <View style={[pc.radio, { borderColor: surface.radioBorder }]}>
             {selected && <View style={[pc.dot, { backgroundColor: plan.color }]} />}
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[pc.label, { color: isFree ? 'rgba(255,255,255,0.35)' : selected ? plan.color : 'rgba(255,255,255,0.7)' }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[pc.label, { color: surface.label }]}>
               {plan.label}
             </Text>
-            <Text style={pc.sub}>{plan.sub}</Text>
+            <Text style={[pc.sub, { color: surface.sub }]}>{plan.sub}</Text>
             {plan.trial && <Text style={[pc.trial, { color: plan.color }]}>✓ {plan.trial}</Text>}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 2 }}>
-            <Text style={[pc.price, { color: isFree ? 'rgba(255,255,255,0.25)' : selected ? '#FFF' : 'rgba(255,255,255,0.6)' }]}>
-              {plan.myr}
+            <Text style={[pc.priceMain, { color: surface.price }]}>
+              {plan.usd}
             </Text>
-            {!isFree && <Text style={pc.usd}>{plan.usd}</Text>}
+            {!isFree && <Text style={[pc.priceSub, { color: surface.usd }]}>{plan.myr}</Text>}
             {!isFree && (
               <View style={[pc.perDay, { backgroundColor: plan.color + '20', borderColor: plan.color + '50' }]}>
                 <Text style={[pc.perDayTxt, { color: plan.color }]}>{plan.perDay}</Text>
@@ -152,10 +170,10 @@ const pc = StyleSheet.create({
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
   dot: { width: 10, height: 10, borderRadius: 5 },
   label: { fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
-  sub: { color: 'rgba(255,255,255,0.38)', fontSize: 11, fontWeight: '600', marginTop: 2, lineHeight: 16 },
+  sub: { fontSize: 11, fontWeight: '600', marginTop: 2, lineHeight: 16 },
   trial: { fontSize: 11, fontWeight: '800', marginTop: 4 },
-  price: { fontSize: 17, fontWeight: '900' },
-  usd: { color: 'rgba(255,255,255,0.28)', fontSize: 10, fontWeight: '600' },
+  priceMain: { fontSize: 17, fontWeight: '900' },
+  priceSub: { fontSize: 10, fontWeight: '600' },
   perDay: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3, marginTop: 3 },
   perDayTxt: { fontSize: 9, fontWeight: '900' },
 });
@@ -165,11 +183,16 @@ type Props = { onClose: () => void };
 /** Full-screen subscription page (routed at /subscription). */
 export default function SubscriptionScreen({ onClose }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, setPlan, language } = useTheme();
+  const { theme, themeId, setPlan, refreshPlanFromSupabase, language } = useTheme();
+  const heroStyle = subscriptionHeroStyle(themeId, theme);
+  const callout = calloutTextStyle(theme);
   const sub = getSubscriptionCopy(language);
   const [selected, setSelected] = useState<PlanId>('monthly');
   const [showPay, setShowPay] = useState(false);
   const [payItem, setPayItem] = useState<PaymentItem | null>(null);
+  const enterOpacity = useRef(new Animated.Value(0)).current;
+  const enterY = useRef(new Animated.Value(16)).current;
+  const closingRef = useRef(false);
 
   const crownGlow = useRef(new Animated.Value(0)).current;
 
@@ -184,27 +207,27 @@ export default function SubscriptionScreen({ onClose }: Props) {
     },
     {
       id: 'weekly', label: 'WEEKLY',
-      badge: '3-DAY FREE TRIAL', badgeTextDark: false, badgeColors: ['#00C2FF', '#006FFF'],
-      myr: 'MYR 19.99', usd: 'USD 4.99', perDay: 'MYR 2.85/day',
+      badge: null, badgeTextDark: false, badgeColors: ['#00C2FF', '#006FFF'],
+      myr: 'MYR 22.90', usd: 'USD 4.99', perDay: 'USD 0.71/day',
       sub: 'Billed weekly · Cancel anytime',
-      trial: '3-day free trial included', color: '#00E5FF',
-      payTitle: 'photodumps Pro — Weekly', paySub: '3-day free trial, then MYR 19.99/week',
+      trial: null, color: '#00E5FF',
+      payTitle: 'photodumps Pro — Weekly', paySub: 'USD 4.99/week · MYR 22.90 · App Store',
     },
     {
       id: 'monthly', label: 'MONTHLY',
       badge: 'BEST VALUE', badgeTextDark: true, badgeColors: ['#FFD600', '#FF8C00'],
-      myr: 'MYR 39.99', usd: 'USD 9.99', perDay: 'MYR 1.33/day',
+      myr: 'MYR 49.90', usd: 'USD 9.99', perDay: 'USD 0.33/day',
       sub: 'Save 53% vs weekly · Billed monthly',
-      trial: '7-day free trial included', color: '#FFD600',
-      payTitle: 'photodumps Pro — Monthly', paySub: '7-day free trial, then MYR 39.99/month',
+      trial: null, color: '#FFD600',
+      payTitle: 'photodumps Pro — Monthly', paySub: 'USD 9.99/month · MYR 49.90 · App Store',
     },
     {
       id: 'yearly', label: 'YEARLY',
       badge: 'LOWEST PRICE', badgeTextDark: false, badgeColors: ['#FF0055', '#FF5500'],
-      myr: 'MYR 199.99', usd: 'USD 49.99', perDay: 'MYR 0.55/day',
+      myr: 'MYR 229.90', usd: 'USD 49.99', perDay: 'USD 0.14/day',
       sub: 'Save 81% vs weekly · Billed annually',
-      trial: '7-day free trial included', color: '#FF5500',
-      payTitle: 'photodumps Pro — Yearly', paySub: '7-day free trial, then MYR 199.99/year',
+      trial: null, color: '#FF5500',
+      payTitle: 'photodumps Pro — Yearly', paySub: 'USD 49.99/year · MYR 229.90 · App Store',
     },
   ];
 
@@ -219,6 +242,45 @@ export default function SubscriptionScreen({ onClose }: Props) {
     return () => loop.stop();
   }, [crownGlow]);
 
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(enterOpacity, {
+        toValue: 1,
+        duration: 230,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(enterY, {
+        toValue: 0,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [enterOpacity, enterY]);
+
+  const requestClose = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    Animated.parallel([
+      Animated.timing(enterOpacity, {
+        toValue: 0,
+        duration: 170,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(enterY, {
+        toValue: 10,
+        duration: 170,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose();
+      closingRef.current = false;
+    });
+  };
+
   const glowR = crownGlow.interpolate({ inputRange: [0, 1], outputRange: [10, 38] });
   const plan = PLANS.find((p) => p.id === selected)!;
   const isHobby = selected === 'free';
@@ -229,11 +291,9 @@ export default function SubscriptionScreen({ onClose }: Props) {
     selected === 'weekly' ? ['#00C2FF', '#006FFF'] :
     ['#2A2A2A', '#1A1A1A'];
 
-  const ctaTextDark = selected === 'monthly';
-  const ctaLabel =
-    selected === 'free' ? sub.ctaFree :
-    selected === 'weekly' ? sub.ctaWeekly :
-    sub.ctaTrial;
+  const ctaInk = subscriptionCtaInk(ctaColors);
+  const ctaTextDark = ctaInk === '#111111';
+  const ctaLabel = selected === 'free' ? sub.ctaFree : sub.ctaSubscribe;
 
   const featureList = isHobby ? sub.hobbyFeatures : sub.proFeatures;
   const featureTitle = isHobby ? sub.featHobbyTitle : sub.featProTitle;
@@ -242,24 +302,31 @@ export default function SubscriptionScreen({ onClose }: Props) {
   const handleCTA = () => {
     if (selected === 'free') {
       void setPlan('hobby');
-      onClose();
+      requestClose();
       return;
     }
-    setPayItem({ title: plan.payTitle, subtitle: plan.paySub, amount: plan.myr, usd: plan.usd });
+    setPayItem({
+      title: plan.payTitle,
+      subtitle: plan.paySub,
+      amount: plan.usd,
+      usd: plan.myr,
+      planId: selected,
+      checkoutMode: 'subscription',
+    });
     setShowPay(true);
   };
 
   const handleSuccess = async () => {
-    await setPlan(selected);
+    await refreshPlanFromSupabase();
     setShowPay(false);
-    onClose();
+    requestClose();
   };
 
   return (
     <>
-      <View style={[s.fullPage, { backgroundColor: theme.bg }]}>
+      <Animated.View style={[s.fullPage, { backgroundColor: theme.bg, opacity: enterOpacity, transform: [{ translateY: enterY }] }]}>
         <SafeAreaView style={s.fullSafe} edges={['top']}>
-          <AppHeader variant="detail" onBack={onClose} subtitle="photodumps Pro" />
+          <AppHeader variant="detail" onBack={requestClose} subtitle="photodumps Pro" />
 
           <ScrollView
             style={s.scrollView}
@@ -267,18 +334,18 @@ export default function SubscriptionScreen({ onClose }: Props) {
             contentContainerStyle={[s.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}
             bounces
           >
-              <LinearGradient colors={['#08001C', '#10003A', '#08001C']} style={s.hdr}>
+              <LinearGradient colors={heroStyle.gradient} style={s.hdr}>
                 <View style={s.hdrBody}>
                   <Animated.View style={{ shadowColor: '#FFD700', shadowRadius: glowR, shadowOpacity: 1, elevation: 20 }}>
                     <LinearGradient colors={['#FFD700', '#FF8C00', '#FF4500']} style={s.crownBox}>
                       <Crown size={36} color="#FFF" />
                     </LinearGradient>
                   </Animated.View>
-                  <Text style={s.heroTitle}>{sub.heroTitle}</Text>
-                  <Text style={s.heroSub}>{sub.heroSub}</Text>
+                  <Text style={[s.heroTitle, { color: heroStyle.title }]}>{sub.heroTitle}</Text>
+                  <Text style={[s.heroSub, { color: heroStyle.sub }]}>{sub.heroSub}</Text>
                   <View style={s.stars}>
                     {[0, 1, 2, 3, 4].map((i) => <Text key={i} style={{ color: '#FFD600', fontSize: 14 }}>★</Text>)}
-                    <Text style={s.rating}>{sub.rating}</Text>
+                    <Text style={[s.rating, { color: heroStyle.rating }]}>{sub.rating}</Text>
                   </View>
                 </View>
               </LinearGradient>
@@ -302,17 +369,21 @@ export default function SubscriptionScreen({ onClose }: Props) {
                 })}
               </View>
 
-              <View style={s.callout}>
-                <Zap size={16} color="#FFD600" />
-                <Text style={s.calloutTxt}>
+              <View style={[s.callout, {
+                backgroundColor: theme.isDark ? 'rgba(255,214,0,0.08)' : theme.accentSoft,
+                borderColor: theme.isDark ? 'rgba(255,214,0,0.2)' : theme.border,
+              }]}
+              >
+                <Zap size={16} color={callout.bold} />
+                <Text style={[s.calloutTxt, { color: callout.body }]}>
                   {sub.callout}{' '}
-                  <Text style={{ color: '#FFD600', fontWeight: '800' }}>{sub.calloutBold}</Text>
+                  <Text style={{ color: callout.bold, fontWeight: '800' }}>{sub.calloutBold}</Text>
                 </Text>
               </View>
 
               <Text style={[s.planHead, { color: theme.textSub }]}>{sub.planHead}</Text>
               {PLANS.map((p) => (
-                <PlanCard key={p.id} plan={p} selected={selected === p.id} onSelect={() => setSelected(p.id)} />
+                <PlanCard key={p.id} plan={p} theme={theme} selected={selected === p.id} onSelect={() => setSelected(p.id)} />
               ))}
 
               <GoldShimmerCTA
@@ -320,12 +391,12 @@ export default function SubscriptionScreen({ onClose }: Props) {
                 colors={ctaColors}
                 textDark={ctaTextDark}
                 label={ctaLabel}
-                icon={selected !== 'free' ? <Zap size={18} color={ctaTextDark ? '#000' : '#FFF'} /> : undefined}
+                icon={selected !== 'free' ? <Zap size={18} color={ctaInk} /> : undefined}
               />
 
               {selected !== 'free' && (
                 <Text style={[s.ctaNote, { color: theme.textMuted }]}>
-                  {plan.trial ? `${plan.trial} · then ${plan.myr}/period · cancel anytime` : `${plan.myr} · cancel anytime`}
+                  {plan.usd} ({plan.myr}) · App Store · cancel anytime
                 </Text>
               )}
 
@@ -336,23 +407,27 @@ export default function SubscriptionScreen({ onClose }: Props) {
                   { icon: Star, txt: sub.trustFees },
                 ].map(({ icon: Icon, txt }) => (
                   <View key={txt} style={s.trustItem}>
-                    <Icon size={11} color="rgba(255,255,255,0.3)" />
+                    <Icon size={11} color={theme.textMuted} />
                     <Text style={[s.trustTxt, { color: theme.textMuted }]}>{txt}</Text>
                   </View>
                 ))}
               </View>
 
               <View style={s.legal}>
-                {[sub.termsLink, sub.privacyLink, sub.restore].map((l) => (
-                  <TouchableOpacity key={l}>
-                    <Text style={[s.legalLink, { color: theme.textMuted }]}>{l}</Text>
-                  </TouchableOpacity>
-                ))}
+                <TouchableOpacity onPress={() => { void WebBrowser.openBrowserAsync(TERMS_OF_SERVICE_URL); }}>
+                  <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.termsLink}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { void WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL); }}>
+                  <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.privacyLink}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity>
+                  <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.restore}</Text>
+                </TouchableOpacity>
               </View>
             <View style={{ height: 32 }} />
           </ScrollView>
         </SafeAreaView>
-      </View>
+      </Animated.View>
 
       {payItem && (
         <PaymentModal visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
@@ -368,10 +443,10 @@ const s = StyleSheet.create({
   hdr: { paddingBottom: 22, paddingTop: 8 },
   hdrBody: { alignItems: 'center', paddingTop: 6, paddingHorizontal: 24, gap: 7 },
   crownBox: { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  heroTitle: { color: '#FFF', fontSize: 32, fontWeight: '900', letterSpacing: -1.5 },
-  heroSub: { color: 'rgba(255,255,255,0.42)', fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
+  heroTitle: { fontSize: 32, fontWeight: '900', letterSpacing: -1.5 },
+  heroSub: { fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
   stars: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  rating: { color: 'rgba(255,255,255,0.38)', fontSize: 12, fontWeight: '700', marginLeft: 5 },
+  rating: { fontSize: 12, fontWeight: '700', marginLeft: 5 },
   scroll: { paddingHorizontal: 18 },
   featCard: { borderWidth: 1, borderRadius: 22, padding: 18, marginBottom: 14, marginTop: 4 },
   featHdr: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
@@ -380,10 +455,10 @@ const s = StyleSheet.create({
   featIcon: { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
   featTxt: { fontSize: 13, fontWeight: '600', flex: 1 },
   callout: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: 'rgba(255,214,0,0.06)',
-    borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,214,0,0.16)',
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1,
   },
-  calloutTxt: { color: 'rgba(255,255,255,0.52)', fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 20 },
+  calloutTxt: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 20 },
   planHead: { fontSize: 9, fontWeight: '900', letterSpacing: 4, marginBottom: 12 },
   ctaWrap: { borderRadius: 26, overflow: 'hidden', marginTop: 2, marginBottom: 10 },
   cta: {

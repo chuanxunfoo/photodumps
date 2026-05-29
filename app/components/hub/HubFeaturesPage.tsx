@@ -1,34 +1,33 @@
-import { useFocusEffect } from 'expo-router';
 import {
-  BarChart2, Camera, Crown, Layers2, LayoutGrid, Scissors, Sticker, Zap,
+  BarChart2, Camera, Crown, Layers2, LayoutGrid, MailWarning, Scissors, Sticker, Zap,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { hubPush, type HubChildRoute } from '../../_lib/exploreBack';
+import {
+  canCreateSticker,
+  hasVideoTrimTrial,
+} from '../../_lib/hobbyFeatureAccess';
 import { getExploreCopy } from '../../_lib/localeContent';
 import { getLocaleUi } from '../../_lib/localeUi';
 import { resolveTypeface, useTheme } from '../../(tabs)/ThemeContext';
 import { HubPageChrome } from './HubPageChrome';
-import {
-  GlowBanner, SUBSCRIBE_BANNER_GRADIENT, assignUniqueBannerGradients, exploreBannerVibe,
-} from './exploreUi';
+import { HubNavRow } from './exploreUi';
 import { hubPageStyles as es } from './hubPageStyles';
-
-const FEATURE_SLOTS = [6, 16, 15, 7, 2, 10, 3, 0] as const;
 
 type Props = { active?: boolean };
 
 export default function HubFeaturesPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, isPro, isAdmin, openSubscription, themeId, language } = useTheme();
+  const { theme, isPro, isAdmin, openSubscription, themeId, language, user } = useTheme();
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
-  const vibe = exploreBannerVibe(themeId, theme.isDark);
-  const bannerColors = useMemo(() => assignUniqueBannerGradients(vibe, [...FEATURE_SLOTS]), [vibe]);
-  const color = (slot: number) => bannerColors.get(slot);
+  const HUB_SLOT_BASE = 9;
+  const isPaid = isPro || isAdmin;
+
   const openSubPage = useCallback(() => {
     try {
       router.push('/subscription');
@@ -36,19 +35,9 @@ export default function HubFeaturesPage({ active = false }: Props) {
       setTimeout(() => router.push('/subscription'), 50);
     }
   }, []);
-  const openSubRef = useRef(openSubscription);
-  openSubRef.current = openSubscription;
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!active || isPro || isAdmin) return;
-      const t = setTimeout(() => openSubRef.current(), 550);
-      return () => clearTimeout(t);
-    }, [active, isPro, isAdmin]),
-  );
 
   const gatePro = (fn: () => void) => {
-    if (!isPro && !isAdmin) {
+    if (!isPaid) {
       openSubscription();
       return;
     }
@@ -57,17 +46,41 @@ export default function HubFeaturesPage({ active = false }: Props) {
 
   const go = (pathname: HubChildRoute) => () => hubPush(pathname, 'features');
 
-  const openWidgets = useCallback(() => {
-    if (!isPro && !isAdmin) {
+  const onVideoTrim = async () => {
+    if (isPaid) {
+      go('/explore-trim')();
+      return;
+    }
+    const uid = user?.uid;
+    if (!uid) {
       openSubscription();
       return;
     }
-    try {
-      router.push('/widgets');
-    } catch {
-      setTimeout(() => router.push('/widgets'), 50);
+    if (await hasVideoTrimTrial(uid)) {
+      go('/explore-trim')();
+      return;
     }
-  }, [isPro, isAdmin, openSubscription]);
+    openSubscription();
+  };
+
+  const onStickerStudio = async () => {
+    if (isPaid) {
+      go('/sticker-studio')();
+      return;
+    }
+    const uid = user?.uid;
+    if (!uid) {
+      openSubscription();
+      return;
+    }
+    if (await canCreateSticker(uid)) {
+      go('/sticker-studio')();
+      return;
+    }
+    openSubscription();
+  };
+
+  const ic = () => '#FFFFFF';
 
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
@@ -85,25 +98,24 @@ export default function HubFeaturesPage({ active = false }: Props) {
               <Text style={[es.galleryHint, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>{ex.sectionProHint}</Text>
             </View>
             <View style={es.section}>
-              <GlowBanner
-                slot={6}
-                vibe={vibe}
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE} fonts={fonts} title={ex.subscribe} subtitle={isPro ? ex.subscribeSubManage : ex.subscribeSubUpgrade} icon={<Crown size={22} color={ic(HUB_SLOT_BASE)} />} onPress={() => { if (isPaid) openSubPage(); else openSubscription(); }} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 1} fonts={fonts} title={ex.duplicates} subtitle={ex.duplicatesSub} proLock={!isPaid} icon={<Layers2 size={22} color={ic(HUB_SLOT_BASE + 1)} />} onPress={() => gatePro(go('/duplicates'))} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 2} fonts={fonts} title={ex.videoTrim} subtitle={ex.videoTrimSub} icon={<Scissors size={22} color={ic(HUB_SLOT_BASE + 2)} />} onPress={() => void onVideoTrim()} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 3} fonts={fonts} title={ex.supercut} subtitle={ex.supercutSub} proLock={!isPaid} icon={<Zap size={22} color={ic(HUB_SLOT_BASE + 3)} />} onPress={() => gatePro(go('/supercut'))} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 4} fonts={fonts} title={ex.myStats} subtitle={ex.myStatsSub} icon={<BarChart2 size={22} color={ic(HUB_SLOT_BASE + 4)} />} onPress={go('/insights')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 5} fonts={fonts} title={ex.stickerStudio} subtitle={ex.stickerStudioSub} icon={<Sticker size={22} color={ic(HUB_SLOT_BASE + 5)} />} onPress={() => void onStickerStudio()} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 6} fonts={fonts} title={ex.widgets} subtitle={ex.widgetsSub} comingSoon proLock={!isPaid} icon={<LayoutGrid size={22} color={ic(HUB_SLOT_BASE + 6)} />} onPress={() => {}} />
+              <HubNavRow theme={theme} themeId={themeId} slot={HUB_SLOT_BASE + 7} fonts={fonts} title={ex.photobooth} subtitle={ex.photoboothSub} proLock={!isPaid} icon={<Camera size={22} color={ic(HUB_SLOT_BASE + 7)} />} onPress={() => gatePro(go('/photobooth'))} />
+              <HubNavRow
                 theme={theme}
+                themeId={themeId}
+                slot={HUB_SLOT_BASE + 8}
                 fonts={fonts}
-                title={ex.subscribe}
-                subtitle={isPro ? ex.subscribeSubManage : ex.subscribeSubUpgrade}
-                colors={SUBSCRIBE_BANNER_GRADIENT}
-                subscribeShimmer={!isPro && !isAdmin}
-                icon={<Crown size={22} color="#FFF" />}
-                onPress={() => { if (isPro || isAdmin) openSubPage(); else openSubscription(); }}
+                title="Inbox Detox"
+                subtitle="Clear old, spam, ads & suspicious emails to reclaim storage"
+                icon={<MailWarning size={22} color={ic(HUB_SLOT_BASE + 8)} />}
+                onPress={go('/email-clean')}
               />
-              <GlowBanner slot={16} vibe={vibe} theme={theme} fonts={fonts} colors={color(16)} title={ex.duplicates} subtitle={ex.duplicatesSub} proLock={!isPro && !isAdmin} icon={<Layers2 size={22} color="#FFF" />} onPress={() => gatePro(go('/duplicates'))} />
-              <GlowBanner slot={15} vibe={vibe} theme={theme} fonts={fonts} colors={color(15)} title={ex.videoTrim} subtitle={ex.videoTrimSub} proLock={!isPro && !isAdmin} icon={<Scissors size={22} color="#FFF" />} onPress={() => gatePro(go('/explore-trim'))} />
-              <GlowBanner slot={7} vibe={vibe} theme={theme} fonts={fonts} colors={color(7)} title={ex.supercut} subtitle={ex.supercutSub} proLock={!isPro && !isAdmin} icon={<Zap size={22} color="#FFF" />} onPress={() => gatePro(go('/supercut'))} />
-              <GlowBanner slot={2} vibe={vibe} theme={theme} fonts={fonts} colors={color(2)} title={ex.myStats} subtitle={ex.myStatsSub} proLock={!isPro && !isAdmin} icon={<BarChart2 size={22} color="#FFF" />} onPress={() => gatePro(go('/insights'))} />
-              <GlowBanner slot={10} vibe={vibe} theme={theme} fonts={fonts} colors={color(10)} title={ex.stickerStudio} subtitle={ex.stickerStudioSub} proLock={!isPro && !isAdmin} icon={<Sticker size={22} color="#FFF" />} onPress={() => gatePro(go('/sticker-studio'))} />
-              <GlowBanner slot={3} vibe={vibe} theme={theme} fonts={fonts} colors={color(3)} title={ex.widgets} subtitle={ex.widgetsSub} proLock={!isPro && !isAdmin} icon={<LayoutGrid size={22} color="#FFF" />} onPress={openWidgets} />
-              <GlowBanner slot={0} vibe={vibe} theme={theme} fonts={fonts} colors={color(0)} title={ex.photobooth} subtitle={ex.photoboothSub} proLock={!isPro && !isAdmin} icon={<Camera size={22} color="#FFF" />} onPress={() => gatePro(go('/photobooth'))} />
             </View>
           </ScrollView>
         </HubPageChrome>

@@ -14,6 +14,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { MinimalBackButton } from '../components/MinimalBackButton';
 import { DigicamDateStamp } from '../components/photobooth/DigicamDateStamp';
 import { useExploreAwareBack } from '../_lib/exploreBack';
+import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import { saveDigiShot } from '../_lib/photobooth/storage';
 import { useRouter } from 'expo-router';
 import {
@@ -737,6 +738,7 @@ const sv = StyleSheet.create({
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 
 export default function PhotoBoothScreen() {
+  useRequireProFeature();
   const goBack = useExploreAwareBack();
   const router = useRouter();
   const { theme } = useTheme();

@@ -1,69 +1,51 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Image } from 'expo-image';
-import { Animated, Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const SPLASH_LOGO = require('./assets/brand/photodumps-logo.png');
+import React, { useCallback, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import * as SystemUI from 'expo-system-ui';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SplashScreen } from './components/SplashScreen';
 import { safeReplace } from './_lib/safeNavigate';
+import { SplashReplayContext } from './_lib/splashReplay';
 import { getSessionSafe } from './(tabs)/supabase';
 import { ThemeProvider, useTheme } from './(tabs)/ThemeContext';
 
-const { width } = Dimensions.get('window');
-
-function SplashScreen({ onDone }: { onDone: () => void }) {
-  const scale = useRef(new Animated.Value(0.3)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
-  const fadeOut = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(scale, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(rotate, { toValue: 1, duration: 800, useNativeDriver: true }),
-      ]),
-      Animated.delay(900),
-      Animated.timing(fadeOut, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start(() => onDone());
-  }, []);
-
-  const spin = rotate.interpolate({ inputRange: [0, 1], outputRange: ['-20deg', '0deg'] });
-
-  return (
-    <Animated.View style={[styles.splash, { opacity: fadeOut }]}>
-      <Animated.View style={{ transform: [{ scale }, { rotate: spin }], opacity }}>
-        <View style={styles.logoWrap}>
-          <Image source={SPLASH_LOGO} style={styles.splashLogo} contentFit="cover" />
-          <Text style={styles.logoText}>photodumps</Text>
-          <Text style={styles.logoSub}>dump what's perfect. keep what's real.</Text>
-        </View>
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
 function InnerLayout() {
   const { theme, setUser } = useTheme();
-  const [splashDone, setSplashDone] = useState(false);
+  const [splashVisible, setSplashVisible] = useState(true);
+  const [splashKey, setSplashKey] = useState(0);
+  const isReplayRef = useRef(false);
+  const afterReplayRef = useRef<(() => void) | undefined>();
+
+  const replaySplash = useCallback((onFinished?: () => void) => {
+    isReplayRef.current = true;
+    afterReplayRef.current = onFinished;
+    setSplashKey((k) => k + 1);
+    setSplashVisible(true);
+  }, []);
 
   const handleSplashDone = async () => {
-    setSplashDone(true);
+    if (isReplayRef.current) {
+      isReplayRef.current = false;
+      setSplashVisible(false);
+      afterReplayRef.current?.();
+      afterReplayRef.current = undefined;
+      return;
+    }
+
+    setSplashVisible(false);
+
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/\/$/, '');
       if (path === '/promo' || path.endsWith('/promo')) return;
     }
+    const signedOnce = (await AsyncStorage.getItem('@dumpit_signed_once')) === '1';
     const session = await getSessionSafe();
 
     if (!session) {
       await setUser(null);
-      safeReplace('/landing');
+      safeReplace(signedOnce ? '/hub?page=calendar' : '/auth');
       return;
     }
 
@@ -79,21 +61,28 @@ function InnerLayout() {
       username,
       isLoggedIn: true,
     });
-    safeReplace('/hub');
+    await AsyncStorage.setItem('@dumpit_signed_once', '1');
+    safeReplace('/hub?page=calendar');
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.bg }]}>
-      <StatusBar style={theme.isDark ? 'light' : 'dark'} translucent backgroundColor="transparent" />
-      <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: theme.bg } }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="promo" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
+    <SplashReplayContext.Provider value={{ replaySplash }}>
+      <View style={[styles.root, { backgroundColor: theme.bg }]}>
+        <StatusBar style={splashVisible ? 'dark' : theme.isDark ? 'light' : 'dark'} translucent backgroundColor="transparent" />
+        <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: theme.bg } }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth-callback" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="gmail-callback" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="verify" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="reset-password" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="promo" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack>
 
-      {!splashDone && <SplashScreen onDone={handleSplashDone} />}
-    </View>
+        {splashVisible && <SplashScreen key={splashKey} onDone={handleSplashDone} />}
+      </View>
+    </SplashReplayContext.Provider>
   );
 }
 
@@ -109,15 +98,4 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  splash: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#030303',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  logoWrap: { alignItems: 'center' },
-  splashLogo: { width: 110, height: 110, borderRadius: 28, marginBottom: 20 },
-  logoText: { color: '#3B5BFC', fontSize: 36, fontWeight: '900', letterSpacing: -2 },
-  logoSub: { color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: '600', letterSpacing: 2, marginTop: 6 },
 });

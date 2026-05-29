@@ -29,7 +29,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
 import { getLocaleUi } from '../_lib/localeUi';
 import { useExploreAwareBack } from '../_lib/exploreBack';
+import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import { estimateAssetBytes, recordUserStatsDeletion } from '../_lib/userStatsSupabase';
+import { pageAccentWash } from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -225,8 +227,9 @@ const qm = StyleSheet.create({
 });
 
 export default function SupercutScreen() {
+  useRequireProFeature();
   const goBack = useExploreAwareBack();
-  const { theme, language, user } = useTheme();
+  const { theme, themeId, language, user } = useTheme();
   const u = getLocaleUi(language);
 
   const [scanning, setScanning] = useState(false);
@@ -344,7 +347,7 @@ export default function SupercutScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
-      <LinearGradient colors={[theme.bg, '#120018', theme.bg]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+      <LinearGradient colors={pageAccentWash(themeId, theme)} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <AppHeader variant="detail" onBack={goBack} subtitle={u.supercutSubtitle} />
 

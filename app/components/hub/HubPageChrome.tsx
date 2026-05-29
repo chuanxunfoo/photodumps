@@ -7,7 +7,6 @@ import { AppHeader } from '../AppHeader';
 import { getExploreCopy } from '../../_lib/localeContent';
 import { getLocaleUi } from '../../_lib/localeUi';
 import { resolveTypeface, useTheme } from '../../(tabs)/ThemeContext';
-import { Ticker, exploreBannerVibe, tickerChrome } from './exploreUi';
 import { hubPageStyles as es } from './hubPageStyles';
 
 type Props = {
@@ -18,12 +17,10 @@ type Props = {
 };
 
 export function HubPageChrome({ sectionLabel, children, active = true }: Props) {
-  const { theme, isPro, isAdmin, user, swipesLeft, openSubscription, setOnSubscriptionOpen, themeId, language } = useTheme();
+  const { theme, isPro, isAdmin, user, swipesLeft, openSubscription, setOnSubscriptionOpen, language } = useTheme();
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
-  const vibe = exploreBannerVibe(themeId, theme.isDark);
-  const tickerColors = tickerChrome(theme, vibe);
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const openSubPage = useCallback(() => {
@@ -64,9 +61,9 @@ export function HubPageChrome({ sectionLabel, children, active = true }: Props) 
               </LinearGradient>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={openSubscription} style={[es.upgradeBtn, { backgroundColor: 'rgba(255,0,85,0.12)', borderColor: '#FF0055', flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
-              <Text style={{ color: '#FF0055', fontSize: 11, fontWeight: '900', letterSpacing: 1 }}>{u.hubUpgrade}</Text>
-              <ChevronRight size={14} color="#FF0055" strokeWidth={2.5} />
+            <TouchableOpacity onPress={openSubscription} style={[es.upgradeBtn, { backgroundColor: theme.accentSoft, borderColor: theme.accent, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
+              <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '900', letterSpacing: 1 }}>{u.hubUpgrade}</Text>
+              <ChevronRight size={14} color={theme.accent} strokeWidth={2.5} />
             </TouchableOpacity>
           )
         }
@@ -79,7 +76,6 @@ export function HubPageChrome({ sectionLabel, children, active = true }: Props) 
           </Text>
         </View>
       )}
-      <Ticker text={ex.tickerText} bg={tickerColors.bg} color={tickerColors.fg} speed={9200} height={26} />
       <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
     </Animated.View>
   );

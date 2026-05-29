@@ -5,9 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { getLegalCopy } from '../_lib/localeContent';
 import { MinimalBackButton } from '../components/MinimalBackButton';
+import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TERMS_OF_SERVICE_URL } from '../_lib/legalUrls';
 import { useTheme } from './ThemeContext';
 
 const LEGAL_BG = require('../assets/explore/legal-parchment.png');
@@ -54,7 +56,7 @@ export default function ExploreLegalTermsScreen() {
   const goBack = useExploreAwareBack();
 
   return (
-    <View style={s.root}>
+    <View style={[s.root, { backgroundColor: theme.bg }]}>
       <ImageBackground source={LEGAL_BG} style={StyleSheet.absoluteFill} imageStyle={{ resizeMode: 'cover' }} />
       <LinearGradient
         colors={['rgba(252,248,240,0.88)', 'rgba(248,242,230,0.93)', 'rgba(245,236,220,0.95)']}
@@ -71,6 +73,12 @@ export default function ExploreLegalTermsScreen() {
           <View style={s.page}>
             <Text style={s.mono}>{BODY}</Text>
           </View>
+          <TouchableOpacity
+            style={s.webLink}
+            onPress={() => { void WebBrowser.openBrowserAsync(TERMS_OF_SERVICE_URL); }}
+          >
+            <Text style={s.webLinkTxt}>Open full terms on the web</Text>
+          </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -78,7 +86,7 @@ export default function ExploreLegalTermsScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f5ebe0' },
+  root: { flex: 1 },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
   backSlot: { width: 36 },
   title: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '900', letterSpacing: 2 },
@@ -90,4 +98,6 @@ const s = StyleSheet.create({
     borderColor: 'rgba(90, 60, 40, 0.22)',
   },
   mono: { fontFamily: 'Courier New', fontSize: 13, lineHeight: 20, fontWeight: '500', color: '#2d2418' },
+  webLink: { marginTop: 14, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16 },
+  webLinkTxt: { color: '#3B5BFC', fontSize: 13, fontWeight: '800' },
 });

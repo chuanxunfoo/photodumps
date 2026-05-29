@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -23,42 +24,36 @@ type Props = {
   visible: boolean;
   stickers: SavedSticker[];
   maxPick: number;
-  initialSelectedIds?: string[];
+  selectedIds: string[];
   onClose: () => void;
-  onDone: (picked: SavedSticker[]) => void;
+  onToggle: (sticker: SavedSticker, selected: boolean) => void;
 };
 
 export function WidgetStickerPicker({
   visible,
   stickers,
   maxPick,
-  initialSelectedIds = [],
+  selectedIds,
   onClose,
-  onDone,
+  onToggle,
 }: Props) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const [hint, setHint] = useState('');
 
   useEffect(() => {
-    if (visible) setSelected(new Set(initialSelectedIds));
-  }, [visible, initialSelectedIds]);
+    if (visible) setHint('');
+  }, [visible]);
 
-  const toggle = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < maxPick) next.add(id);
-      return next;
-    });
-  };
-
-  const picked = useMemo(
-    () => stickers.filter(s => selected.has(s.id)),
-    [stickers, selected],
-  );
-
-  const handleDone = () => {
-    onDone(picked);
-    onClose();
+  const toggle = (s: SavedSticker) => {
+    const on = selected.has(s.id);
+    if (!on && selected.size >= maxPick) {
+      setHint(`Max ${maxPick} stickers on this widget`);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    setHint('');
+    void Haptics.selectionAsync();
+    onToggle(s, !on);
   };
 
   return (
@@ -66,13 +61,16 @@ export function WidgetStickerPicker({
       <SafeAreaView style={st.root} edges={['top', 'bottom']}>
         <View style={st.bar}>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
-            <Text style={st.barGhost}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={st.barTitle}>Stickers</Text>
-          <TouchableOpacity onPress={handleDone} hitSlop={12}>
             <Text style={st.barDone}>Done</Text>
           </TouchableOpacity>
+          <Text style={st.barTitle}>Add stickers</Text>
+          <View style={st.barSpacer} />
         </View>
+
+        <Text style={st.sub}>
+          Tap to add or remove · {selected.size}/{maxPick} on widget
+        </Text>
+        {hint ? <Text style={st.hint}>{hint}</Text> : null}
 
         {stickers.length === 0 ? (
           <View style={st.empty}>
@@ -83,7 +81,7 @@ export function WidgetStickerPicker({
             {stickers.map(s => {
               const on = selected.has(s.id);
               return (
-                <Pressable key={s.id} onPress={() => toggle(s.id)} style={st.tileWrap}>
+                <Pressable key={s.id} onPress={() => toggle(s)} style={st.tileWrap}>
                   <View style={[st.tile, on && st.tileOn]}>
                     <Image source={{ uri: s.uri }} style={[st.thumb, !on && st.thumbOff]} contentFit="contain" />
                     {on && (
@@ -97,10 +95,6 @@ export function WidgetStickerPicker({
             })}
           </ScrollView>
         )}
-
-        <Text style={st.footer}>
-          {selected.size}/{maxPick} selected
-        </Text>
       </SafeAreaView>
     </Modal>
   );
@@ -117,9 +111,24 @@ const st = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0,0,0,0.06)',
   },
-  barGhost: { fontSize: 15, fontWeight: '600', color: '#9a8fa8' },
+  barDone: { fontSize: 16, fontWeight: '700', color: '#b07a9a', minWidth: 48 },
   barTitle: { fontSize: 16, fontWeight: '700', color: '#4a4258' },
-  barDone: { fontSize: 15, fontWeight: '700', color: '#b07a9a' },
+  barSpacer: { minWidth: 48 },
+  sub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9a8fa8',
+    textAlign: 'center',
+    paddingHorizontal: PAD,
+    paddingTop: 10,
+  },
+  hint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#c792c6',
+    textAlign: 'center',
+    paddingTop: 4,
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, padding: PAD, paddingBottom: 24 },
   tileWrap: { width: TILE },
   tile: {
@@ -133,7 +142,7 @@ const st = StyleSheet.create({
   },
   tileOn: { borderColor: '#c792c6' },
   thumb: { width: '100%', height: '100%' },
-  thumbOff: { opacity: 0.5 },
+  thumbOff: { opacity: 0.55 },
   check: {
     position: 'absolute',
     top: 6,
@@ -146,7 +155,6 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   checkMark: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  footer: { textAlign: 'center', fontSize: 13, fontWeight: '600', color: '#9a8fa8', paddingBottom: 10 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTxt: { fontSize: 15, color: '#9a8fa8', textAlign: 'center' },
 });

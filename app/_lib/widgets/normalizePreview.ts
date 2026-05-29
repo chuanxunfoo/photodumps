@@ -1,19 +1,28 @@
 import * as ImageManipulator from 'expo-image-manipulator';
+import { fixWidgetPreviewAlpha } from './fixPreviewAlpha';
+import { prepareWidgetPreview } from './prepareWidgetPreview';
+import { withFileScheme } from './pngIo';
+import { widgetPreviewExists } from './widgetFiles';
 import { WIDGET_FAMILIES, type WidgetFamily } from './widgetSizes';
 
-function withFileScheme(path: string): string {
-  if (path.startsWith('file://')) return path;
-  if (path.startsWith('/')) return `file://${path}`;
-  return path;
-}
-
-/** Resize saved widget PNG to exact iOS export pixels for the chosen family. */
 export async function normalizeWidgetPreview(tmpUri: string, family: WidgetFamily): Promise<string> {
   const { exportW, exportH } = WIDGET_FAMILIES[family];
+  const src = withFileScheme(tmpUri);
+
+  try {
+    const out = await prepareWidgetPreview(src, exportW, exportH);
+    const polished = await fixWidgetPreviewAlpha(out);
+    if (await widgetPreviewExists(polished)) return withFileScheme(polished);
+  } catch (e) {
+    if (__DEV__) console.warn('prepareWidgetPreview failed:', e);
+  }
+
+  const alphaFixed = await fixWidgetPreviewAlpha(src);
+  const maxSide = Math.max(exportW, exportH);
   const result = await ImageManipulator.manipulateAsync(
-    withFileScheme(tmpUri),
-    [{ resize: { width: exportW, height: exportH } }],
-    { compress: 1, format: ImageManipulator.SaveFormat.PNG },
+    alphaFixed,
+    [{ resize: { width: maxSide } }],
+    { format: ImageManipulator.SaveFormat.PNG, compress: 1 },
   );
-  return withFileScheme(result.uri);
+  return fixWidgetPreviewAlpha(withFileScheme(result.uri));
 }

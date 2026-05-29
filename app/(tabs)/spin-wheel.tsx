@@ -24,6 +24,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PaymentModal } from './PaymentModal';
 import type { PaymentItem } from './PaymentModal';
+import { recordSpinPurchase } from '../_lib/billingSupabase';
 import { useTheme } from './ThemeContext';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -384,7 +385,7 @@ export default function SpinWheelScreen() {
   const goBack = useExploreAwareBack('generals');
   const insets = useSafeAreaInsets();
   const scrollBottomPad = TAB_BAR_HEIGHT + insets.bottom + 36;
-  const { addBonusSwipes } = useTheme();
+  const { addBonusSwipes, user } = useTheme();
   const [tierIdx, setTierIdx] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [targetIdxs, setTargetIdxs] = useState([0, 0, 0]);
@@ -454,6 +455,8 @@ export default function SpinWheelScreen() {
       subtitle: 'Guaranteed prize every spin!',
       amount: tier.myr,
       usd: tier.usd,
+      checkoutMode: 'payment',
+      productKey: tier.id,
     });
     setShowPayment(true);
   };
@@ -486,11 +489,19 @@ export default function SpinWheelScreen() {
         setShowCelebration(true);
         triggerWinShake();
         void addBonusSwipesRef.current(p.swipes);
+        if (user?.uid) {
+          void recordSpinPurchase({
+            userId: user.uid,
+            tier: tier.id,
+            amountMyrDisplay: tier.myr,
+            swipesWon: p.swipes,
+          });
+        }
         Animated.spring(wonScale, { toValue: 1, friction: 6, tension: 90, useNativeDriver: true }).start();
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }
-  }, []);
+  }, [tier.id, tier.myr, user?.uid]);
 
   const floorOpacity = floorSheen.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.12] });
 

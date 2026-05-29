@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
 import {
     AlertCircle, Check, ChevronLeft, ChevronRight, Eye, EyeOff,
@@ -24,7 +25,17 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAuthRedirectUri, signInWithApple, signInWithGoogle } from './authOAuth';
+import { getAuthRedirectUri, getResetPasswordRedirectUri, signInWithApple, signInWithGoogle } from './authOAuth';
+import { ensureProfileRow } from '../_lib/profilePlanSupabase';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const BRAND_LOGO = require('../assets/brand-icon.png');
+
+const INK = '#12141A';
+const MUTED = 'rgba(18,20,26,0.52)';
+const LINE = 'rgba(18,20,26,0.12)';
+const SURFACE = '#FFFFFF';
+const ACCENT = '#3B5BFC';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type { UserProfile } from './ThemeContext';
 import { useTheme } from './ThemeContext';
@@ -39,6 +50,12 @@ async function persistSessionUser(
     (typeof meta?.username === 'string' && meta.username) ||
     u.email?.split('@')[0] ||
     'user';
+  await ensureProfileRow({
+    userId: u.id,
+    email: u.email ?? '',
+    username: uname,
+    planType: 'hobby',
+  });
   await setUser({
     uid: u.id,
     email: u.email ?? '',
@@ -49,6 +66,9 @@ async function persistSessionUser(
 
 function formatAuthError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
+  if (/unsupported provider|provider is not enabled|validation_failed/i.test(msg)) {
+    return 'Google/Apple sign-in is not enabled in Supabase. Go to Supabase Dashboard -> Authentication -> Providers, enable Google and/or Apple, add client IDs/secrets, then save. Also add your redirect URL in Authentication -> URL Configuration (dumpit://auth-callback).';
+  }
   if (/Network request failed|Failed to fetch|invalid\.supabase\.co/i.test(msg)) {
     return 'Cannot reach Supabase. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env to your project URL and anon key (Dashboard → Settings → API), then restart Expo. On Android, cleartext is not used for https—verify the URL is https://xxxx.supabase.co with no typos.';
   }
@@ -78,12 +98,12 @@ function PwCriteriaRow({ met, label }: { met: boolean; label: string }) {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 }}>
       <View style={{
         width: 16, height: 16, borderRadius: 8,
-        backgroundColor: met ? '#00C853' : 'rgba(255,255,255,0.1)',
+        backgroundColor: met ? '#00C853' : 'rgba(18,20,26,0.15)',
         justifyContent: 'center', alignItems: 'center',
       }}>
         {met && <Check size={10} color="#FFF" />}
       </View>
-      <Text style={{ color: met ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)', fontSize: 12, fontWeight: '600' }}>{label}</Text>
+      <Text style={{ color: met ? '#1E293B' : 'rgba(18,20,26,0.52)', fontSize: 12, fontWeight: '600' }}>{label}</Text>
     </View>
   );
 }
@@ -96,7 +116,7 @@ function Field({
   const borderAnim = useRef(new Animated.Value(0)).current;
   const onFocus = () => Animated.timing(borderAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
   const onBlur  = () => Animated.timing(borderAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
-  const borderColor = borderAnim.interpolate({ inputRange: [0, 1], outputRange: ['rgba(255,255,255,0.1)', '#FF0055'] });
+  const borderColor = borderAnim.interpolate({ inputRange: [0, 1], outputRange: [LINE, ACCENT] });
 
   return (
     <View style={{ marginBottom: 14 }}>
@@ -108,7 +128,7 @@ function Field({
           value={value}
           onChangeText={onChange}
           placeholder={placeholder}
-          placeholderTextColor="rgba(255,255,255,0.2)"
+          placeholderTextColor="rgba(18,20,26,0.28)"
           secureTextEntry={secure}
           keyboardType={keyboardType ?? 'default'}
           autoCapitalize={autoCapitalize ?? 'none'}
@@ -119,7 +139,7 @@ function Field({
         />
         {secureToggle && (
           <TouchableOpacity onPress={onToggleSecure} style={fs.eyeBtn}>
-            {secure ? <EyeOff size={18} color="rgba(255,255,255,0.4)" /> : <Eye size={18} color="rgba(255,255,255,0.6)" />}
+            {secure ? <EyeOff size={18} color={MUTED} /> : <Eye size={18} color={INK} />}
           </TouchableOpacity>
         )}
       </Animated.View>
@@ -134,11 +154,11 @@ function Field({
 }
 
 const fs = StyleSheet.create({
-  label:     { color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 7 },
-  fieldWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  label:     { color: MUTED, fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  fieldWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1.5, overflow: 'hidden' },
   fieldIcon: { paddingHorizontal: 14, justifyContent: 'center', alignItems: 'center' },
-  input:     { flex: 1, color: '#FFF', fontSize: 15, fontWeight: '600', paddingVertical: 16, paddingRight: 14 },
-  eyeBtn:    { paddingHorizontal: 14, paddingVertical: 16 },
+  input:     { flex: 1, color: INK, fontSize: 16, fontWeight: '500', paddingVertical: 15, paddingRight: 14 },
+  eyeBtn:    { paddingHorizontal: 14, paddingVertical: 15 },
 });
 
 // ─── FORGOT PASSWORD MODAL ────────────────────────────────────────────
@@ -146,14 +166,24 @@ function ForgotModal({ visible, onClose }: { visible: boolean; onClose: () => vo
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cooldownSec, setCooldownSec] = useState(0);
   const slideAnim = useRef(new Animated.Value(height)).current;
 
   React.useEffect(() => {
     Animated.spring(slideAnim, { toValue: visible ? 0 : height, friction: 14, tension: 80, useNativeDriver: true }).start();
-    if (!visible) { setSent(false); setEmail(''); }
+    if (!visible) { setSent(false); setEmail(''); setCooldownSec(0); }
   }, [visible]);
 
+  React.useEffect(() => {
+    if (cooldownSec <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSec((n) => (n <= 1 ? 0 : n - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSec]);
+
   const handleSend = async () => {
+    if (cooldownSec > 0) return;
     if (!email.includes('@')) { Alert.alert('Invalid email', 'Please enter a valid email address.'); return; }
     if (!isSupabaseConfigured()) {
       Alert.alert('Not configured', 'Add Supabase environment variables before using password reset.');
@@ -162,10 +192,11 @@ function ForgotModal({ visible, onClose }: { visible: boolean; onClose: () => vo
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: getAuthRedirectUri(),
+        redirectTo: getResetPasswordRedirectUri(),
       });
       if (error) throw error;
       setSent(true);
+      setCooldownSec(10);
     } catch (e) {
       Alert.alert('Reset failed', formatAuthError(e));
     } finally {
@@ -176,16 +207,21 @@ function ForgotModal({ visible, onClose }: { visible: boolean; onClose: () => vo
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          style={{ width: '100%' }}
+        >
         <Animated.View style={{
-          backgroundColor: '#0D0D0D', borderTopLeftRadius: 32, borderTopRightRadius: 32,
-          padding: 28, paddingBottom: 50, borderTopWidth: 1, borderTopColor: '#1A1A1A',
+          backgroundColor: '#FFFFFF', borderTopLeftRadius: 32, borderTopRightRadius: 32,
+          padding: 24, paddingBottom: 26, borderTopWidth: 1, borderTopColor: LINE,
           transform: [{ translateY: slideAnim }],
         }}>
-          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#1A1A1A', alignSelf: 'center', marginBottom: 24 }} />
+          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(18,20,26,0.16)', alignSelf: 'center', marginBottom: 18 }} />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={{ color: '#FFF', fontSize: 22, fontWeight: '900' }}>Reset Password</Text>
-            <TouchableOpacity onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' }}>
-              <X size={16} color="#888" />
+            <Text style={{ color: INK, fontSize: 22, fontWeight: '900' }}>Reset Password</Text>
+            <TouchableOpacity onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }}>
+              <X size={16} color={MUTED} />
             </TouchableOpacity>
           </View>
 
@@ -194,17 +230,17 @@ function ForgotModal({ visible, onClose }: { visible: boolean; onClose: () => vo
               <View style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(0,200,83,0.15)', justifyContent: 'center', alignItems: 'center' }}>
                 <Check size={32} color="#00C853" />
               </View>
-              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '900', textAlign: 'center' }}>Check your inbox!</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 22 }}>
-                We've sent a password reset link to{'\n'}<Text style={{ color: '#FFF', fontWeight: '700' }}>{email}</Text>
+              <Text style={{ color: INK, fontSize: 18, fontWeight: '900', textAlign: 'center' }}>Check your inbox!</Text>
+              <Text style={{ color: MUTED, fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 22 }}>
+                We've sent a password reset link to{'\n'}<Text style={{ color: INK, fontWeight: '700' }}>{email}</Text>
               </Text>
-              <TouchableOpacity onPress={onClose} style={{ marginTop: 10, borderRadius: 20, backgroundColor: '#FF0055', paddingHorizontal: 32, paddingVertical: 14 }}>
+              <TouchableOpacity onPress={onClose} style={{ marginTop: 10, borderRadius: 20, backgroundColor: INK, paddingHorizontal: 32, paddingVertical: 14 }}>
                 <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 14 }}>DONE</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 24, lineHeight: 22 }}>
+              <Text style={{ color: MUTED, fontSize: 14, marginBottom: 14, lineHeight: 22 }}>
                 Enter the email address linked to your account. We'll send you a secure reset link.
               </Text>
               <Field
@@ -212,21 +248,28 @@ function ForgotModal({ visible, onClose }: { visible: boolean; onClose: () => vo
                 value={email}
                 onChange={setEmail}
                 placeholder="your@email.com"
-                icon={<Mail size={18} color="rgba(255,255,255,0.4)" />}
+                icon={<Mail size={18} color={MUTED} />}
                 keyboardType="email-address"
               />
               <TouchableOpacity
                 onPress={handleSend}
-                disabled={loading}
-                style={{ borderRadius: 20, overflow: 'hidden', marginTop: 8 }}
+                disabled={loading || cooldownSec > 0}
+                style={{ borderRadius: 20, overflow: 'hidden', marginTop: 8, marginBottom: 6 }}
               >
-                <LinearGradient colors={['#FF0055', '#FF3300']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
-                  {loading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 15, letterSpacing: 1 }}>SEND RESET LINK</Text>}
+                <LinearGradient colors={['#12141A', '#1F2937']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, opacity: cooldownSec > 0 ? 0.75 : 1 }}>
+                  {loading ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 15, letterSpacing: 1 }}>
+                      {cooldownSec > 0 ? `TRY AGAIN IN ${cooldownSec}s` : 'SEND RESET LINK'}
+                    </Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </>
           )}
         </Animated.View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -277,12 +320,15 @@ function TermsModal({ visible, onClose, onAccept }: { visible: boolean; onClose:
 // ─── MAIN AUTH SCREEN ────────────────────────────────────────────────
 export default function AuthScreen() {
   const { setUser } = useTheme();
+  const params = useLocalSearchParams<{ verified?: string; error?: string; recovery?: string }>();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [signupSent, setSignupSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthProvider, setOauthProvider] = useState<null | 'google' | 'apple'>(null);
   const [showForgot, setShowForgot] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
 
   // Form fields
   const [fullName, setFullName]   = useState('');
@@ -303,6 +349,7 @@ export default function AuthScreen() {
     Animated.timing(modeAnim, { toValue: m === 'login' ? 0 : 1, duration: 250, useNativeDriver: false }).start();
     setMode(m);
     setErrors({});
+    setSignupSent(false);
   };
 
   const { checks, score } = passwordStrength(password);
@@ -370,29 +417,33 @@ export default function AuthScreen() {
           email: emailTrimmed,
           password,
           options: {
+            emailRedirectTo: getAuthRedirectUri(),
             data: {
               full_name: fullName.trim(),
+              username: username.trim(),
             },
           },
         });
         if (error) throw error;
 
-        if (!data.session) {
-          Alert.alert(
-            'Confirm your email',
-            'We sent you a link. Open it to activate your account, then sign in.',
-          );
-          return;
-        }
-
-        const u = data.session.user;
-        await setUser({
-          uid: u.id,
+        const u = data.user ?? data.session?.user;
+        if (!u) throw new Error('Unable to create account at the moment. Please try again.');
+        await ensureProfileRow({
+          userId: u.id,
           email: u.email ?? emailTrimmed,
-          username,
-          isLoggedIn: true,
+          username: username.trim() || (u.email?.split('@')[0] ?? 'user'),
+          fullName: fullName.trim(),
+          phone: phone.trim() || undefined,
+          planType: 'hobby',
         });
-        router.replace('/onboarding');
+        await supabase.auth.resend({
+          type: 'signup',
+          email: emailTrimmed,
+          options: { emailRedirectTo: getAuthRedirectUri() },
+        });
+        await supabase.auth.signOut();
+        setSignupSent(true);
+        setMode('login');
         return;
       }
 
@@ -408,6 +459,12 @@ export default function AuthScreen() {
         (typeof meta?.username === 'string' && meta.username) ||
         u.email?.split('@')[0] ||
         'user';
+      await ensureProfileRow({
+        userId: u.id,
+        email: u.email ?? emailTrimmed,
+        username: uname,
+        planType: 'hobby',
+      });
 
       await setUser({
         uid: u.id,
@@ -425,14 +482,11 @@ export default function AuthScreen() {
 
   const tabIndicatorLeft = modeAnim.interpolate({ inputRange: [0, 1], outputRange: ['2%', '51%'] });
 
+  const emailVerified = params.verified === '1';
+  const authError = params.error === '1';
+
   return (
     <View style={as.root}>
-      <LinearGradient colors={['#030303', '#0D0003', '#030303']} style={StyleSheet.absoluteFill} />
-
-      {/* BG orbs */}
-      <View style={[as.orb, { left: -80, top: 100, width: 240, height: 240, backgroundColor: 'rgba(255,0,85,0.08)' }]} />
-      <View style={[as.orb, { right: -60, top: 300, width: 200, height: 200, backgroundColor: 'rgba(191,90,242,0.06)' }]} />
-
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <SafeAreaView style={{ flex: 1 }}>
           <ScrollView
@@ -440,25 +494,75 @@ export default function AuthScreen() {
             contentContainerStyle={{ paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Back arrow — only show if already onboarded */}
-            <TouchableOpacity style={as.backBtn} onPress={() => router.replace('/landing')}>
-              <ChevronLeft size={22} color="rgba(255,255,255,0.4)" />
+            <TouchableOpacity style={as.backBtn} onPress={() => router.replace('/onboarding')}>
+              <ChevronLeft size={22} color={MUTED} />
             </TouchableOpacity>
 
             <View style={as.logoRow}>
-              <Text style={as.brandMark}>PHOTODUMPS</Text>
-              <Text style={as.appTagline}>Sign in to continue</Text>
+              <Image source={BRAND_LOGO} style={as.logoImg} contentFit="cover" />
+              <Text style={as.brandMark}>photodumps</Text>
+              <Text style={as.appTagline}>
+                {mode === 'login' ? 'Welcome back' : 'Create your account'}
+              </Text>
             </View>
 
+            {emailVerified && (
+              <View style={as.bannerOk}>
+                <Check size={18} color="#059669" />
+                <Text style={as.bannerOkText}>
+                  Email verified. Sign in with your password to continue.
+                </Text>
+              </View>
+            )}
+            {signupSent && (
+              <View style={as.bannerOk}>
+                <Mail size={18} color={ACCENT} />
+                <View style={{ flex: 1 }}>
+                  <Text style={as.bannerOkText}>
+                    Check your inbox — we sent a link to verify {email}. Open it, then sign in here.
+                  </Text>
+                  <TouchableOpacity
+                    disabled={resendBusy}
+                    onPress={async () => {
+                      if (!email?.trim()) return;
+                      setResendBusy(true);
+                      try {
+                        const { error } = await supabase.auth.resend({
+                          type: 'signup',
+                          email: email.trim(),
+                          options: { emailRedirectTo: getAuthRedirectUri() },
+                        });
+                        if (error) throw error;
+                        Alert.alert('Verification sent', 'Please check your inbox (and spam folder).');
+                      } catch (e) {
+                        Alert.alert('Resend failed', formatAuthError(e));
+                      } finally {
+                        setResendBusy(false);
+                      }
+                    }}
+                  >
+                    <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '700', marginTop: 8 }}>
+                      {resendBusy ? 'Resending…' : 'Resend verification email'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            {authError && (
+              <View style={as.bannerErr}>
+                <AlertCircle size={18} color="#DC2626" />
+                <Text style={as.bannerErrText}>That link expired or failed. Try again or request a new one.</Text>
+              </View>
+            )}
+
             <View style={as.card}>
-              {/* Tab switcher */}
-              <View style={[as.tabRow, { backgroundColor: 'rgba(255,255,255,0.04)' }]}>
+              <View style={as.tabRow}>
                 <Animated.View style={[as.tabIndicator, { left: tabIndicatorLeft }]} />
                 <TouchableOpacity style={as.tab} onPress={() => switchMode('login')}>
-                  <Text style={[as.tabText, mode === 'login' && as.tabTextActive]}>SIGN IN</Text>
+                  <Text style={[as.tabText, mode === 'login' && as.tabTextActive]}>Sign in</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={as.tab} onPress={() => switchMode('signup')}>
-                  <Text style={[as.tabText, mode === 'signup' && as.tabTextActive]}>CREATE ACCOUNT</Text>
+                  <Text style={[as.tabText, mode === 'signup' && as.tabTextActive]}>Sign up</Text>
                 </TouchableOpacity>
               </View>
 
@@ -468,17 +572,17 @@ export default function AuthScreen() {
                   <>
                     <Field label="FULL NAME" value={fullName} onChange={setFullName}
                       placeholder="Your full name" autoCapitalize="words"
-                      icon={<User size={18} color="rgba(255,255,255,0.4)" />}
+                      icon={<User size={18} color={MUTED} />}
                       error={errors.fullName}
                     />
                     <Field label="USERNAME" value={username} onChange={(t: string) => setUsername(t.toLowerCase().replace(/\s/g, ''))}
                       placeholder="@yourhandle"
-                      icon={<Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 15, fontWeight: '700' }}>@</Text>}
+                      icon={<Text style={{ color: MUTED, fontSize: 15, fontWeight: '700' }}>@</Text>}
                       error={errors.username} maxLength={20}
                     />
                     <Field label="PHONE (OPTIONAL)" value={phone} onChange={setPhone}
                       placeholder="+60 12 345 6789" keyboardType="phone-pad"
-                      icon={<Phone size={18} color="rgba(255,255,255,0.4)" />}
+                      icon={<Phone size={18} color={MUTED} />}
                       error={errors.phone}
                     />
                   </>
@@ -486,23 +590,22 @@ export default function AuthScreen() {
 
                 <Field label="EMAIL ADDRESS" value={email} onChange={setEmail}
                   placeholder="your@email.com" keyboardType="email-address"
-                  icon={<Mail size={18} color="rgba(255,255,255,0.4)" />}
+                  icon={<Mail size={18} color={MUTED} />}
                   error={errors.email}
                 />
 
                 <Field label="PASSWORD" value={password} onChange={setPassword}
                   placeholder={mode === 'signup' ? 'Create a strong password' : 'Enter your password'}
-                  icon={<Lock size={18} color="rgba(255,255,255,0.4)" />}
+                  icon={<Lock size={18} color={MUTED} />}
                   secureToggle secure={!showPw} onToggleSecure={() => setShowPw(p => !p)}
                   error={errors.password}
                 />
 
-                {/* Password strength bar — signup only */}
                 {mode === 'signup' && password.length > 0 && (
                   <View style={{ marginBottom: 14 }}>
                     <View style={{ flexDirection: 'row', gap: 4, marginBottom: 8 }}>
                       {[1, 2, 3, 4, 5].map(i => (
-                        <View key={i} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= score ? STRENGTH_COLORS[score] : 'rgba(255,255,255,0.1)' }} />
+                        <View key={i} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= score ? STRENGTH_COLORS[score] : LINE }} />
                       ))}
                     </View>
                     {score > 0 && (
@@ -510,7 +613,7 @@ export default function AuthScreen() {
                         {STRENGTH_LABELS[score]}
                       </Text>
                     )}
-                    <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 14 }}>
+                    <View style={{ backgroundColor: '#E2E8F0', borderRadius: 14, padding: 14 }}>
                       <PwCriteriaRow met={checks.length}  label="At least 8 characters" />
                       <PwCriteriaRow met={checks.upper}   label="One uppercase letter (A–Z)" />
                       <PwCriteriaRow met={checks.lower}   label="One lowercase letter (a–z)" />
@@ -524,7 +627,7 @@ export default function AuthScreen() {
                 {mode === 'signup' && (
                   <Field label="CONFIRM PASSWORD" value={confirm} onChange={setConfirm}
                     placeholder="Re-enter your password"
-                    icon={<Lock size={18} color="rgba(255,255,255,0.4)" />}
+                    icon={<Lock size={18} color={MUTED} />}
                     secureToggle secure={!showConfirm} onToggleSecure={() => setShowConfirm(p => !p)}
                     error={errors.confirm}
                   />
@@ -533,7 +636,7 @@ export default function AuthScreen() {
                 {/* Forgot password — login only */}
                 {mode === 'login' && (
                   <TouchableOpacity onPress={() => setShowForgot(true)} style={{ alignSelf: 'flex-end', marginBottom: 20, marginTop: -4 }}>
-                    <Text style={{ color: '#FF0055', fontSize: 12, fontWeight: '700' }}>Forgot password?</Text>
+                    <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '600' }}>Forgot password?</Text>
                   </TouchableOpacity>
                 )}
 
@@ -547,19 +650,19 @@ export default function AuthScreen() {
                     >
                       <View style={{
                         width: 22, height: 22, borderRadius: 6, marginTop: 1,
-                        backgroundColor: termsAccepted ? '#FF0055' : 'rgba(255,255,255,0.1)',
-                        borderWidth: 1, borderColor: termsAccepted ? '#FF0055' : 'rgba(255,255,255,0.2)',
+                        backgroundColor: termsAccepted ? ACCENT : '#F4F6FA',
+                        borderWidth: 1, borderColor: termsAccepted ? ACCENT : LINE,
                         justifyContent: 'center', alignItems: 'center',
                       }}>
                         {termsAccepted && <Check size={13} color="#FFF" />}
                       </View>
-                      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, flex: 1, lineHeight: 20 }}>
+                      <Text style={{ color: MUTED, fontSize: 13, flex: 1, lineHeight: 20 }}>
                         I agree to the{' '}
-                        <Text style={{ color: '#FF0055', fontWeight: '700' }} onPress={() => setShowTerms(true)}>
+                        <Text style={{ color: ACCENT, fontWeight: '700' }} onPress={() => setShowTerms(true)}>
                           Terms of Service
                         </Text>
                         {' '}and{' '}
-                        <Text style={{ color: '#FF0055', fontWeight: '700' }} onPress={() => setShowTerms(true)}>
+                        <Text style={{ color: ACCENT, fontWeight: '700' }} onPress={() => setShowTerms(true)}>
                           Privacy Policy
                         </Text>
                       </Text>
@@ -574,23 +677,22 @@ export default function AuthScreen() {
                 )}
 
                 {/* Submit */}
-                <TouchableOpacity onPress={handleSubmit} disabled={loading} activeOpacity={0.86} style={as.submitOuter}>
-                  <LinearGradient
-                    colors={loading ? ['#333', '#222'] : ['#FF0055', '#FF3300']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={as.submitBtn}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#FFF" size="small" />
-                    ) : (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={as.submitText}>
-                          {mode === 'login' ? 'Sign in' : 'Create account'}
-                        </Text>
-                        <ChevronRight size={18} color="#FFF" />
-                      </View>
-                    )}
-                  </LinearGradient>
+                <TouchableOpacity
+                  onPress={handleSubmit}
+                  disabled={loading}
+                  activeOpacity={0.86}
+                  style={[as.submitBtn, loading && { opacity: 0.65 }]}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={as.submitText}>
+                        {mode === 'login' ? 'Sign in' : 'Create account'}
+                      </Text>
+                      <ChevronRight size={18} color="#FFF" />
+                    </View>
+                  )}
                 </TouchableOpacity>
 
                 {/* Divider */}
@@ -611,8 +713,8 @@ export default function AuthScreen() {
                       <ActivityIndicator color="#FFF" size="small" />
                     ) : (
                       <>
-                        <Ionicons name="logo-apple" size={22} color="#FFFFFF" style={as.socialIcon} />
-                        <Text style={as.socialLabel}>Apple</Text>
+                        <Ionicons name="logo-apple" size={22} color={INK} style={as.socialIcon} />
+                        <Text style={as.socialLabel}>Continue with Apple</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -626,8 +728,8 @@ export default function AuthScreen() {
                       <ActivityIndicator color="#FFF" size="small" />
                     ) : (
                       <>
-                        <Ionicons name="logo-google" size={22} color="#FFFFFF" style={as.socialIcon} />
-                        <Text style={as.socialLabel}>Google</Text>
+                        <Ionicons name="logo-google" size={22} color={INK} style={as.socialIcon} />
+                        <Text style={as.socialLabel}>Continue with Google</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -636,10 +738,10 @@ export default function AuthScreen() {
             </View>
 
             <Text style={as.footerNote}>
-              By signing in you confirm you are 13+ and agree to our{' '}
-              <Text style={{ color: '#FF0055' }} onPress={() => setShowTerms(true)}>Terms</Text>
+              By continuing you confirm you are 13+ and agree to our{' '}
+              <Text style={{ color: ACCENT }} onPress={() => setShowTerms(true)}>Terms</Text>
               {' & '}
-              <Text style={{ color: '#FF0055' }} onPress={() => setShowTerms(true)}>Privacy Policy</Text>
+              <Text style={{ color: ACCENT }} onPress={() => setShowTerms(true)}>Privacy Policy</Text>
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -652,55 +754,103 @@ export default function AuthScreen() {
 }
 
 const as = StyleSheet.create({
-  root:  { flex: 1, backgroundColor: '#030303' },
-  orb:   { position: 'absolute', borderRadius: 200 },
-  backBtn: { padding: 20, alignSelf: 'flex-start' },
-
-  logoRow: { alignItems: 'center', gap: 6, paddingVertical: 20 },
+  root:  { flex: 1, backgroundColor: '#FAFBFC' },
+  backBtn: { padding: 16, alignSelf: 'flex-start' },
+  logoRow: { alignItems: 'center', gap: 8, paddingVertical: 8, paddingBottom: 20 },
+  logoImg: { width: 64, height: 64, borderRadius: 16 },
   brandMark: {
-    color: '#FFF',
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: 4,
+    color: INK,
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: -0.8,
   },
   appTagline: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 14,
+    color: MUTED,
+    fontSize: 15,
     fontWeight: '500',
-    letterSpacing: 0.3,
   },
+  bannerOk: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(5,150,105,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(5,150,105,0.2)',
+  },
+  bannerOkText: { flex: 1, color: INK, fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  bannerErr: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(220,38,38,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(220,38,38,0.18)',
+  },
+  bannerErrText: { flex: 1, color: INK, fontSize: 14, lineHeight: 20 },
   socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
+    backgroundColor: SURFACE,
+    borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1.5,
+    borderColor: LINE,
     minHeight: 52,
   },
   socialIcon: { marginRight: 2 },
-  socialLabel: { color: '#FFF', fontSize: 15, fontWeight: '600' },
-
-  card:    { marginHorizontal: 16, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
-
-  tabRow:  { flexDirection: 'row', margin: 12, borderRadius: 18, padding: 4, position: 'relative' },
-  tabIndicator: { position: 'absolute', top: 4, width: '48%', height: '100%', backgroundColor: '#FF0055', borderRadius: 14 },
-  tab:     { flex: 1, paddingVertical: 12, alignItems: 'center', zIndex: 1 },
-  tabText: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  tabTextActive: { color: '#FFF' },
-
-  submitOuter: { borderRadius: 20, overflow: 'hidden', marginBottom: 20 },
-  submitBtn:   { paddingVertical: 19, alignItems: 'center', justifyContent: 'center' },
-  submitText:  { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.25 },
-
+  socialLabel: { color: INK, fontSize: 15, fontWeight: '600' },
+  card: {
+    marginHorizontal: 20,
+    borderRadius: 24,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: LINE,
+    overflow: 'hidden',
+    shadowColor: '#12141A',
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  tabRow:  { flexDirection: 'row', margin: 10, borderRadius: 14, padding: 4, position: 'relative', backgroundColor: '#F0F2F8' },
+  tabIndicator: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    width: '48%',
+    backgroundColor: SURFACE,
+    borderRadius: 11,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  tab:     { flex: 1, paddingVertical: 11, alignItems: 'center', zIndex: 1 },
+  tabText: { color: MUTED, fontSize: 14, fontWeight: '600' },
+  tabTextActive: { color: INK, fontWeight: '700' },
+  submitBtn: {
+    borderRadius: 14,
+    paddingVertical: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: INK,
+    marginBottom: 18,
+  },
+  submitText:  { color: '#FFF', fontSize: 16, fontWeight: '700' },
   divider:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
-  dividerText: { color: 'rgba(255,255,255,0.25)', fontSize: 12, fontWeight: '600' },
-
-  footerNote: { textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 11, fontWeight: '500', marginTop: 16, paddingHorizontal: 32, lineHeight: 18 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: LINE },
+  dividerText: { color: MUTED, fontSize: 12, fontWeight: '500' },
+  footerNote: { textAlign: 'center', color: MUTED, fontSize: 12, marginTop: 16, paddingHorizontal: 32, lineHeight: 18 },
 });
 

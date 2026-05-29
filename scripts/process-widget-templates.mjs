@@ -1,9 +1,9 @@
 /**
- * Process widget templates for exact iOS sizes.
- * Cutouts: strip white + black, scale art to FILL the widget (no letterbox margins).
- * Square/boxy → small + large only. Wide → medium only.
+ * Sharp template cutouts for widget PNGs.
+ * - Strip only pure outer white/cream sheet (never eats into art).
+ * - Soft alpha on edges, small padding so hands/outlines stay intact.
  *
- * Local only: npm install --no-save sharp && node scripts/process-widget-templates.mjs
+ * Mac: npm install --no-save sharp && node scripts/process-widget-templates.mjs
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,7 +35,6 @@ function findSourceFile(srcToken) {
   return path.join(ASSETS_IN, hit);
 }
 
-/** Square/boxy art → small + large. Wide panoramas → medium only. Never mix. */
 function inferFamilies(meta, kind) {
   if (kind === 'cutout') return ['small', 'large'];
   const ar = meta.width / meta.height;
@@ -43,103 +42,90 @@ function inferFamilies(meta, kind) {
   return ['small', 'large'];
 }
 
-function isMattePixel(r, g, b) {
+/** Only the export sheet behind the template — not interior colors. */
+function isOuterMatte(r, g, b) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const lum = 0.299 * r + 0.587 * g + 0.114 * b;
   const chroma = max - min;
-  if (lum < 52 && chroma < 28) return true;
-  if (lum > 245 && chroma < 10) return true;
-  if (lum > 228 && chroma < 22) return true;
-  if (lum > 200 && r > 195 && g > 190 && b > 170 && chroma < 40) return true;
+  if (lum > 248 && chroma < 14) return true;
+  if (lum > 232 && chroma < 20) return true;
   return false;
 }
 
-function colorDist(r1, g1, b1, r2, g2, b2) {
-  return Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
-}
-
-/** Flood-remove border-connected backgrounds (white, black, cream, flat color mats). */
-function floodStripBorder(data, w, h, tolerance = 52) {
+function floodStripOuterMatte(data, w, h) {
   const size = w * h;
   const visited = new Uint8Array(size);
   const queue = [];
   let qi = 0;
 
-  const trySeed = (x, y) => {
+  const seed = (x, y) => {
     const idx = y * w + x;
     if (visited[idx]) return;
     const i = idx * 4;
+    if (!isOuterMatte(data[i], data[i + 1], data[i + 2])) return;
     visited[idx] = 1;
-    queue.push([idx, data[i], data[i + 1], data[i + 2]]);
+    queue.push(idx);
   };
 
   for (let x = 0; x < w; x++) {
-    trySeed(x, 0);
-    trySeed(x, h - 1);
+    seed(x, 0);
+    seed(x, h - 1);
   }
   for (let y = 0; y < h; y++) {
-    trySeed(0, y);
-    trySeed(w - 1, y);
+    seed(0, y);
+    seed(w - 1, y);
   }
 
   while (qi < queue.length) {
-    const [idx, sr, sg, sb] = queue[qi++];
+    const idx = queue[qi++];
     const i = idx * 4;
     data[i + 3] = 0;
-
     const x = idx % w;
     const y = (idx - x) / w;
-    const neighbors = [
+    for (const [nx, ny] of [
       [x - 1, y],
       [x + 1, y],
       [x, y - 1],
       [x, y + 1],
-    ];
-    for (const [nx, ny] of neighbors) {
+    ]) {
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       const nidx = ny * w + nx;
       if (visited[nidx]) continue;
       const ni = nidx * 4;
-      const nr = data[ni];
-      const ng = data[ni + 1];
-      const nb = data[ni + 2];
-      if (colorDist(nr, ng, nb, sr, sg, sb) <= tolerance || isMattePixel(nr, ng, nb)) {
+      if (isOuterMatte(data[ni], data[ni + 1], data[ni + 2])) {
         visited[nidx] = 1;
-        queue.push([nidx, sr, sg, sb]);
+        queue.push(nidx);
       }
     }
   }
 }
 
-async function stripFillerBackground(input) {
+async function cutoutExactShape(input) {
   const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const w = info.width;
-  const h = info.height;
-  floodStripBorder(data, w, h);
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    if (isMattePixel(r, g, b)) data[i + 3] = 0;
-  }
-  return sharp(data, { raw: { width: w, height: h, channels: 4 } });
+  floodStripOuterMatte(data, info.width, info.height);
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png()
+    .trim({ threshold: 1 })
+    .extend({
+      top: 6,
+      bottom: 6,
+      left: 6,
+      right: 6,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png();
 }
 
-/** Cutout scaled to cover entire widget canvas — transparent only outside the figure. */
-async function processCutout(input, w, h) {
-  const trimmed = await sharp(input).trim({ threshold: 18 }).png().toBuffer();
-  const cut = await stripFillerBackground(trimmed);
-  const cutBuf = await cut.png().toBuffer();
-  return sharp(cutBuf)
-    .resize(w, h, { fit: 'cover', position: 'centre' })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-}
-
-async function processFull(input, w, h) {
-  return sharp(input)
-    .resize(w, h, { fit: 'cover', position: 'attention' })
+async function processTemplate(input, w, h) {
+  const shape = await cutoutExactShape(input);
+  return shape
+    .resize(w, h, {
+      fit: 'contain',
+      position: 'centre',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      kernel: sharp.kernel.lanczos3,
+    })
     .png({ compressionLevel: 9 })
     .toBuffer();
 }
@@ -165,8 +151,7 @@ async function main() {
 
     for (const family of families) {
       const { w, h } = FAMILIES[family];
-      const buf =
-        kindNorm === 'cutout' ? await processCutout(input, w, h) : await processFull(input, w, h);
+      const buf = await processTemplate(input, w, h);
       fs.writeFileSync(path.join(dir, `${family}.png`), buf);
     }
 

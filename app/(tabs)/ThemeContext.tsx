@@ -12,6 +12,7 @@ import {
   updateProfilePlanType,
   type ProfilePlanType,
 } from '../_lib/profilePlanSupabase';
+import { syncBonusSwipesRow } from '../_lib/billingSupabase';
 import { isSupabaseConfigured, supabase } from './supabase';
 
 /** Old device-wide keys — caused wrong plan when another user signed in. */
@@ -28,7 +29,7 @@ function appPlanFromProfile(planType: ProfilePlanType): PlanType {
 
 export type ThemeId =
   | 'dark' | 'light'
-  | 'cyberpunk' | 'vintage' | 'zen' | 'y2k' | 'nordic' | 'brutalist';
+  | 'cyberpunk' | 'vintage' | 'zen' | 'y2k';
 
 export type { LanguageId } from '../_lib/i18n/supported';
 import { LANGUAGE_LABELS, normalizeLanguage, type LanguageId } from '../_lib/i18n/supported';
@@ -50,81 +51,66 @@ export interface ThemeColors {
 }
 
 const THEMES: Record<ThemeId, ThemeColors> = {
-  dark: {
-    bg: '#030303', bg2: '#0A0A0A', bg3: '#111111', card: '#0D0D0D',
-    border: '#1A1A1A', text: '#FFFFFF', textSub: '#888888', textMuted: '#555555',
-    accent: '#FF0055', accentSoft: 'rgba(255,0,85,0.12)', success: '#00FFA3',
-    danger: '#FF3B30', tabBar: 'rgba(4,4,4,0.97)', isDark: true,
-    accent2: '#FF3377', radiusSm: 12, radiusMd: 16, radiusLg: 24, borderW: 1,
-    typeface: 'system', uppercaseUi: true, scanlineOpacity: 0,
-  },
   light: {
-    bg: '#F5F5F5', bg2: '#FFFFFF', bg3: '#EFEFEF', card: '#FFFFFF',
-    border: '#E0E0E0', text: '#111111', textSub: '#666666', textMuted: '#999999',
-    accent: '#FF0055', accentSoft: 'rgba(255,0,85,0.08)', success: '#00C853',
-    danger: '#FF3B30', tabBar: 'rgba(255,255,255,0.97)', isDark: false,
-    accent2: '#FF3377', radiusSm: 12, radiusMd: 16, radiusLg: 24, borderW: 1,
-    typeface: 'system', uppercaseUi: true, scanlineOpacity: 0,
+    bg: '#F4F6FA', bg2: '#FFFFFF', bg3: '#E8ECF4', card: '#FFFFFF',
+    border: '#D8DEE8', text: '#12141A', textSub: '#4A5168', textMuted: '#8A92A8',
+    accent: '#FF0055', accentSoft: 'rgba(255,0,85,0.1)', success: '#059669',
+    danger: '#DC2626', tabBar: 'rgba(255,255,255,0.98)', isDark: false,
+    accent2: '#2563EB', radiusSm: 12, radiusMd: 16, radiusLg: 20, borderW: 1,
+    typeface: 'system', uppercaseUi: false, scanlineOpacity: 0,
+  },
+  dark: {
+    bg: '#12141C', bg2: '#1A1E28', bg3: '#252B38', card: '#1E2430',
+    border: '#3A4254', text: '#F4F6FA', textSub: '#B8C0D4', textMuted: '#7A849C',
+    accent: '#FF0055', accentSoft: 'rgba(255,0,85,0.15)', success: '#34D399',
+    danger: '#FB7185', tabBar: 'rgba(18,20,28,0.98)', isDark: true,
+    accent2: '#60A5FA', radiusSm: 12, radiusMd: 16, radiusLg: 20, borderW: 1,
+    typeface: 'system', uppercaseUi: false, scanlineOpacity: 0,
   },
   cyberpunk: {
-    bg: '#02040A', bg2: '#051018', bg3: '#081C28', card: '#06101C',
-    border: 'rgba(0,255,170,0.35)', text: '#E6FFF4', textSub: '#6BD4AA', textMuted: '#3D8A68',
-    accent: '#00FF9C', accentSoft: 'rgba(0,255,156,0.14)', success: '#00FFA3',
-    danger: '#FF0055', tabBar: 'rgba(2,6,14,0.98)', isDark: true,
-    accent2: '#00C2FF', radiusSm: 10, radiusMd: 14, radiusLg: 20, borderW: 1.5,
-    typeface: 'system', uppercaseUi: true, scanlineOpacity: 0.055,
+    bg: '#06040F', bg2: '#0E0A1A', bg3: '#16102A', card: '#120E22',
+    border: 'rgba(255,0,170,0.35)', text: '#F5F0FF', textSub: '#C4B5E8', textMuted: '#8A7AA8',
+    accent: '#FF00AA', accentSoft: 'rgba(255,0,170,0.18)', success: '#00FF9C',
+    danger: '#FF3355', tabBar: 'rgba(6,4,15,0.98)', isDark: true,
+    accent2: '#00F0FF', radiusSm: 10, radiusMd: 14, radiusLg: 18, borderW: 1.5,
+    typeface: 'system', uppercaseUi: true, scanlineOpacity: 0,
   },
   vintage: {
-    bg: '#EDE4D3', bg2: '#F8F2E6', bg3: '#E5DBC8', card: '#FBF8F0',
-    border: '#C9B896', text: '#4A3728', textSub: '#7D6A58', textMuted: '#A39688',
-    accent: '#8B4513', accentSoft: 'rgba(139,69,19,0.12)', success: '#2E7D4A',
-    danger: '#B5493A', tabBar: 'rgba(251,248,240,0.98)', isDark: false,
-    accent2: '#C9A227', radiusSm: 14, radiusMd: 18, radiusLg: 22, borderW: 1,
+    bg: '#F5F0E6', bg2: '#FAF7F2', bg3: '#EDE6D8', card: '#FDFBF7',
+    border: '#D4C4B0', text: '#4A3F32', textSub: '#7A6B58', textMuted: '#A89888',
+    accent: '#8B6F47', accentSoft: 'rgba(139,111,71,0.12)', success: '#5A8F6A',
+    danger: '#B85C4A', tabBar: 'rgba(253,251,247,0.98)', isDark: false,
+    accent2: '#B8956A', radiusSm: 12, radiusMd: 16, radiusLg: 20, borderW: 1,
     typeface: 'serif', uppercaseUi: false, scanlineOpacity: 0,
   },
   zen: {
-    bg: '#FAFAFA', bg2: '#FFFFFF', bg3: '#F4F4F4', card: '#FFFFFF',
-    border: '#E6E6E6', text: '#111111', textSub: '#666666', textMuted: '#A0A0A0',
-    accent: '#000000', accentSoft: 'rgba(0,0,0,0.06)', success: '#0A7A4A',
-    danger: '#C62828', tabBar: 'rgba(255,255,255,0.98)', isDark: false,
-    accent2: '#888888', radiusSm: 8, radiusMd: 10, radiusLg: 12, borderW: 1,
+    bg: '#F2EDE4', bg2: '#F8F5EF', bg3: '#E8E2D8', card: '#FAF8F4',
+    border: '#D8D0C4', text: '#3D3832', textSub: '#6B6560', textMuted: '#9A948C',
+    accent: '#6B7B6B', accentSoft: 'rgba(107,123,107,0.1)', success: '#5A8F72',
+    danger: '#B87A6A', tabBar: 'rgba(248,245,239,0.98)', isDark: false,
+    accent2: '#A8B5A0', radiusSm: 8, radiusMd: 10, radiusLg: 14, borderW: 1,
     typeface: 'system', uppercaseUi: false, scanlineOpacity: 0,
   },
   y2k: {
-    bg: '#2A0838', bg2: '#3D1450', bg3: '#1E0530', card: '#36205A',
-    border: '#000000', text: '#FFF5FF', textSub: '#EEAADD', textMuted: '#B888CC',
-    accent: '#FF2BA6', accentSoft: 'rgba(255,43,166,0.18)', success: '#00FFC6',
-    danger: '#FF0055', tabBar: 'rgba(42,8,56,0.97)', isDark: true,
-    accent2: '#C77DFF', radiusSm: 18, radiusMd: 24, radiusLg: 32, borderW: 3,
+    bg: '#F5E6FF', bg2: '#FFF0FA', bg3: '#E8D4FF', card: '#FFF5FC',
+    border: '#FF9EE0', text: '#4A2048', textSub: '#8B5A9A', textMuted: '#B888C8',
+    accent: '#FF6EC7', accentSoft: 'rgba(255,110,199,0.18)', success: '#5EEAD4',
+    danger: '#FF5A8A', tabBar: 'rgba(245,230,255,0.98)', isDark: false,
+    accent2: '#7BF0FF', radiusSm: 16, radiusMd: 22, radiusLg: 28, borderW: 2.5,
     typeface: 'display', uppercaseUi: false, scanlineOpacity: 0,
-  },
-  nordic: {
-    bg: '#141E26', bg2: '#1A2630', bg3: '#223140', card: '#1C2730',
-    border: '#2E3F4E', text: '#EAF2F6', textSub: '#8CAFC2', textMuted: '#5C7788',
-    accent: '#2DD4BF', accentSoft: 'rgba(45,212,191,0.14)', success: '#5EEAD4',
-    danger: '#F87171', tabBar: 'rgba(20,30,38,0.97)', isDark: true,
-    accent2: '#38BDF8', radiusSm: 12, radiusMd: 16, radiusLg: 20, borderW: 1,
-    typeface: 'system', uppercaseUi: false, scanlineOpacity: 0,
-  },
-  brutalist: {
-    bg: '#F2F0E6', bg2: '#E8E4D8', bg3: '#DAD6CC', card: '#F7F5ED',
-    border: '#000000', text: '#000000', textSub: '#333333', textMuted: '#555555',
-    accent: '#000000', accentSoft: 'rgba(255,230,0,0.22)', success: '#00AA55',
-    danger: '#FF0055', tabBar: 'rgba(242,240,230,0.98)', isDark: false,
-    accent2: '#FFE600', radiusSm: 0, radiusMd: 2, radiusLg: 4, borderW: 3,
-    typeface: 'mono', uppercaseUi: true, scanlineOpacity: 0,
   },
 };
 
 /** Old storage keys → new Pro theme (one-time migration). */
 const LEGACY_THEME_STORAGE: Record<string, ThemeId> = {
-  midnight: 'cyberpunk', blue: 'nordic', red: 'y2k', pink: 'y2k', yellow: 'brutalist',
+  midnight: 'cyberpunk', blue: 'dark', red: 'y2k', pink: 'y2k', yellow: 'light',
   green: 'cyberpunk', purple: 'y2k', orange: 'vintage',
+  nordic: 'dark', brutalist: 'light',
 };
 
 export const THEMES_MAP = THEMES;
-export const FREE_THEMES: ThemeId[] = ['dark', 'light'];
-export const PREMIUM_THEMES: ThemeId[] = ['cyberpunk', 'vintage', 'zen', 'y2k', 'nordic', 'brutalist'];
+export const FREE_THEMES: ThemeId[] = ['light', 'dark'];
+export const PREMIUM_THEMES: ThemeId[] = ['cyberpunk', 'vintage', 'zen', 'y2k'];
 export const THEME_PICKER_IDS: ThemeId[] = [...FREE_THEMES, ...PREMIUM_THEMES];
 
 export interface ThemeMeta {
@@ -138,37 +124,29 @@ export interface ThemeMeta {
 }
 
 export const THEME_META: Record<ThemeId, ThemeMeta> = {
-  dark: {
-    label: 'Dark', pitch: 'Signature photodumps night mode.', mood: 'Ink black · hot pink accent',
-    preview: ['#030303', '#FF0055', '#0A0A0A'], emoji: '🖤',
-  },
   light: {
-    label: 'Light', pitch: 'Clean studio canvas.', mood: 'Paper white · minimal contrast',
-    preview: ['#F5F5F5', '#FF0055', '#FFFFFF'], emoji: '🤍',
+    label: 'Light', pitch: 'Bright studio white with punchy colour bars.', mood: 'Coral · cobalt · candy gradients',
+    preview: ['#F4F6FA', '#FF0055', '#2563EB'], emoji: '🤍',
+  },
+  dark: {
+    label: 'Dark', pitch: 'Midnight slate layers — bars glow, not flat black.', mood: 'Charcoal depth · neon jewel bars',
+    preview: ['#12141C', '#FF0055', '#60A5FA'], emoji: '🖤',
   },
   cyberpunk: {
-    label: 'Cyberpunk City', pitch: 'Terminal neon, scanlines, glowing chrome.', mood: 'Tech-forward · danger in hot pink',
-    preview: ['#02040A', '#00FF9C', '#00C2FF'], emoji: '🌃',
+    label: 'Cyberpunk City', pitch: 'Pink, cyan, violet — arcade night in the city.', mood: 'Hot magenta · electric blue · acid lime',
+    preview: ['#06040F', '#FF00AA', '#00F0FF'], emoji: '🌃',
   },
   vintage: {
-    label: 'Aesthetic Vintage', pitch: 'Warm parchment & sepia — memory-journal energy.', mood: 'Serif · soft gold · premium calm',
-    preview: ['#EDE4D3', '#8B4513', '#C9A227'], emoji: '📜',
+    label: 'Muji Aesthetic', pitch: 'Cream paper and warm wood — calm retail calm.', mood: 'MUJI cream · natural oak · serif warmth',
+    preview: ['#F5F0E6', '#8B6F47', '#B8956A'], emoji: '🪵',
   },
   zen: {
-    label: 'Zen Minimal', pitch: 'Apple-Notes quiet — hairlines & light type.', mood: 'White space · highest perceived premium',
-    preview: ['#FAFAFA', '#000000', '#E6E6E6'], emoji: '◯',
+    label: 'Zen Minimal', pitch: 'Vintage linen and sage — breathe easy.', mood: 'Warm stone · muted sage · soft relief',
+    preview: ['#F2EDE4', '#6B7B6B', '#A8B5A0'], emoji: '◯',
   },
   y2k: {
-    label: 'Y2K Bubblegum', pitch: 'Loud pink-purple, thick borders, offset shadow.', mood: 'TikTok-native · instantly recognisable',
-    preview: ['#2A0838', '#FF2BA6', '#C77DFF'], emoji: '💿',
-  },
-  nordic: {
-    label: 'Nordic Fjord', pitch: 'Deep slate calm with aurora teal & ice blue.', mood: 'Scandi serious · pro & casual',
-    preview: ['#141E26', '#2DD4BF', '#38BDF8'], emoji: '🧊',
-  },
-  brutalist: {
-    label: 'Brutalist Zine', pitch: 'Newsprint, 3px black rules, yellow highlight.', mood: 'No other cleaner looks like this',
-    preview: ['#F2F0E6', '#000000', '#FFE600'], emoji: '📰',
+    label: 'Y2K Bubblegum', pitch: 'Candy-bright arcade vibes — cute and playful.', mood: 'Bubblegum pink · mint cyan · game UI',
+    preview: ['#F5E6FF', '#FF6EC7', '#7BF0FF'], emoji: '💿',
   },
 };
 
@@ -681,7 +659,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType>({} as ThemeContextType);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeId, setThemeIdState] = useState<ThemeId>('dark');
+  const [themeId, setThemeIdState] = useState<ThemeId>('light');
   const [language, setLanguageState] = useState<LanguageId>('en');
   const [isPro, setIsProState] = useState(false);
   const [isAdmin, setIsAdminState] = useState(false);
@@ -752,7 +730,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (th) {
           const raw = th as string;
           const mapped = (LEGACY_THEME_STORAGE[raw] ?? raw) as ThemeId;
-          const next: ThemeId = (mapped in THEMES) ? mapped : 'dark';
+          const next: ThemeId = (mapped in THEMES) ? mapped : 'light';
           setThemeIdState(next);
           if (next !== raw) void AsyncStorage.setItem('@dumpit_theme', next);
         }
@@ -872,11 +850,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       void AsyncStorage.setItem('@dumpit_bonus_swipes', String(nextBonus));
       const uid = userRef.current?.uid;
       if (uid && isSupabaseConfigured()) {
-        void supabase
-          .from('subscriptions')
-          .update({ bonus_swipes: nextBonus })
-          .eq('user_id', uid)
-          .then(() => {}, () => {});
+        void syncBonusSwipesRow(uid, nextBonus);
       }
       return nextBonus;
     });

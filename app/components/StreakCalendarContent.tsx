@@ -3,6 +3,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '../(tabs)/ThemeContext';
+import { StreakHeroBanner } from './streak/StreakHeroBanner';
+import { STREAK_FIRE_THRESHOLD, StreakFire } from './streak/StreakFire';
 import {
   daysInMonth,
   loadStreakState,
@@ -87,12 +89,11 @@ export function StreakCalendarContent() {
     year: 'numeric',
   });
 
+  const onFire = current >= STREAK_FIRE_THRESHOLD;
+
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.brand, { color: theme.textMuted }]}>photodumps</Text>
-
-      <Text style={[styles.streakNum, { color: theme.text }]}>{current}</Text>
-      <Text style={[styles.streakLbl, { color: theme.textSub }]}>day streak</Text>
+      <StreakHeroBanner streak={current} best={best} />
 
       <View style={styles.monthNav}>
         <Pressable
@@ -147,6 +148,11 @@ export function StreakCalendarContent() {
                   futureDay && { opacity: 0.35 },
                 ]}
               >
+                {isActive && onFire && isToday ? (
+                  <View style={styles.dayFire}>
+                    <StreakFire size={14} color={theme.accent} active />
+                  </View>
+                ) : null}
                 <Text
                   style={[
                     styles.dayTxt,
@@ -162,35 +168,12 @@ export function StreakCalendarContent() {
         })}
       </View>
 
-      <Text style={[styles.footer, { color: theme.textSub }]}>
-        Best streak: {best} {best === 1 ? 'day' : 'days'}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { width: '100%', paddingHorizontal: 8, paddingTop: 8 },
-  brand: {
-    textAlign: 'center',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 3,
-    marginBottom: 8,
-  },
-  streakNum: {
-    textAlign: 'center',
-    fontSize: 56,
-    fontWeight: '900',
-    letterSpacing: -2,
-    marginTop: 4,
-  },
-  streakLbl: {
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 22,
-  },
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -248,10 +231,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  footer: {
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 4,
+  dayFire: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
   },
 });

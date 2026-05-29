@@ -18,7 +18,6 @@ function shouldHideStreakOrb(pathname: string): boolean {
   const p = pathname || '';
   if (p.includes('/streak')) return true;
   if (p.includes('/auth')) return true;
-  if (p.includes('/landing')) return true;
   if (p.includes('/onboarding')) return true;
   return false;
 }

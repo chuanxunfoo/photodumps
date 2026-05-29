@@ -1,0 +1,28 @@
+# Supabase project: photodumps
+# Deploy from repo root:  npm run deploy:stripe
+
+project_id = "ozuaijxdifqnbuavuelm"
+
+[functions.create-checkout-session]
+verify_jwt = true
+
+[functions.verify-checkout-session]
+verify_jwt = true
+
+[functions.create-billing-portal]
+verify_jwt = true
+
+[functions.create-payment-sheet]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.gmail-detox]
+verify_jwt = true
+
+[functions.gmail-oauth-exchange]
+verify_jwt = true
+
+[functions.gmail-oauth-redirect]
+verify_jwt = false

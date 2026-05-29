@@ -6,12 +6,12 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'react-native';
 
-/** Max long edge for editor-quality cutout. */
-export const CUTOUT_MAX_DIMENSION = 480;
-/** Live / gallery — small uploads = faster cloud cutout (seconds). */
-export const CUTOUT_LIVE_DIMENSION = 256;
-/** Cloud upload cap when not in live mode. */
-export const CUTOUT_CLOUD_DIMENSION = 384;
+/** Max long edge for editor-quality cutout (Vision / Core ML). */
+export const CUTOUT_MAX_DIMENSION = 1024;
+/** Live camera scan — higher = sharper masks (Apple Vision on iOS 17+). */
+export const CUTOUT_LIVE_DIMENSION = 640;
+/** Gallery / picker before cutout. */
+export const CUTOUT_CLOUD_DIMENSION = 768;
 export const COLLAGE_BG_MAX_DIMENSION = 1280;
 
 function withFileScheme(path: string): string {

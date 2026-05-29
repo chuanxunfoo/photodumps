@@ -5,8 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import React, { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StripeRoot } from '../_lib/stripe/StripeRoot';
 import { ThemeProvider, useTheme } from './ThemeContext';
-import { createSessionFromUrl } from './authOAuth';
+import { isOAuthSession } from '../_lib/authSession';
+import { createSessionFromUrl, parseOAuthRedirectParams } from './authOAuth';
 import { supabase } from './supabase';
 import { safeReplace } from '../_lib/safeNavigate';
 import { recordDailyOpen } from '../_lib/streakLogic';
@@ -14,33 +16,79 @@ import { getOrCreateStatsSessionId } from '../_lib/statsSession';
 import type { UserProfile } from './ThemeContext';
 
 function DeepLinkHandler() {
-  const { setUser } = useTheme();
+  const { setUser, refreshPlanFromSupabase } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
-    Linking.getInitialURL().then(url => { if (url) handleAuthURL(url); });
-    const sub = Linking.addEventListener('url', ({ url }) => handleAuthURL(url));
+    Linking.getInitialURL().then((url) => { if (url) void handleURL(url); });
+    const sub = Linking.addEventListener('url', ({ url }) => void handleURL(url));
     return () => sub.remove();
   }, []);
+
+  const handleURL = async (url: string) => {
+    if (!url) return;
+    if (url.includes('stripe-return')) {
+      const { parseStripeReturnUrl, verifyCheckoutSession } = await import('../_lib/stripe/checkout');
+      const { sessionId, cancelled } = parseStripeReturnUrl(url);
+      if (!cancelled && sessionId) {
+        await verifyCheckoutSession(sessionId);
+        await refreshPlanFromSupabase();
+      }
+      return;
+    }
+    await handleAuthURL(url);
+  };
 
   const handleAuthURL = async (url: string) => {
     if (!url || !url.includes('auth-callback')) return;
     try {
+      const params = parseOAuthRedirectParams(url);
+      if (params.error) {
+        safeReplace('/auth?error=1');
+        return;
+      }
+
+      if (params.type === 'recovery') {
+        const session = await createSessionFromUrl(url);
+        if (!session) {
+          safeReplace('/auth?error=1');
+          return;
+        }
+        const u = session.user;
+        const meta = u.user_metadata as { username?: string } | undefined;
+        await setUser({
+          uid: u.id,
+          email: u.email ?? '',
+          username: meta?.username ?? u.email?.split('@')[0] ?? 'user',
+          isLoggedIn: true,
+        });
+        safeReplace('/auth?recovery=1');
+        return;
+      }
+
       const session = await createSessionFromUrl(url);
       if (!session) return;
-      const u = session.user;
-      const meta = u.user_metadata as { username?: string } | undefined;
-      const profile: UserProfile = {
-        uid: u.id,
-        email: u.email ?? '',
-        username: meta?.username ?? u.email?.split('@')[0] ?? 'user',
-        isLoggedIn: true,
-      };
-      await setUser(profile);
-      const onboard = await AsyncStorage.getItem('@dumpit_onboard');
-      safeReplace(onboard ? '/hub' : '/onboarding');
+
+      if (isOAuthSession(session)) {
+        const u = session.user;
+        const meta = u.user_metadata as { username?: string } | undefined;
+        const profile: UserProfile = {
+          uid: u.id,
+          email: u.email ?? '',
+          username: meta?.username ?? u.email?.split('@')[0] ?? 'user',
+          isLoggedIn: true,
+        };
+        await setUser(profile);
+        const onboard = await AsyncStorage.getItem('@dumpit_onboard');
+        safeReplace(onboard ? '/hub' : '/onboarding');
+        return;
+      }
+
+      await supabase.auth.signOut();
+      safeReplace('/auth?verified=1');
     } catch (e) {
       console.warn('Deep link auth error:', e);
+      safeReplace('/auth?error=1');
     }
   };
 
@@ -69,9 +117,9 @@ function TabsLayout() {
         <Tabs.Screen name="dump" options={{ href: null }} />
         <Tabs.Screen name="explore" options={{ href: null }} />
         <Tabs.Screen name="insights" options={{ href: null }} />
+        <Tabs.Screen name="email-clean" options={{ href: null }} />
         <Tabs.Screen name="onboarding" options={{ href: null }} />
         <Tabs.Screen name="auth" options={{ href: null }} />
-        <Tabs.Screen name="landing" options={{ href: null }} />
         <Tabs.Screen name="subscribe" options={{ href: null }} />
         <Tabs.Screen name="subscription" options={{ href: null }} />
         <Tabs.Screen name="payment" options={{ href: null }} />
@@ -109,8 +157,8 @@ function AppGate() {
   useEffect(() => {
     let mounted = true;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && mounted) {
-        AsyncStorage.getItem('@dumpit_onboard').then(onboard => {
+      if (event === 'SIGNED_IN' && session && mounted && isOAuthSession(session)) {
+        AsyncStorage.getItem('@dumpit_onboard').then((onboard) => {
           if (mounted) safeReplace(onboard ? '/hub' : '/onboarding');
         });
       }
@@ -125,10 +173,12 @@ function AppGate() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <DeepLinkHandler />
-        <AppGate />
-      </ThemeProvider>
+      <StripeRoot>
+        <ThemeProvider>
+          <DeepLinkHandler />
+          <AppGate />
+        </ThemeProvider>
+      </StripeRoot>
     </SafeAreaProvider>
   );
 }

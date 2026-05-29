@@ -57,7 +57,7 @@ export function DraggableCutout({
 
   const pan = Gesture.Pan()
     .onBegin(() => {
-      runOnJS(onSelect)?.();
+      if (onSelect) runOnJS(onSelect)();
       startX.value = tx.value;
       startY.value = ty.value;
     })

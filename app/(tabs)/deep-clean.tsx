@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ticker } from './Ticker';
+import { textOnAccent } from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
 
 const { width, height } = Dimensions.get('window');
@@ -149,8 +150,8 @@ export default function DeepCleanScreen() {
               style={s.paywallBtn}
             >
               <View style={s.paywallBtnInner}>
-                <Sparkles size={16} color="#FFF" />
-                <Text style={s.paywallBtnText}>Upgrade to Pro</Text>
+                <Sparkles size={16} color={textOnAccent(theme)} />
+                <Text style={[s.paywallBtnText, { color: textOnAccent(theme) }]}>Upgrade to Pro</Text>
               </View>
             </TouchableOpacity>
             <Text style={[s.paywallFine, { color: theme.textMuted }]}>

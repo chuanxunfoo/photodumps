@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell, BookmarkIcon, CircleDot, Crown, FileText, Globe, HelpCircle, LifeBuoy, Palette, Settings, Star,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
@@ -15,15 +15,12 @@ import { PREMIUM_THEMES, resolveTypeface, useTheme } from '../../(tabs)/ThemeCon
 import { HubPageChrome } from './HubPageChrome';
 import { SupportModal } from './SupportModal';
 import {
-  GlowBanner, LanguageModal, PRO_LOOK_CARD_W, PRO_LOOK_SNAP, ThemeModal, ThemeShowcaseCard,
-  assignUniqueBannerGradients, exploreBannerVibe,
+  HubNavRow, LanguageModal, PRO_LOOK_CARD_W, PRO_LOOK_SNAP, ThemeModal, ThemeShowcaseCard,
 } from './exploreUi';
 import { hubPageStyles as es } from './hubPageStyles';
 
 const EUGENE_PAPER = require('../../assets/explore/eugene-paper.png');
 const PALM_KL = require('../../assets/explore/palm-kl.png');
-
-const GENERAL_SLOTS = [1, 8, 17, 4, 3, 5, 18, 9, 11, 13, 14] as const;
 
 type Props = { active?: boolean };
 
@@ -33,9 +30,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
-  const vibe = exploreBannerVibe(themeId, theme.isDark);
-  const bannerColors = useMemo(() => assignUniqueBannerGradients(vibe, [...GENERAL_SLOTS]), [vibe]);
-  const color = (slot: number) => bannerColors.get(slot);
+  const ic = () => '#FFFFFF';
   const [showTheme, setShowTheme] = useState(false);
   const [showLang, setShowLang] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
@@ -64,23 +59,13 @@ export default function HubGeneralsPage({ active = false }: Props) {
               <Text style={[es.galleryHint, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>{ex.sectionEveryoneHint}</Text>
             </View>
             <View style={es.section}>
-              <GlowBanner slot={1} vibe={vibe} theme={theme} fonts={fonts} colors={color(1)} title={ex.settings} subtitle={ex.settingsSub} icon={<Settings size={22} color="#FFF" />} onPress={go('/settings')} />
-              <GlowBanner slot={8} vibe={vibe} theme={theme} fonts={fonts} colors={color(8)} title={ex.bookmarks} subtitle={ex.bookmarksSub} italic icon={<BookmarkIcon size={22} color="#FFF" />} onPress={go('/explore-bookmarks')} />
-              <GlowBanner slot={17} vibe={vibe} theme={theme} fonts={fonts} colors={color(17)} title={ex.notifications} subtitle={ex.notificationsSub} icon={<Bell size={22} color="#FFF" />} onPress={go('/notifications')} />
-              <GlowBanner slot={4} vibe={vibe} theme={theme} fonts={fonts} colors={color(4)} title={ex.faq} subtitle={ex.faqSub} icon={<HelpCircle size={22} color="#FFF" />} onPress={go('/explore-faq')} />
-              <GlowBanner slot={3} vibe={vibe} theme={theme} fonts={fonts} colors={color(3)} title={ex.rateUs} subtitle={ex.rateUsSub} italic icon={<Star size={22} color="#FFF" />} onPress={go('/explore-rate')} />
-              <GlowBanner slot={5} vibe={vibe} theme={theme} fonts={fonts} colors={color(5)} title={ex.support} subtitle={ex.supportSub} icon={<LifeBuoy size={22} color="#FFF" />} onPress={() => setShowSupport(true)} />
-              <GlowBanner
-                slot={18}
-                vibe={vibe}
-                theme={theme}
-                fonts={fonts}
-                colors={color(18)}
-                title={ex.spinWheel}
-                subtitle={ex.spinWheelSub}
-                icon={<CircleDot size={22} color="#FFF" />}
-                onPress={go('/spin-wheel')}
-              />
+              <HubNavRow theme={theme} themeId={themeId} slot={0} fonts={fonts} title={ex.settings} subtitle={ex.settingsSub} icon={<Settings size={22} color={ic(0)} />} onPress={go('/settings')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={1} fonts={fonts} title={ex.bookmarks} subtitle={ex.bookmarksSub} icon={<BookmarkIcon size={22} color={ic(1)} />} onPress={go('/explore-bookmarks')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={2} fonts={fonts} title={ex.notifications} subtitle={ex.notificationsSub} icon={<Bell size={22} color={ic(2)} />} onPress={go('/notifications')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={3} fonts={fonts} title={ex.faq} subtitle={ex.faqSub} icon={<HelpCircle size={22} color={ic(3)} />} onPress={go('/explore-faq')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={4} fonts={fonts} title={ex.rateUs} subtitle={ex.rateUsSub} icon={<Star size={22} color={ic(4)} />} onPress={go('/explore-rate')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={5} fonts={fonts} title={ex.support} subtitle={ex.supportSub} icon={<LifeBuoy size={22} color={ic(5)} />} onPress={() => setShowSupport(true)} />
+              <HubNavRow theme={theme} themeId={themeId} slot={6} fonts={fonts} title={ex.spinWheel} subtitle={ex.spinWheelSub} icon={<CircleDot size={22} color={ic(6)} />} onPress={go('/spin-wheel')} />
             </View>
 
             <View style={[es.proLooksRail, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
@@ -126,8 +111,8 @@ export default function HubGeneralsPage({ active = false }: Props) {
             </View>
 
             <View style={es.section}>
-              <GlowBanner slot={9} vibe={vibe} theme={theme} fonts={fonts} colors={color(9)} title={ex.appTheme} subtitle={ex.appThemeSub} proLock={!isPro && !isAdmin} icon={<Palette size={22} color="#FFF" />} onPress={() => { if (!isPro && !isAdmin) { openSubscription(); return; } setShowTheme(true); }} />
-              <GlowBanner slot={11} vibe={vibe} theme={theme} fonts={fonts} colors={color(11)} title={ex.languages} subtitle={ex.languagesSub} proLock={!isPro && !isAdmin} icon={<Globe size={22} color="#FFF" />} onPress={() => { if (!isPro && !isAdmin) { openSubscription(); return; } setShowLang(true); }} />
+              <HubNavRow theme={theme} themeId={themeId} slot={7} fonts={fonts} title={ex.appTheme} subtitle={ex.appThemeSub} icon={<Palette size={22} color={ic(7)} />} onPress={() => setShowTheme(true)} />
+              <HubNavRow theme={theme} themeId={themeId} slot={8} fonts={fonts} title={ex.languages} subtitle={ex.languagesSub} icon={<Globe size={22} color={ic(8)} />} onPress={() => setShowLang(true)} />
             </View>
 
             <View style={[es.letterOuter, { borderColor: theme.border }]}>
@@ -147,8 +132,8 @@ export default function HubGeneralsPage({ active = false }: Props) {
               <Text style={[es.galleryHint, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>{ex.sectionLegalHint}</Text>
             </View>
             <View style={es.section}>
-              <GlowBanner slot={13} vibe={vibe} theme={theme} fonts={fonts} colors={color(13)} title={ex.terms} subtitle={ex.termsSub} icon={<FileText size={22} color="#FFF" />} onPress={go('/explore-legal-terms')} />
-              <GlowBanner slot={14} vibe={vibe} theme={theme} fonts={fonts} colors={color(14)} title={ex.privacy} subtitle={ex.privacySub} icon={<FileText size={22} color="#FFF" />} onPress={go('/explore-legal-privacy')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={9} fonts={fonts} title={ex.terms} subtitle={ex.termsSub} icon={<FileText size={22} color={ic(9)} />} onPress={go('/explore-legal-terms')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={10} fonts={fonts} title={ex.privacy} subtitle={ex.privacySub} icon={<FileText size={22} color={ic(10)} />} onPress={go('/explore-legal-privacy')} />
             </View>
 
             <View style={[es.klFooter, { borderColor: theme.border }]}>

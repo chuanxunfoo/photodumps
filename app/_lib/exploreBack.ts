@@ -17,6 +17,7 @@ export type HubChildRoute =
   | '/insights'
   | '/sticker-studio'
   | '/widgets'
+  | '/email-clean'
   | '/widget-editor'
   | '/photobooth'
   | '/photobooth-gallery';
