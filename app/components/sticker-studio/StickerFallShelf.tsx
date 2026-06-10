@@ -11,7 +11,7 @@ import type { SavedSticker } from '../../_lib/stickerStudio/types';
 import { layoutStickersOnShelf } from './stickerHubFilters';
 
 const SHELF_H = 248;
-const STICKER_SZ = 68;
+const STICKER_SZ = 80;
 
 type ThemeSlice = {
   bg2: string;

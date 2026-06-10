@@ -79,6 +79,26 @@ export function TraceControls({ trace, onChange, theme }: Props) {
         })}
       </ScrollView>
 
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          onChange({ ...trace, dashWrap: !trace.dashWrap });
+        }}
+        style={[
+          st.dashToggle,
+          { borderColor: trace.dashWrap ? '#FFD54F' : theme.border },
+          trace.dashWrap && st.dashToggleOn,
+        ]}
+      >
+        <Text style={[st.dashToggleLbl, { color: trace.dashWrap ? theme.accent : theme.textSub }]}>
+          {trace.dashWrap ? 'Dash wrap on' : '+ Dash wrap'}
+        </Text>
+        <Text style={[st.dashToggleHint, { color: theme.textMuted }]}>
+          Dashed ring around shape — independent of trace style
+        </Text>
+      </TouchableOpacity>
+
       {hasTrace && (
         <>
           <Text style={[st.sectionLbl, { color: theme.textMuted, marginTop: 14 }]}>TRACE COLOUR</Text>
@@ -172,4 +192,15 @@ const st = StyleSheet.create({
   slider: { width: '100%', height: 36, marginTop: 2 },
   sliderEnds: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4 },
   sliderEnd: { fontSize: 10, fontWeight: '600' },
+  dashToggle: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  dashToggleOn: { backgroundColor: 'rgba(255,213,79,0.14)', borderColor: '#FFD54F' },
+  dashToggleLbl: { fontSize: 12, fontWeight: '900' },
+  dashToggleHint: { fontSize: 9, marginTop: 4, lineHeight: 12, fontWeight: '600' },
 });

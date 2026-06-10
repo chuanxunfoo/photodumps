@@ -10,9 +10,9 @@ export const SUBSCRIPTION_PLANS: Record<
 };
 
 export const SPIN_PACKS: Record<string, { usdCents: number; name: string; bonusSwipes: number }> = {
-  basic: { usdCents: 199, name: 'Basic Spin Pack', bonusSwipes: 25 },
-  plus: { usdCents: 499, name: 'Plus Spin Pack', bonusSwipes: 75 },
-  max: { usdCents: 999, name: 'Max Spin Pack', bonusSwipes: 200 },
+  basic: { usdCents: 99, name: 'Basic Spin Pack', bonusSwipes: 25 },
+  plus: { usdCents: 199, name: 'Plus Spin Pack', bonusSwipes: 75 },
+  max: { usdCents: 299, name: 'Max Spin Pack', bonusSwipes: 200 },
 };
 
 export function priceIdForPlan(planId: StripePlanId): string | undefined {

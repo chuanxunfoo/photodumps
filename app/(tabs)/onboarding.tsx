@@ -14,6 +14,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { HOBBY_WEEKLY_SWIPES } from '../_lib/appConfig';
+import { markOnboardingComplete } from '../_lib/appLaunchFlow';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -92,6 +93,7 @@ const PRO_UNLOCKS = [
   'Duplicates finder — burst & junk stacks',
   'Full storage analytics & history',
   '4 premium colour themes',
+  'Email clean — Gmail spam & promo batches',
   'Priority support · zero ads',
 ];
 
@@ -653,8 +655,8 @@ export default function OnboardingScreen() {
   };
 
   const finish = async () => {
-    await AsyncStorage.setItem('@dumpit_onboard', 'true');
-    router.replace('/auth');
+    await markOnboardingComplete();
+    router.replace('/subscription?postOnboarding=1');
   };
 
   const skip = () => {

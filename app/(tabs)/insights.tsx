@@ -23,7 +23,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
-import { GlassTicker } from '../components/GlassTicker';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { getLocaleUi } from '../_lib/localeUi';
 import { resetStatsSession, getOrCreateStatsSessionId, getStatsSessionId } from '../_lib/statsSession';
@@ -35,7 +34,6 @@ import {
   resolveAuthUserId,
   type UserStatsAggregateRow,
 } from '../_lib/userStatsSupabase';
-import { tickerHuesForTheme, tickerTextColorForTheme } from '../components/hub/exploreUi';
 import { insightsHeroGradient, insightsHeroText } from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
 
@@ -266,14 +264,6 @@ export default function InsightsScreen() {
             </LinearGradient>
           </Animated.View>
 
-          <GlassTicker
-            text={`${u.insightsLibraryPulse} · ${analytics.totalCount} · ${u.insightsScreenshots} ${analytics.ssCount}`}
-            hues={tickerHuesForTheme(themeId, theme)}
-            textColor={tickerTextColorForTheme(themeId)}
-            blurTint={theme.isDark ? 'dark' : 'light'}
-            speed={9500}
-          />
-
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>{u.insightsAccountTotals}</Text>
           {(() => {
             const hasAny =
@@ -343,7 +333,7 @@ export default function InsightsScreen() {
               color={theme.accent}
               n={emailStats.count}
               theme={theme}
-              hint={emailStats.count > 0 ? u.insightsGmailHint : 'Run Inbox Detox from Features'}
+              hint={emailStats.count > 0 ? u.insightsGmailHint : 'Run email clean from Features'}
             />
           </View>
         </ScrollView>

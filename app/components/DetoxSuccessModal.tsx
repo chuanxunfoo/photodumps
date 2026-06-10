@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { primaryButtonColors } from '../_lib/buttonContrast';
 import type { ThemeColors } from '../(tabs)/ThemeContext';
 import { resolveTypeface } from '../(tabs)/ThemeContext';
 
@@ -56,6 +57,8 @@ export function DetoxSuccessModal({
   const iconColor = kind === 'permission' ? theme.accent : theme.success;
   const ringBg = kind === 'permission' ? theme.accentSoft : theme.success + '22';
 
+  const primaryBtn = primaryButtonColors(theme);
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -84,9 +87,9 @@ export function DetoxSuccessModal({
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={onClose}
-            style={[styles.btn, { backgroundColor: theme.accent }]}
+            style={[styles.btn, { backgroundColor: primaryBtn.bg }]}
           >
-            <Text style={[styles.btnTxt, { fontFamily: fonts.titleFont }]}>Done</Text>
+            <Text style={[styles.btnTxt, { color: primaryBtn.text, fontFamily: fonts.titleFont }]}>Done</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -132,5 +135,5 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  btnTxt: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  btnTxt: { fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
 });

@@ -5,6 +5,10 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, 'app', '.env') });
 
+/** Public AdMob app id — must be in the binary or iOS kills the app at launch. */
+const ADMOB_IOS_APP_ID =
+  process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID ?? 'ca-app-pub-6354540982110974~4388147190';
+
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
 const googleIosUrlScheme = googleIosClientId
   ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/i, '')}`
@@ -31,9 +35,19 @@ module.exports = ({ config }) => ({
     bundleIdentifier: 'com.yourname.dumpitapp',
     entitlements: {
       'com.apple.security.application-groups': ['group.com.yourname.dumpitapp.widgets'],
+      'com.apple.developer.applesignin': ['Default'],
     },
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
+      GADApplicationIdentifier: ADMOB_IOS_APP_ID,
+      NSUserTrackingUsageDescription:
+        'This helps show relevant ads and keep photodumps free.',
+      NSCameraUsageDescription:
+        'photodumps needs the camera for Photobooth.',
+      NSMicrophoneUsageDescription:
+        'photodumps needs the microphone when recording video.',
+      NSPhotoLibraryUsageDescription:
+        'photodumps needs access to your photos to help you clean and organize your library.',
       CFBundleURLTypes: [
         {
           CFBundleURLSchemes: ['dumpit', ...(googleIosUrlScheme ? [googleIosUrlScheme] : [])],
@@ -95,18 +109,12 @@ module.exports = ({ config }) => ({
     ],
     'react-native-compressor',
     'expo-notifications',
+    'expo-apple-authentication',
     '@bacons/apple-targets',
-    [
-      '@stripe/stripe-react-native',
-      {
-        merchantIdentifier: process.env.EXPO_PUBLIC_STRIPE_MERCHANT_ID ?? 'merchant.com.yourname.dumpitapp',
-        enableGooglePay: false,
-      },
-    ],
     [
       'react-native-google-mobile-ads',
       {
-        iosAppId: process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID,
+        iosAppId: ADMOB_IOS_APP_ID,
       },
     ],
     'react-native-iap',

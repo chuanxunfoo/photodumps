@@ -1,5 +1,4 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { Crown, Mail, Shield, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
@@ -21,8 +20,8 @@ import {
   type ProfilePlanType,
 } from '../_lib/profilePlanSupabase';
 import { textOnAccent } from '../_lib/themeContrast';
-import { useSplashReplay } from '../_lib/splashReplay';
-import { supabase } from './supabase';
+import { AccountAuthSheet, openAccountActionsSheet, runAccountDeleteFlow } from '../components/AccountAuthSheet';
+import { signOutAccount } from '../_lib/accountAuth';
 import { useTheme } from './ThemeContext';
 
 function InfoRow({
@@ -49,13 +48,32 @@ function InfoRow({
 const ADMIN_PLANS: ProfilePlanType[] = ['hobby', 'pro', 'admin'];
 
 export default function SettingsScreen() {
-  const { replaySplash } = useSplashReplay();
   const goBack = useExploreAwareBack();
   const { theme, user, isPro, isAdmin, swipesLeft, openSubscription, setUser, language } = useTheme();
   const u = getLocaleUi(language);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPlan, setAdminPlan] = useState<ProfilePlanType>('hobby');
   const [adminBusy, setAdminBusy] = useState(false);
+
+  const openAccountMenu = () => {
+    if (!user?.isLoggedIn) {
+      Alert.alert(u.settingsAccount, 'Use Generals → account to sign in with Apple.');
+      return;
+    }
+    openAccountActionsSheet({
+      onSignOut: () => {
+        void signOutAccount(setUser);
+      },
+      onDelete: () => {
+        void runAccountDeleteFlow({ setUser, labels: u });
+      },
+      labels: {
+        signOut: u.settingsSignOut,
+        deleteAccount: u.settingsDeleteAccount,
+        cancel: u.captionCancel,
+      },
+    });
+  };
 
   const plan = isAdmin ? u.settingsPlanAdmin : isPro ? u.settingsPlanPro : u.settingsPlanHobby;
   const planHint = isPro || isAdmin ? u.settingsUnlimited : `${swipesLeft} ${u.settingsSwipesHint}`;
@@ -183,14 +201,10 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={[s.secondaryBtn, { borderColor: theme.border }]}
-          onPress={async () => {
-            await supabase.auth.signOut();
-            await setUser(null);
-            replaySplash(() => router.replace('/onboarding'));
-          }}
+          onPress={openAccountMenu}
           activeOpacity={0.88}
         >
-          <Text style={[s.secondaryBtnText, { color: theme.textSub }]}>{u.settingsSignOut}</Text>
+          <Text style={[s.secondaryBtnText, { color: theme.textSub }]}>{u.settingsAccount}</Text>
         </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -274,4 +288,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   planChipText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  dangerBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: '#D32F2F',
+  },
+  dangerBtnText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
 });

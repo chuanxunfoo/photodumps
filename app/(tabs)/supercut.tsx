@@ -227,7 +227,7 @@ const qm = StyleSheet.create({
 });
 
 export default function SupercutScreen() {
-  useRequireProFeature();
+  const proAllowed = useRequireProFeature();
   const goBack = useExploreAwareBack();
   const { theme, themeId, language, user } = useTheme();
   const u = getLocaleUi(language);
@@ -344,6 +344,8 @@ export default function SupercutScreen() {
   };
 
   const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.95] });
+
+  if (!proAllowed) return null;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>

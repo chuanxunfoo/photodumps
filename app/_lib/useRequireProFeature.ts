@@ -1,21 +1,59 @@
-import { useFocusEffect } from 'expo-router';
+import { type Href, router, useFocusEffect } from 'expo-router';
+
 import { useCallback } from 'react';
 
-import { safeReplace } from './safeNavigate';
+import { InteractionManager } from 'react-native';
+
+
+
 import { useTheme } from '../(tabs)/ThemeContext';
 
+
+
 /**
+
  * Blocks Hobby users who deep-link into a Pro-only screen.
- * Opens subscription once, then returns to hub Features.
+
+ * Sends them to the subscription page (no blank pro screen flash).
+
  */
-export function useRequireProFeature() {
-  const { isPro, isAdmin, openSubscription } = useTheme();
+
+export function useRequireProFeature(): boolean {
+
+  const { isPro, isAdmin } = useTheme();
+
+  const allowed = isPro || isAdmin;
+
+
 
   useFocusEffect(
+
     useCallback(() => {
-      if (isPro || isAdmin) return;
-      openSubscription();
-      safeReplace('/hub?page=features');
-    }, [isPro, isAdmin, openSubscription]),
+
+      if (allowed) return;
+
+      InteractionManager.runAfterInteractions(() => {
+
+        try {
+
+          router.replace('/subscription' as Href);
+
+        } catch {
+
+          setTimeout(() => router.replace('/subscription' as Href), 50);
+
+        }
+
+      });
+
+    }, [allowed]),
+
   );
+
+
+
+  return allowed;
+
 }
+
+

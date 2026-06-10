@@ -3,12 +3,11 @@
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { MinimalBackButton } from '../components/MinimalBackButton';
-import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useExploreAwareBack } from '../_lib/exploreBack';
-import { PRIVACY_POLICY_URL } from '../_lib/legalUrls';
+import { openPrivacyOnWeb } from '../_lib/openLegalDocument';
 import { getLegalCopy } from '../_lib/localeContent';
 import { useTheme } from './ThemeContext';
 
@@ -80,7 +79,7 @@ export default function ExploreLegalPrivacyScreen() {
           </View>
           <TouchableOpacity
             style={s.webLink}
-            onPress={() => { void WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL); }}
+            onPress={() => { void openPrivacyOnWeb(); }}
           >
             <Text style={s.webLinkTxt}>Open full policy on the web</Text>
           </TouchableOpacity>

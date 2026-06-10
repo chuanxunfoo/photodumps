@@ -35,6 +35,10 @@ import {
   consumeVideoTrimTrial,
   hasVideoTrimTrial,
 } from '../_lib/hobbyFeatureAccess';
+import {
+  cacheVideoForTrim,
+  isLikelyICloudErrorMessage,
+} from '../_lib/videoLocalUri';
 import { resolveTypeface, useTheme } from './ThemeContext';
 
 const { width: W } = Dimensions.get('window');
@@ -57,7 +61,7 @@ const NATIVE_VIDEO_EXPORT_FALLBACK =
 const NATIVE_VIDEO_COMPRESS_FALLBACK =
   'Could not compress. Compression uses the same native module (expo-video-processing). Use a development or production build — not Expo Go.';
 const ICLOUD_IMPORT_HELP =
-  'This clip is only in iCloud right now. Keep this screen open on Wi-Fi and we will try downloading it automatically. If Apple still blocks access, open the video in Photos once until download completes, then import again.';
+  'This video is stored in iCloud. We tried downloading it automatically — keep Wi‑Fi on, wait a moment, and try again. You can also open the clip in Photos until you see the download badge disappear, then re-import.';
 
 type QualityId = 'smart' | '144' | '360' | '720' | '1080' | '4k';
 
@@ -113,36 +117,6 @@ async function resolvePickedVideoUri(asset: ImagePicker.ImagePickerAsset): Promi
     /* use picker URI */
   }
   return fallback;
-}
-
-function isLikelyICloudErrorMessage(msg: string): boolean {
-  return /3164/i.test(msg) || /networkAccessRequired/i.test(msg) || /PHPhotosErrorDomain/i.test(msg);
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Best effort: ask Photos to download the original from iCloud and return a local URI. */
-async function ensureLocalAssetUri(assetId: string, retries = 5): Promise<string | null> {
-  try {
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted' && status !== 'limited') return null;
-  } catch {
-    return null;
-  }
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      const info = await MediaLibrary.getAssetInfoAsync(assetId, { shouldDownloadFromNetwork: true });
-      if (info.localUri) return info.localUri;
-      if (info.uri?.startsWith('file://')) return info.uri;
-    } catch {
-      // Retry in case iCloud fetch is still in progress.
-    }
-    await sleep(700 + i * 450);
-  }
-  return null;
 }
 
 function normalizeToFileUri(uriOrPath: string): string {
@@ -206,6 +180,8 @@ export default function ExploreTrimScreen() {
   const [quality, setQuality] = useState<QualityId>('smart');
   const [busy, setBusy] = useState(false);
   const [importingFromIcloud, setImportingFromIcloud] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importLabel, setImportLabel] = useState('');
   const [trackW, setTrackW] = useState(Math.max(200, W - 32));
   const [qualityOpen, setQualityOpen] = useState(false);
   const canNativeProcess = isVideoProcessingAvailable();
@@ -294,72 +270,48 @@ export default function ExploreTrimScreen() {
         videoMaxDuration: 0,
         ...(Platform.OS === 'android' ? { defaultTab: 'videos' as const } : {}),
         ...(Platform.OS === 'ios'
-          ? { preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current }
+          ? {
+              preferredAssetRepresentationMode:
+                ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+            }
           : {}),
       });
 
       if (res.canceled || !res.assets?.[0]) return;
       const a = res.assets[0];
       setPickedAssetId(a.assetId ?? null);
-      const u = await resolvePickedVideoUri(a);
+
+      let u = a.uri ?? '';
+      if (!u) {
+        u = await resolvePickedVideoUri(a);
+      }
+
       if (!u) {
         Alert.alert('Import failed', 'No file URI was returned for this video.');
         return;
       }
 
+      setImportingFromIcloud(true);
+      setImportProgress(0.06);
+      setImportLabel('Opening video…');
       setPickedUri(u);
 
-      const base = FileSystem.cacheDirectory;
-      const dest = base ? `${base}trim_source_${Date.now()}.mp4` : null;
+      const outPath = await cacheVideoForTrim(u, a.assetId ?? null, (p) => {
+        setImportProgress(p.fraction);
+        setImportLabel(p.label);
+      });
 
-      let outPath: string | null = null;
-      if (u.startsWith('file://') && dest) {
-        try {
-          await FileSystem.copyAsync({ from: u, to: dest });
-          outPath = dest;
-        } catch {
-          outPath = u;
-        }
-      } else if (u.startsWith('file://')) {
-        outPath = u;
-      } else if (dest) {
-        try {
-          await FileSystem.copyAsync({ from: u, to: dest });
-          outPath = dest;
-        } catch (e: any) {
-          const msg = typeof e?.message === 'string' ? e.message : 'Could not copy video to app storage.';
-          const icloud = isLikelyICloudErrorMessage(msg);
-          if (icloud && a.assetId) {
-            setImportingFromIcloud(true);
-            try {
-              const localUri = await ensureLocalAssetUri(a.assetId, 8);
-              if (localUri) {
-                try {
-                  await FileSystem.copyAsync({ from: localUri, to: dest });
-                  outPath = dest;
-                } catch {
-                  outPath = localUri;
-                }
-              }
-            } finally {
-              setImportingFromIcloud(false);
-            }
-          }
-          if (!outPath) {
-          Alert.alert(
-            'Import copy failed',
-            icloud
-              ? ICLOUD_IMPORT_HELP
-              : `${msg}\n\nPreview may still work; export needs a file the device can read.`,
-          );
-            outPath = u;
-          }
-        }
-      } else {
-        outPath = u;
+      setImportingFromIcloud(false);
+      setImportProgress(0);
+      setImportLabel('');
+
+      if (!outPath) {
+        Alert.alert('Could not import video', ICLOUD_IMPORT_HELP);
+        return;
       }
 
-      setFsPath(outPath);
+      setPickedUri(outPath.startsWith('file://') ? outPath : u);
+      setFsPath(outPath.startsWith('file://') ? outPath : u);
 
       // Picker reports seconds; timeline is corrected from the player once `durationMillis` is known.
       const raw = typeof a.duration === 'number' && a.duration > 0 ? a.duration : 0;
@@ -378,6 +330,8 @@ export default function ExploreTrimScreen() {
       const msg = typeof e?.message === 'string' ? e.message : String(e);
       const icloud = isLikelyICloudErrorMessage(msg);
       setImportingFromIcloud(false);
+      setImportProgress(0);
+      setImportLabel('');
       Alert.alert(
         'Could not import video',
         icloud
@@ -681,12 +635,29 @@ export default function ExploreTrimScreen() {
 
         <Text style={styles.screenSub}>
           {importingFromIcloud
-            ? 'Downloading original from iCloud… keep this screen open.'
+            ? (importLabel || 'Preparing your video…')
             : 'Drag the white line to scrub. Timeline length comes from the player once the file loads — picker times are often wrong.'}
         </Text>
 
+        {importingFromIcloud ? (
+          <View style={styles.importProgressCard}>
+            <ActivityIndicator color="#FF0055" size="large" />
+            <Text style={styles.importProgressTitle}>{importLabel || 'Downloading from iCloud…'}</Text>
+            <Text style={styles.importProgressHint}>Stay on Wi‑Fi and keep this screen open.</Text>
+            <View style={styles.importProgressTrack}>
+              <View style={[styles.importProgressFill, { width: `${Math.round(Math.min(1, importProgress) * 100)}%` }]} />
+            </View>
+            <Text style={styles.importProgressPct}>{Math.round(Math.min(1, importProgress) * 100)}%</Text>
+          </View>
+        ) : null}
+
         {!pickedUri ? (
-          <TouchableOpacity style={styles.importHero} onPress={() => void pickVideo()} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={[styles.importHero, importingFromIcloud && { opacity: 0.45 }]}
+            onPress={() => void pickVideo()}
+            disabled={importingFromIcloud}
+            activeOpacity={0.9}
+          >
             <LinearGradient colors={['#2a2a32', '#1a1a20']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
             <Upload size={40} color="#fff" />
             <Text style={styles.importTitle}>IMPORT VIDEO</Text>
@@ -867,6 +838,32 @@ const styles = StyleSheet.create({
   },
   importTitle: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 2 },
   importSub: { color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', lineHeight: 20, fontWeight: '600' },
+  importProgressCard: {
+    marginHorizontal: 18,
+    marginBottom: 14,
+    padding: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    gap: 10,
+  },
+  importProgressTitle: { color: '#fff', fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  importProgressHint: { color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  importProgressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  importProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: '#FF0055',
+  },
+  importProgressPct: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
   previewShell: { alignItems: 'center', marginTop: 12 },
   previewBorder: {
     width: Math.min(W - 32, 360),

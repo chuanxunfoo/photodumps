@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getLocaleUi } from '../_lib/localeUi';
+import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import {
   deleteWidget,
   getActiveWidgetId,
@@ -44,6 +45,7 @@ const CARD_W = (SW - PAD * 2 - GAP) / COLS;
 const SIZE_FILTERS: WidgetFamily[] = ['small', 'medium', 'large'];
 
 export default function WidgetsScreen() {
+  const proAllowed = useRequireProFeature();
   const router = useRouter();
   const goBack = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -108,6 +110,8 @@ export default function WidgetsScreen() {
       },
     });
   };
+
+  if (!proAllowed) return null;
 
   const openNew = (templateId: string) => {
     router.push({

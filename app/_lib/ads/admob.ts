@@ -49,7 +49,11 @@ export async function initMobileAds(): Promise<void> {
   if (!initOnce) {
     initOnce = mod.mobileAds()
       .initialize()
-      .then(() => {});
+      .then(() => {})
+      .catch((e) => {
+        console.warn('[admob] init skipped', e);
+        initOnce = null;
+      });
   }
   return initOnce;
 }

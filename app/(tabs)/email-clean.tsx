@@ -10,20 +10,25 @@ import {
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { connectGmailAccount, getWebGmailRedirectUri, hasGmailConnection, markGmailOAuthResume } from '../_lib/gmailConnect';
+import { connectGmailAccount, getWebGmailRedirectUri, hasGmailConnection, hasGmailModifyPermission } from '../_lib/gmailConnect';
 import { recordEmailDetoxCleanup } from '../_lib/emailDetoxStats';
 import { cleanupGmailDetox, GMAIL_DETOX_BATCH_SIZE, previewGmailDetoxBatch, scanGmailDetox, type DetoxGroupKey, type GmailDetoxBatchPreview, type GmailDetoxGroup } from '../_lib/gmailDetox';
 import {
   clearGmailDetoxReady,
+  clearOAuthRedirectMarker,
   consumeGmailOAuthReturn,
   isGmailDetoxReady,
   markGmailDetoxReady,
   allowPermissionPromptAgain,
   markGmailPendingAction,
+  markGmailOAuthResume,
   shouldBlockAutoPermissionPrompt,
+  type GmailOAuthReturnPayload,
   type GmailPendingAction,
 } from '../_lib/gmailDetoxSetup';
 import { useExploreAwareBack } from '../_lib/exploreBack';
+import { useRequireProFeature } from '../_lib/useRequireProFeature';
+import { dangerButtonColors, primaryButtonColors, secondaryButtonColors } from '../_lib/buttonContrast';
 import { DetoxPermissionModal } from '../components/DetoxPermissionModal';
 import { DetoxSuccessModal, type DetoxSuccessKind } from '../components/DetoxSuccessModal';
 import { MinimalBackButton } from '../components/MinimalBackButton';
@@ -102,6 +107,13 @@ function isScopeError(msg: string): boolean {
   );
 }
 
+function isReconnectError(msg: string): boolean {
+  return (
+    msg === 'GMAIL_RECONNECT_REQUIRED' ||
+    /invalid_grant|expired or revoked|GMAIL_RECONNECT_REQUIRED/i.test(msg)
+  );
+}
+
 function handleScopeFailure(
   uid: string,
   setters: {
@@ -116,7 +128,7 @@ function handleScopeFailure(
   setters.setGmailReady(false);
   if (uid) void clearGmailDetoxReady(uid);
   setters.setInfoText(
-    'Delete access is still missing. Tap “Finish Google setup” on this screen — avoid opening the Google popup in a loop.',
+    'On Google, allow “Read, compose, and send emails” (includes trash). Tap Finish Google setup and check every box.',
   );
 }
 
@@ -225,6 +237,8 @@ function ConfirmCleanupModal({
   loading,
   theme,
   fonts,
+  secondaryBtn,
+  dangerBtn,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -234,6 +248,8 @@ function ConfirmCleanupModal({
   loading: boolean;
   theme: ReturnType<typeof useTheme>['theme'];
   fonts: ReturnType<typeof resolveTypeface>;
+  secondaryBtn: ReturnType<typeof secondaryButtonColors>;
+  dangerBtn: ReturnType<typeof dangerButtonColors>;
 }) {
   const slide = useRef(new Animated.Value(SCREEN_H)).current;
   const removable = queue.filter((q) => q.count > 0);
@@ -269,14 +285,14 @@ function ConfirmCleanupModal({
               <Trash2 size={22} color={theme.danger} />
             </View>
             <Text style={[s.modalTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
-              Confirm small cleanup batch
+              Delete this batch?
             </Text>
             <Text style={[s.modalSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
               {loading
-                ? 'Measuring the exact next batch from Gmail…'
+                ? 'Checking batch size…'
                 : batchCount > 0
-                  ? `Exactly ${batchCount} email${batchCount === 1 ? '' : 's'} (${formatStorage(batchBytes)}) will be removed — sized individually from Gmail, not estimated.`
-                  : 'No emails ready to delete in this batch. Try rescanning.'}
+                  ? `${batchCount} email${batchCount === 1 ? '' : 's'} · ${formatStorage(batchBytes)} will be removed.`
+                  : 'Nothing to delete right now.'}
             </Text>
             {!loading && batchPreview && batchPreview.remainingCount > 0 && (
               <View style={[s.batchPill, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
@@ -311,14 +327,14 @@ function ConfirmCleanupModal({
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={onClose}
-              style={[s.modalCancel, { backgroundColor: theme.bg3, borderColor: theme.border }]}
+              style={[s.modalCancel, { backgroundColor: secondaryBtn.bg, borderColor: secondaryBtn.border }]}
             >
-              <Text style={[s.modalCancelTxt, { color: theme.text, fontFamily: fonts.bodyFont }]}>Cancel</Text>
+              <Text style={[s.modalCancelTxt, { color: secondaryBtn.text, fontFamily: fonts.bodyFont }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.9} onPress={onConfirm} disabled={loading || batchCount <= 0} style={{ flex: 1, opacity: loading || batchCount <= 0 ? 0.5 : 1 }}>
-              <View style={[s.modalConfirm, { backgroundColor: theme.danger }]}>
-                <Trash2 size={16} color="#fff" />
-                <Text style={[s.modalConfirmTxt, { fontFamily: fonts.titleFont }]}>
+              <View style={[s.modalConfirm, { backgroundColor: dangerBtn.bg }]}>
+                <Trash2 size={16} color={dangerBtn.text} />
+                <Text style={[s.modalConfirmTxt, { color: dangerBtn.text, fontFamily: fonts.titleFont }]}>
                   {loading ? 'Loading…' : `Delete ${batchCount} email${batchCount === 1 ? '' : 's'}`}
                 </Text>
               </View>
@@ -331,6 +347,7 @@ function ConfirmCleanupModal({
 }
 
 export default function EmailCleanScreen() {
+  const proAllowed = useRequireProFeature();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const goBack = useExploreAwareBack('features');
@@ -346,6 +363,7 @@ export default function EmailCleanScreen() {
   const [scanDepthPerGroup, setScanDepthPerGroup] = useState(60);
   const [cleanupBatchMax, setCleanupBatchMax] = useState(GMAIL_DETOX_BATCH_SIZE);
   const [nextBatch, setNextBatch] = useState<GmailDetoxBatchPreview>({ batchCount: 0, batchBytes: 0, remainingCount: 0 });
+  const [deleteCandidateIds, setDeleteCandidateIds] = useState<string[]>([]);
   const [confirmPreview, setConfirmPreview] = useState<GmailDetoxBatchPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [lastBatchDeleted, setLastBatchDeleted] = useState(0);
@@ -373,7 +391,6 @@ export default function EmailCleanScreen() {
   const scanTicker = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
   const pendingAfterOAuth = useRef<GmailPendingAction>('scan');
-  const oauthReturnHandled = useRef(false);
 
   const animatedOffset = progress.interpolate({
     inputRange: [0, 1],
@@ -397,7 +414,7 @@ export default function EmailCleanScreen() {
     return 0;
   }, [phase, progressPct, processedCount, removableCount, removedQueue, queue.length]);
 
-  const applyScanResult = useCallback((res: {
+  const applyScanResult = useCallback(async (res: {
     groups: GmailDetoxGroup[];
     totalBytes: number;
     totalMessages: number;
@@ -406,6 +423,7 @@ export default function EmailCleanScreen() {
     cleanupBatchMax: number;
     nextBatch: GmailDetoxBatchPreview;
     canDelete: boolean;
+    deleteCandidateIds: string[];
   }) => {
     setQueue(toQueue(res.groups));
     setTotalBytes(res.totalBytes);
@@ -414,19 +432,26 @@ export default function EmailCleanScreen() {
     setScanDepthPerGroup(res.scanDepthPerGroup);
     setCleanupBatchMax(res.cleanupBatchMax);
     setNextBatch(res.nextBatch);
-    setNeedsDeleteSetup(!res.canDelete);
-    setGmailReady(res.canDelete);
-    if (res.canDelete) {
+    setDeleteCandidateIds(res.deleteCandidateIds);
+
+    const uid = user?.uid ?? '';
+    let canClean = res.canDelete;
+    if (!canClean) canClean = await hasGmailModifyPermission();
+    if (!canClean && uid) canClean = await isGmailDetoxReady(uid);
+
+    setNeedsDeleteSetup(!canClean);
+    setGmailReady(canClean);
+    if (canClean) {
       setErrorText(null);
-      const uid = user?.uid ?? '';
-      if (uid) void markGmailDetoxReady(uid);
+      setInfoText(null);
+      if (uid) await markGmailDetoxReady(uid);
     }
   }, [user?.uid]);
 
   const refreshScanInBackground = useCallback(async () => {
     await new Promise((resolve) => setTimeout(resolve, 1800));
     const scan = await scanGmailDetox();
-    if (scan.ok) applyScanResult(scan);
+    if (scan.ok) await applyScanResult(scan);
   }, [applyScanResult]);
 
   const gmailRedirectUri = useMemo(() => getWebGmailRedirectUri(), []);
@@ -500,12 +525,24 @@ export default function EmailCleanScreen() {
       pulse.stopAnimation();
       setPhase('idle');
       setQueue(FALLBACK_GROUPS);
+      if (isReconnectError(res.error)) {
+        const uid = user?.uid ?? '';
+        if (uid) void clearGmailDetoxReady(uid);
+        setGmailReady(false);
+        setNeedsDeleteSetup(false);
+        setNeedsConnect(true);
+        setInfoText('Your Google connection expired. Tap Start scan to sign in to Gmail again.');
+        allowPermissionPromptAgain();
+        pendingAfterOAuth.current = 'scan';
+        setPermissionOpen(true);
+        return;
+      }
       setErrorText(res.error);
       setNeedsConnect(/google identity not connected|refresh token missing|grant gmail access/i.test(res.error));
       return;
     }
 
-    applyScanResult(res);
+    await applyScanResult(res);
     setLastBatchDeleted(0);
     setLastBatchBytes(0);
     setProcessedCount(FALLBACK_GROUPS.length);
@@ -516,34 +553,33 @@ export default function EmailCleanScreen() {
       easing: Easing.inOut(Easing.quad),
       useNativeDriver: false,
     }).start(() => setPhase('result'));
-  }, [applyScanResult, broomTilt, broomX, progress, pulse, startBroom, stopScanTicker]);
+  }, [applyScanResult, broomTilt, broomX, progress, pulse, startBroom, stopScanTicker, user?.uid]);
 
   const beginScan = useCallback(async () => {
     const uid = user?.uid ?? '';
-    const linked = await hasGmailConnection();
+    let linked = await hasGmailConnection();
     const ready = uid ? await isGmailDetoxReady(uid) : false;
     setGmailReady(ready);
+    setInfoText(null);
 
-    // Popup only when Gmail was never connected — not on every visit.
+    if (!linked && (await shouldBlockAutoPermissionPrompt())) {
+      await new Promise((r) => setTimeout(r, 800));
+      linked = await hasGmailConnection();
+    }
+
     if (!linked) {
-      if (shouldBlockAutoPermissionPrompt()) {
-        setNeedsDeleteSetup(true);
-        setInfoText(
-          'Google sign-in finished. If delete still does not work, tap “Finish Google setup” below.',
-        );
-        return;
-      }
-      allowPermissionPromptAgain();
+      await allowPermissionPromptAgain();
       pendingAfterOAuth.current = 'scan';
       setPermissionOpen(true);
       return;
     }
 
+    await clearOAuthRedirectMarker();
     await runScanOnly();
   }, [runScanOnly, user?.uid]);
 
-  const openPermissionForClean = useCallback(() => {
-    allowPermissionPromptAgain();
+  const openPermissionForClean = useCallback(async () => {
+    await allowPermissionPromptAgain();
     pendingAfterOAuth.current = 'clean';
     setPermissionOpen(true);
   }, []);
@@ -569,11 +605,12 @@ export default function EmailCleanScreen() {
       useNativeDriver: false,
     }).start();
 
-    const res = await cleanupGmailDetox(selected);
+    const res = await cleanupGmailDetox(selected, deleteCandidateIds);
     if (!res.ok) {
       progress.stopAnimation();
       broomX.stopAnimation();
       broomTilt.stopAnimation();
+      pulse.stopAnimation();
       setPhase('result');
       setQueue((prev) => prev.map((q) => (q.count > 0 ? { ...q, status: 'ready' as const } : q)));
       if (isScopeError(res.error)) {
@@ -591,18 +628,46 @@ export default function EmailCleanScreen() {
 
     if (res.deletedCount <= 0) {
       progress.stopAnimation();
+      broomX.stopAnimation();
+      broomTilt.stopAnimation();
+      pulse.stopAnimation();
       setPhase('result');
-      setErrorText('Gmail did not remove any messages this batch. Tap Start scan to refresh.');
+      setErrorText('Gmail did not remove any messages this batch. Tap Scan again to refresh the list.');
       return;
     }
+
+    setDeleteCandidateIds((ids) => ids.slice(res.deletedCount));
+    setQueue((prev) => {
+      let left = res.deletedCount;
+      return prev.map((item) => {
+        if (left <= 0 || item.count <= 0) return item;
+        const drop = Math.min(item.count, left);
+        left -= drop;
+        const nextCount = item.count - drop;
+        return {
+          ...item,
+          count: nextCount,
+          bytes: nextCount > 0 ? Math.max(0, item.bytes - Math.round(item.bytes * (drop / item.count))) : 0,
+          status: nextCount > 0 ? ('ready' as const) : ('removed' as const),
+        };
+      });
+    });
 
     setNeedsDeleteSetup(false);
     setGmailReady(true);
     setLastBatchDeleted(res.deletedCount);
     setLastBatchBytes(res.deletedBytes);
-    setNextBatch(res.nextBatch);
+    const remainingAfter = Math.max(0, totalMessages - res.deletedCount);
+    const nextBatchEstimate: GmailDetoxBatchPreview = {
+      batchCount: Math.min(cleanupBatchMax, remainingAfter),
+      batchBytes: remainingAfter > 0
+        ? Math.round(Math.max(0, totalBytes - res.deletedBytes) * Math.min(cleanupBatchMax, remainingAfter) / remainingAfter)
+        : 0,
+      remainingCount: Math.max(0, remainingAfter - cleanupBatchMax),
+    };
+    setNextBatch(nextBatchEstimate);
     setTotalBytes(Math.max(0, totalBytes - res.deletedBytes));
-    setTotalMessages(Math.max(0, totalMessages - res.deletedCount));
+    setTotalMessages(remainingAfter);
 
     void recordEmailDetoxCleanup({
       userId: user?.uid ?? '',
@@ -617,7 +682,7 @@ export default function EmailCleanScreen() {
       useNativeDriver: false,
     }).start();
 
-    const stillQueued = res.remainingCount > 0 || res.nextBatch.batchCount > 0;
+    const stillQueued = remainingAfter > 0;
     setPhase(stillQueued ? 'result' : 'done');
 
     showSuccess({
@@ -625,12 +690,12 @@ export default function EmailCleanScreen() {
       title: 'Emails deleted successfully',
       message: `${res.deletedCount} email${res.deletedCount === 1 ? '' : 's'} removed · ${formatStorage(res.deletedBytes)} freed from Gmail.`,
       detail: stillQueued
-        ? `Next batch ready: ${res.nextBatch.batchCount} email${res.nextBatch.batchCount === 1 ? '' : 's'} · ${formatStorage(res.nextBatch.batchBytes)}. Saved to My Stats.`
+        ? `About ${remainingAfter.toLocaleString()} left in this scan. Tap Delete again for the next batch of up to ${cleanupBatchMax}. Saved to My Stats.`
         : 'These categories look clean for now. Saved to My Stats.',
     });
 
     void refreshScanInBackground();
-  }, [progress, queue, refreshScanInBackground, showSuccess, startBroom, totalBytes, totalMessages, user?.uid, broomTilt, broomX]);
+  }, [cleanupBatchMax, deleteCandidateIds, progress, pulse, queue, refreshScanInBackground, showSuccess, startBroom, totalBytes, totalMessages, user?.uid, broomTilt, broomX]);
 
   const requestCleanupConfirmationInternal = useCallback(async () => {
     const removable = queue.filter((q) => q.count > 0);
@@ -642,7 +707,34 @@ export default function EmailCleanScreen() {
     setConfirmOpen(true);
     setConfirmPreview(null);
     setPreviewLoading(true);
-    const preview = await previewGmailDetoxBatch(removable.map((q) => q.key));
+
+    const groupKeys = removable.map((q) => q.key);
+    const ids = deleteCandidateIds.slice(0, cleanupBatchMax);
+    if (ids.length > 0) {
+      const totalRemovable = removable.reduce((sum, q) => sum + q.count, 0);
+      setConfirmPreview({
+        batchCount: ids.length,
+        batchBytes: nextBatch.batchBytes,
+        remainingCount: Math.max(0, totalRemovable - ids.length),
+      });
+      setPreviewLoading(false);
+      const preview = await previewGmailDetoxBatch(groupKeys, ids);
+      if (preview.ok && preview.batchCount > 0) {
+        setConfirmPreview({
+          batchCount: preview.batchCount,
+          batchBytes: preview.batchBytes,
+          remainingCount: Math.max(0, totalRemovable - preview.batchCount),
+        });
+        return;
+      }
+      if (!preview.ok) {
+        setConfirmOpen(false);
+        setErrorText(preview.error);
+        return;
+      }
+    }
+
+    const preview = await previewGmailDetoxBatch(groupKeys);
     setPreviewLoading(false);
     if (!preview.ok) {
       setConfirmOpen(false);
@@ -663,12 +755,13 @@ export default function EmailCleanScreen() {
       setInfoText('No emails ready to delete right now. Rescan to refresh.');
       return;
     }
+    const totalRemovable = removable.reduce((sum, q) => sum + q.count, 0);
     setConfirmPreview({
       batchCount: preview.batchCount,
       batchBytes: preview.batchBytes,
-      remainingCount: preview.remainingCount,
+      remainingCount: Math.max(0, totalRemovable - preview.batchCount),
     });
-  }, [queue, user?.uid]);
+  }, [cleanupBatchMax, deleteCandidateIds, nextBatch.batchBytes, queue, user?.uid]);
 
   const requestCleanupConfirmation = useCallback(async () => {
     if (!isPaid) {
@@ -678,7 +771,8 @@ export default function EmailCleanScreen() {
 
     const uid = user?.uid ?? '';
     const linked = await hasGmailConnection();
-    const ready = uid ? await isGmailDetoxReady(uid) : false;
+    const modifyOk = await hasGmailModifyPermission();
+    const ready = uid ? (await isGmailDetoxReady(uid)) || modifyOk : false;
     setGmailReady(ready);
     if (!ready) {
       if (!linked) {
@@ -686,20 +780,75 @@ export default function EmailCleanScreen() {
         return;
       }
       setNeedsDeleteSetup(true);
-      setInfoText('Approve “Manage your mail” once — tap “Finish Google setup” below.');
+      setInfoText('On Google, allow “Read, compose, and send emails” — tap Finish Google setup below.');
       return;
     }
 
     await requestCleanupConfirmationInternal();
   }, [isPaid, openPermissionForClean, openSubscription, requestCleanupConfirmationInternal, user?.uid]);
 
+  const handleOAuthReturn = useCallback(
+    async (payload: GmailOAuthReturnPayload) => {
+      const uid = user?.uid ?? '';
+      pendingAfterOAuth.current = payload.pending;
+      setErrorText(null);
+      setPermissionOpen(false);
+      await clearOAuthRedirectMarker();
+
+      const modifyOk = payload.hasModify || (await hasGmailModifyPermission());
+      if (modifyOk && uid) {
+        await markGmailDetoxReady(uid);
+        setGmailReady(true);
+        setNeedsDeleteSetup(false);
+        setInfoText(null);
+        showSuccess({
+          kind: 'permission',
+          title: 'Gmail connected',
+          message: 'You’re all set. Scan your inbox and confirm each small cleanup batch.',
+        });
+      } else {
+        setGmailReady(false);
+        setNeedsDeleteSetup(true);
+        setInfoText(
+          'Google did not grant full Gmail access. Remove photodumps from Google permissions, then tap Finish Google setup and allow “Read, compose, and send emails”.',
+        );
+      }
+
+      if (payload.pending === 'clean' && modifyOk) {
+        void requestCleanupConfirmationInternal();
+        return;
+      }
+      if (totalMessages > 0 && phase === 'result') return;
+      await runScanOnly();
+    },
+    [phase, requestCleanupConfirmationInternal, runScanOnly, showSuccess, totalMessages, user?.uid],
+  );
+
+  const syncGmailAccessState = useCallback(async () => {
+    const uid = user?.uid ?? '';
+    if (!uid) return;
+    const linked = await hasGmailConnection();
+    if (!linked) {
+      setGmailReady(false);
+      setNeedsDeleteSetup(false);
+      return;
+    }
+    const modifyOk = await hasGmailModifyPermission();
+    const ready = await isGmailDetoxReady(uid);
+    const canClean = modifyOk || ready;
+    if (modifyOk) await markGmailDetoxReady(uid);
+    setGmailReady(canClean);
+    setNeedsDeleteSetup(!canClean);
+    if (canClean) setInfoText(null);
+  }, [user?.uid]);
+
   const handlePermissionConnect = useCallback(async () => {
-    allowPermissionPromptAgain();
+    await allowPermissionPromptAgain();
     setOauthConnecting(true);
     setErrorText(null);
     const action = pendingAfterOAuth.current;
-    markGmailOAuthResume(action);
-    markGmailPendingAction(action);
+    await markGmailOAuthResume(action);
+    await markGmailPendingAction(action);
 
     const res = await connectGmailAccount();
     setOauthConnecting(false);
@@ -707,6 +856,25 @@ export default function EmailCleanScreen() {
     if (!res.ok) {
       if (res.error === 'Redirecting to Google…') {
         setPermissionOpen(false);
+        return;
+      }
+      const payload = await consumeGmailOAuthReturn();
+      if (payload) {
+        await handleOAuthReturn(payload);
+        return;
+      }
+      const modifyOk = await hasGmailModifyPermission();
+      if (modifyOk) {
+        setPermissionOpen(false);
+        setNeedsDeleteSetup(false);
+        setGmailReady(true);
+        setInfoText(null);
+        if (action === 'clean') void requestCleanupConfirmationInternal();
+        return;
+      }
+      if (/cancelled|did not complete/i.test(res.error)) {
+        setPermissionOpen(false);
+        setInfoText('If Google opened in the browser, tap Open photodumps there, then return to email clean.');
         return;
       }
       setErrorText(res.error);
@@ -721,17 +889,19 @@ export default function EmailCleanScreen() {
 
     setPermissionOpen(false);
     const uid = user?.uid ?? '';
-    if (res.hasModify && uid) {
+    const canClean = res.hasModify || (await hasGmailModifyPermission());
+    if (canClean && uid) {
       await markGmailDetoxReady(uid);
       setGmailReady(true);
       setNeedsDeleteSetup(false);
+      setInfoText(null);
       showSuccess({
         kind: 'permission',
         title: 'Gmail connected',
         message: 'You’re all set. We won’t ask for Google access again — just scan, confirm, and delete small batches.',
       });
     } else {
-      setErrorText('Google did not grant delete access. Try again and check all permission boxes on the Google screen.');
+      setErrorText('Google did not grant compose/send access. Allow every Gmail box on the Google screen, then try again.');
       return;
     }
 
@@ -739,19 +909,13 @@ export default function EmailCleanScreen() {
       void requestCleanupConfirmationInternal();
       return;
     }
+    if (totalMessages > 0 && phase === 'result') return;
     await runScanOnly();
-  }, [gmailRedirectUri, requestCleanupConfirmationInternal, runScanOnly, showSuccess, user?.uid]);
+  }, [gmailRedirectUri, handleOAuthReturn, phase, requestCleanupConfirmationInternal, runScanOnly, showSuccess, totalMessages, user?.uid]);
 
   useEffect(() => {
-    const uid = user?.uid ?? '';
-    if (!uid) return;
-    void (async () => {
-      const linked = await hasGmailConnection();
-      const ready = await isGmailDetoxReady(uid);
-      setGmailReady(ready);
-      setNeedsDeleteSetup(linked && !ready);
-    })();
-  }, [user?.uid]);
+    void syncGmailAccessState();
+  }, [syncGmailAccessState]);
 
   useEffect(() => {
     const id = progress.addListener(({ value }) => setProgressPct(Math.round(value * 100)));
@@ -759,44 +923,16 @@ export default function EmailCleanScreen() {
   }, [progress]);
 
   useFocusEffect(
-    useCallback(() => () => stopScanTicker(), [stopScanTicker]),
+    useCallback(() => {
+      void syncGmailAccessState();
+      void (async () => {
+        const payload = await consumeGmailOAuthReturn();
+        if (!payload) return;
+        await handleOAuthReturn(payload);
+      })();
+      return () => stopScanTicker();
+    }, [handleOAuthReturn, stopScanTicker, syncGmailAccessState]),
   );
-
-  useEffect(() => {
-    if (oauthReturnHandled.current) return;
-    const payload = consumeGmailOAuthReturn();
-    if (!payload) return;
-    oauthReturnHandled.current = true;
-
-    const uid = user?.uid ?? '';
-    pendingAfterOAuth.current = payload.pending;
-    setErrorText(null);
-    setPermissionOpen(false);
-
-    if (payload.hasModify && uid) {
-      void markGmailDetoxReady(uid).then(() => {
-        setGmailReady(true);
-        setNeedsDeleteSetup(false);
-      });
-      showSuccess({
-        kind: 'permission',
-        title: 'Gmail connected',
-        message: 'You’re all set. Scan your inbox and confirm each small cleanup batch.',
-      });
-    } else {
-      setGmailReady(false);
-      setNeedsDeleteSetup(true);
-      setInfoText(
-        'Google did not grant “Manage your mail”. Remove photodumps from Google Account → Third-party access, then tap “Finish Google setup” once.',
-      );
-    }
-
-    if (payload.pending === 'clean' && payload.hasModify) {
-      void requestCleanupConfirmationInternal();
-      return;
-    }
-    void runScanOnly();
-  }, [requestCleanupConfirmationInternal, runScanOnly, showSuccess, user?.uid]);
 
   const broomTx = broomX.interpolate({ inputRange: [0, 1], outputRange: [-22, 22] });
   const broomRz = broomTilt.interpolate({ inputRange: [0, 1], outputRange: ['-14deg', '10deg'] });
@@ -804,25 +940,30 @@ export default function EmailCleanScreen() {
 
   const batchPreviewCount = nextBatch.batchCount;
   const batchPreviewBytes = nextBatch.batchBytes;
+  const primaryBtn = useMemo(() => primaryButtonColors(theme), [theme]);
+  const secondaryBtn = useMemo(() => secondaryButtonColors(theme), [theme]);
+  const dangerBtn = useMemo(() => dangerButtonColors(theme), [theme]);
 
   const ctaLabel =
     phase === 'idle'
-      ? gmailReady ? 'Scan inbox' : 'Start scan'
+      ? 'Scan emails'
       : phase === 'scanning'
-        ? 'Analyzing mailbox…'
+        ? 'Scanning…'
         : phase === 'result'
           ? needsDeleteSetup
             ? 'Finish Google setup'
             : isPaid
             ? batchPreviewCount > 0
-              ? `Clean ${batchPreviewCount} emails (${formatStorage(batchPreviewBytes)})`
-              : 'Rescan inbox'
-            : 'Unlock Pro to clean'
+              ? `Delete ${batchPreviewCount} emails`
+              : 'Scan again'
+            : 'Unlock Pro to delete'
           : phase === 'cleaning'
-            ? 'Deleting batch…'
+            ? 'Deleting…'
           : phase === 'done'
-            ? 'Rescan inbox'
+            ? 'Scan again'
             : 'Done';
+
+  if (!proAllowed) return null;
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -830,7 +971,7 @@ export default function EmailCleanScreen() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={s.nav}>
           <MinimalBackButton onPress={goBack} color={theme.textSub} size={24} />
-          <Text style={[s.navTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>Inbox Detox</Text>
+          <Text style={[s.navTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>email clean</Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -838,7 +979,7 @@ export default function EmailCleanScreen() {
           <View style={s.hero}>
             <LinearGradient colors={[theme.bg2, theme.bg3]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.kickerPill}>
               <Sparkles size={11} color={theme.textSub} />
-              <Text style={[s.kicker, { color: theme.textSub, fontFamily: fonts.titleFont }]}>INBOX DETOX</Text>
+              <Text style={[s.kicker, { color: theme.textSub, fontFamily: fonts.titleFont }]}>email clean</Text>
               {!isPaid && (
                 <View style={s.kickerPro}>
                   <Crown size={9} color="#1A1000" />
@@ -848,9 +989,6 @@ export default function EmailCleanScreen() {
             </LinearGradient>
             <Text style={[s.title, { color: theme.text, fontFamily: fonts.titleFont }]}>
               Reclaim your Gmail storage
-            </Text>
-            <Text style={[s.subtitle, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-              One-time Google sign-in, then small confirmed batches — real sizes from Gmail, never the same estimate twice.
             </Text>
           </View>
 
@@ -906,9 +1044,9 @@ export default function EmailCleanScreen() {
 
             {phase === 'scanning' ? (
               <>
-                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Scanning live Gmail…</Text>
+                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Scanning Gmail…</Text>
                 <Text style={[s.scanSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                  Policy group {processedCount}/{FALLBACK_GROUPS.length}
+                  Category {processedCount}/{FALLBACK_GROUPS.length}
                 </Text>
               </>
             ) : phase === 'result' ? (
@@ -917,24 +1055,21 @@ export default function EmailCleanScreen() {
                   Next batch: {formatStorage(nextBatch.batchBytes)}
                 </Text>
                 <Text style={[s.scanSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                  {nextBatch.batchCount} email{nextBatch.batchCount === 1 ? '' : 's'} ready to remove now
-                  {nextBatch.remainingCount > 0 ? ` · ${nextBatch.remainingCount} more after` : ''}
-                </Text>
-                <Text style={[s.scanFine, { color: theme.textMuted, fontFamily: fonts.bodyFont }]}>
-                  Sampled matches: {formatStorage(totalBytes)} · {totalMessages.toLocaleString()} unique emails (no double-counting)
+                  {nextBatch.batchCount} ready now
+                  {nextBatch.remainingCount > 0 ? ` · ${nextBatch.remainingCount} more later` : ''}
                 </Text>
                 <View style={[s.reviewBanner, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
                   <CheckCircle2 size={14} color={theme.textSub} />
                   <Text style={[s.reviewNote, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                    Review below — nothing deleted yet
+                    Nothing deleted yet — review below
                   </Text>
                 </View>
               </>
             ) : phase === 'cleaning' ? (
               <>
-                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Removing small batch…</Text>
+                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Deleting…</Text>
                 <Text style={[s.scanSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                  Up to {cleanupBatchMax} emails · safest categories first
+                  Up to {cleanupBatchMax} emails
                 </Text>
               </>
             ) : phase === 'done' ? (
@@ -942,7 +1077,7 @@ export default function EmailCleanScreen() {
                 <View style={s.doneRow}>
                   <CheckCircle2 size={20} color={theme.success} />
                   <Text style={[s.doneText, { color: theme.text, fontFamily: fonts.bodyFont }]}>
-                    Batch complete — inbox looks cleaner
+                    Done — inbox is cleaner
                   </Text>
                 </View>
                 {lastBatchDeleted > 0 && (
@@ -953,11 +1088,9 @@ export default function EmailCleanScreen() {
               </View>
             ) : (
               <>
-                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Ready when you are</Text>
+                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Ready to scan</Text>
                 <Text style={[s.scanSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                  {gmailReady
-                    ? 'Scan to measure your inbox, then confirm each small delete batch.'
-                    : 'First tap opens a one-time Google permission popup — after that, just scan and clean.'}
+                  Tap Scan emails · connect Gmail once · delete in small batches you confirm
                 </Text>
               </>
             )}
@@ -977,10 +1110,10 @@ export default function EmailCleanScreen() {
                 <MailWarning size={18} color="#D4A853" />
                 <View style={{ flex: 1 }}>
                   <Text style={[s.setupTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
-                    One more step to delete
+                    Allow Gmail cleanup access
                   </Text>
                   <Text style={[s.setupBody, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                    Scan works, but Google has not granted “Manage your mail” yet. Tap here — approve that checkbox once, then you can clean batches.
+                    On Google, turn on “Read, compose, and send emails” (look for trash / labels). That is how delete works — Google never says “delete” by name.
                   </Text>
                 </View>
               </View>
@@ -1043,8 +1176,8 @@ export default function EmailCleanScreen() {
             disabled={phase === 'scanning' || phase === 'cleaning'}
             style={{ marginHorizontal: 20, marginTop: 20 }}
           >
-            <View style={[s.cta, { backgroundColor: theme.text }, (phase === 'scanning' || phase === 'cleaning') && { opacity: 0.7 }]}>
-              <Text style={[s.ctaText, { fontFamily: fonts.titleFont }]}>{ctaLabel}</Text>
+            <View style={[s.cta, { backgroundColor: primaryBtn.bg }, (phase === 'scanning' || phase === 'cleaning') && { opacity: 0.7 }]}>
+              <Text style={[s.ctaText, { color: primaryBtn.text, fontFamily: fonts.titleFont }]}>{ctaLabel}</Text>
             </View>
           </TouchableOpacity>
 
@@ -1058,8 +1191,8 @@ export default function EmailCleanScreen() {
               }}
               style={{ marginHorizontal: 20, marginTop: 10 }}
             >
-              <View style={[s.connectBtn, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
-                <Text style={[s.connectText, { color: theme.text, fontFamily: fonts.titleFont }]}>
+              <View style={[s.connectBtn, { backgroundColor: secondaryBtn.bg, borderColor: secondaryBtn.border }]}>
+                <Text style={[s.connectText, { color: secondaryBtn.text, fontFamily: fonts.titleFont }]}>
                   Try Google sign-in again
                 </Text>
               </View>
@@ -1068,7 +1201,7 @@ export default function EmailCleanScreen() {
 
           {!isPaid && (
             <Text style={[s.lockNote, { color: theme.textMuted, fontFamily: fonts.bodyFont }]}>
-              Scan is free. Pro unlocks small-batch cleanup ({cleanupBatchMax} emails at a time).
+              Scanning is free. Pro unlocks delete ({cleanupBatchMax} emails per batch).
             </Text>
           )}
         </ScrollView>
@@ -1077,6 +1210,7 @@ export default function EmailCleanScreen() {
       <DetoxPermissionModal
         visible={permissionOpen}
         connecting={oauthConnecting}
+        primaryBtn={primaryBtn}
         onConnect={() => void handlePermissionConnect()}
         onClose={() => setPermissionOpen(false)}
         theme={theme}
@@ -1095,6 +1229,8 @@ export default function EmailCleanScreen() {
         loading={previewLoading}
         theme={theme}
         fonts={fonts}
+        secondaryBtn={secondaryBtn}
+        dangerBtn={dangerBtn}
       />
 
       <DetoxSuccessModal
@@ -1289,7 +1425,7 @@ const s = StyleSheet.create({
   statePill: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
   statePillText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.3 },
   cta: { borderRadius: 18, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, paddingHorizontal: 16 },
-  ctaText: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  ctaText: { fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
   connectBtn: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1364,5 +1500,5 @@ const s = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
   },
-  modalConfirmTxt: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  modalConfirmTxt: { fontSize: 14, fontWeight: '900' },
 });

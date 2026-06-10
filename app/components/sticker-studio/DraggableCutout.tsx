@@ -23,7 +23,7 @@ export function DraggableCutout({
   item,
   boundW,
   boundH,
-  baseSize = 140,
+  baseSize = 158,
   onRemove,
   onChange,
   selected,

@@ -1,24 +1,31 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { AlertCircle, CheckCircle2, Lock } from 'lucide-react-native';
+import { AlertCircle, CheckCircle2 } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, Modal, Platform,
+  ActivityIndicator, Alert, Animated, Dimensions, Modal, Platform,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { openPrivacyDocument, openTermsDocument } from '../_lib/openLegalDocument';
 import { completePayment, paymentButtonLabel } from '../_lib/stripe/pay';
-import { isIosIapAvailable } from '../_lib/iap/iosIap';
 import { isStripeNativeAvailable } from '../_lib/stripe/nativeAvailable';
 import type { PaymentItem, StripePlanId } from '../_lib/stripe/plans';
-import { SPIN_PACK_META, spinPackFromTierLabel } from '../_lib/stripe/plans';
+import { SUBSCRIPTION_PLAN_META, SPIN_PACK_META, spinPackFromTierLabel } from '../_lib/stripe/plans';
 import { recordSubscriptionActivation } from '../_lib/billingSupabase';
+import { sendSubscriptionConfirmationEmail } from '../_lib/subscriptionConfirm';
 import { useTheme } from './ThemeContext';
 
 export type { PaymentItem } from '../_lib/stripe/plans';
 
 const { height: SCREEN_H } = Dimensions.get('window');
+
+const SUB_LENGTH_LABEL: Record<StripePlanId, string> = {
+  weekly: '1 week (auto-renewing)',
+  monthly: '1 month (auto-renewing)',
+  yearly: '1 year (auto-renewing)',
+};
 
 interface Props {
   visible: boolean;
@@ -41,6 +48,7 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
 
   const isSubscription = item.checkoutMode !== 'payment' && !!item.planId;
   const planId = item.planId as StripePlanId | undefined;
+  const useIap = Platform.OS === 'ios' && isSubscription;
 
   React.useEffect(() => {
     if (visible) {
@@ -54,14 +62,10 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
     }
   }, [visible, slideAnim]);
 
-  const runApplePay = useCallback(async () => {
+  const runPurchase = useCallback(async () => {
     setError('');
     if (!user?.isLoggedIn) {
       setError('Sign in to subscribe.');
-      return;
-    }
-    if (Platform.OS !== 'ios') {
-      setError('Apple Pay is available on iPhone only.');
       return;
     }
 
@@ -80,7 +84,7 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
       if (!result.ok) {
         if (result.needsAuth) {
           onClose();
-          router.push('/auth');
+          Alert.alert('Account', 'Open Generals → account to sign in with Apple, then try again.');
           return;
         }
         setError(result.error);
@@ -88,7 +92,6 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
       }
 
       if (isSubscription) {
-        // For iOS IAP flow, unlock immediately on successful StoreKit transaction.
         await setPlan('pro');
         await refreshPlanFromSupabase();
         if (user?.uid && planId) {
@@ -98,6 +101,7 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
             provider: Platform.OS === 'ios' ? 'apple' : 'stripe',
             status: 'active',
           });
+          await sendSubscriptionConfirmationEmail(planId);
         }
       } else if (req.mode === 'payment') {
         const key = req.productKey as keyof typeof SPIN_PACK_META;
@@ -115,18 +119,19 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
     }
   }, [
     addBonusSwipes, isSubscription, item, onClose, onSuccess, planId,
-    refreshPlanFromSupabase, router, setPlan, user?.isLoggedIn,
+    refreshPlanFromSupabase, router, setPlan, user?.isLoggedIn, user?.uid,
   ]);
 
-  /** Open native purchase sheet as soon as modal appears (dev/prod iOS builds). */
   React.useEffect(() => {
     if (!visible || done || processing || startedRef.current) return;
     if (!user?.isLoggedIn) return;
-    if (!(isIosIapAvailable() || (Platform.OS === 'ios' && isStripeNativeAvailable()))) return;
+    if (!(useIap || isStripeNativeAvailable())) return;
     startedRef.current = true;
-    const t = setTimeout(() => void runApplePay(), 400);
+    const t = setTimeout(() => void runPurchase(), 400);
     return () => clearTimeout(t);
-  }, [visible, done, processing, user?.isLoggedIn, runApplePay]);
+  }, [visible, done, processing, user?.isLoggedIn, runPurchase, useIap]);
+
+  const subMeta = planId ? SUBSCRIPTION_PLAN_META[planId] : null;
 
   if (!visible) return null;
 
@@ -141,13 +146,11 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
           <View style={s.header}>
             <View style={{ flex: 1 }}>
               <Text style={[s.headerTitle, { color: theme.text }]}>
-                {done ? 'Subscribed' : isIosIapAvailable() ? 'App Store' : 'Apple Pay'}
+                {done ? 'Subscribed' : useIap ? 'photodumps Pro' : 'Checkout'}
               </Text>
-              {!done && (
+              {!done && useIap && (
                 <Text style={[s.headerSub, { color: theme.textSub }]}>
-                  {isIosIapAvailable()
-                    ? 'Subscribe with your App Store account. Confirm with Side Button / Face ID.'
-                    : 'No Stripe account needed — pay with Face ID or double-click the side button.'}
+                  Auto-renewing subscription via the App Store
                 </Text>
               )}
             </View>
@@ -168,10 +171,32 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
             <View style={[s.body, { paddingBottom: insets.bottom + 20 }]}>
               <View style={[s.orderCard, { borderColor: theme.border, backgroundColor: theme.card }]}>
                 <Text style={[s.orderTitle, { color: theme.text }]}>{item.title}</Text>
-                <Text style={[s.orderSub, { color: theme.textSub }]}>{item.subtitle}</Text>
+                {isSubscription && planId && (
+                  <>
+                    <Text style={[s.orderSub, { color: theme.textSub }]}>
+                      Subscription length: {SUB_LENGTH_LABEL[planId]}
+                    </Text>
+                    <Text style={[s.orderSub, { color: theme.textSub }]}>
+                      {subMeta?.label ?? 'Pro'} · auto-renews until cancelled
+                    </Text>
+                  </>
+                )}
+                {!isSubscription && (
+                  <Text style={[s.orderSub, { color: theme.textSub }]}>{item.subtitle}</Text>
+                )}
                 <Text style={[s.orderAmt, { color: theme.accent }]}>{item.amount}</Text>
-                <Text style={[s.orderUsd, { color: theme.textMuted }]}>{item.usd}</Text>
+                {!!item.usd && (
+                  <Text style={[s.orderUsd, { color: theme.textMuted }]}>{item.usd}</Text>
+                )}
               </View>
+
+              {isSubscription && (
+                <Text style={[s.legalBlock, { color: theme.textMuted }]}>
+                  Payment will be charged to your Apple ID account at confirmation. Subscription automatically renews
+                  unless cancelled at least 24 hours before the end of the current period. Manage or cancel in Settings
+                  → Apple ID → Subscriptions.
+                </Text>
+              )}
 
               {!!error && (
                 <View style={s.errorRow}>
@@ -180,9 +205,9 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
                 </View>
               )}
 
-              {!isIosIapAvailable() && !isStripeNativeAvailable() && (
+              {!useIap && !isStripeNativeAvailable() && (
                 <Text style={[s.expoGoWarn, { color: theme.textSub }]}>
-                  No Mac? You can still pay here — we&apos;ll open Stripe in your browser. For native Apple Pay on iPhone, use an EAS cloud build (see supabase/STRIPE_SETUP.md).
+                  Opens secure Stripe checkout in your browser.
                 </Text>
               )}
 
@@ -190,29 +215,34 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
                 <View style={s.waiting}>
                   <ActivityIndicator color={theme.accent} size="large" />
                   <Text style={[s.waitingTxt, { color: theme.text }]}>
-                    Confirm with Apple Pay…
+                    {useIap ? 'Confirm in the App Store…' : 'Opening checkout…'}
                   </Text>
-                  <Text style={[s.waitingHint, { color: theme.textMuted }]}>
-                    Double-click the side button (or use Face ID)
-                  </Text>
+                  {useIap && (
+                    <Text style={[s.waitingHint, { color: theme.textMuted }]}>
+                      Use Face ID or your device passcode to confirm
+                    </Text>
+                  )}
                 </View>
               ) : (
-                <TouchableOpacity onPress={() => void runApplePay()} activeOpacity={0.88}>
+                <TouchableOpacity onPress={() => void runPurchase()} activeOpacity={0.88}>
                   <LinearGradient
-                    colors={['#1c1c1e', '#000']}
-                    style={s.appleBtn}
+                    colors={[theme.accent, theme.accent2 ?? theme.accent]}
+                    style={s.subscribeBtn}
                   >
-                    <Text style={s.appleMark}></Text>
-                    <Text style={s.appleBtnText}>{paymentButtonLabel()}</Text>
+                    <Text style={s.subscribeBtnText}>{paymentButtonLabel()}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               )}
 
-              <Text style={[s.disclaimer, { color: theme.textMuted }]}>
-                {isIosIapAvailable()
-                  ? 'Charged via App Store. Manage or cancel in Apple ID → Subscriptions.'
-                  : 'Charged through Apple Pay. Cancel anytime in Settings → subscription.'}
-              </Text>
+              <View style={s.legalLinks}>
+                <TouchableOpacity onPress={() => openTermsDocument()}>
+                  <Text style={[s.legalLink, { color: theme.accent }]}>Terms of Use</Text>
+                </TouchableOpacity>
+                <Text style={{ color: theme.textMuted }}>·</Text>
+                <TouchableOpacity onPress={() => openPrivacyDocument()}>
+                  <Text style={[s.legalLink, { color: theme.accent }]}>Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </Animated.View>
@@ -223,30 +253,30 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
 
 const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
-  sheet: { minHeight: SCREEN_H * 0.55, borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' },
+  sheet: { minHeight: SCREEN_H * 0.58, borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.35)', alignSelf: 'center', marginTop: 10 },
   header: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 22, paddingVertical: 14, gap: 12 },
   headerTitle: { fontSize: 20, fontWeight: '900' },
   headerSub: { fontSize: 12, fontWeight: '500', marginTop: 6, lineHeight: 17 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   body: { paddingHorizontal: 20 },
-  orderCard: { borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 16 },
+  orderCard: { borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 12 },
   orderTitle: { fontSize: 16, fontWeight: '800' },
-  orderSub: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  orderSub: { fontSize: 12, fontWeight: '600', marginTop: 4, lineHeight: 17 },
   orderAmt: { fontSize: 22, fontWeight: '900', marginTop: 12 },
   orderUsd: { fontSize: 11, fontWeight: '600', marginTop: 4 },
+  legalBlock: { fontSize: 11, lineHeight: 16, marginBottom: 14 },
   errorRow: { flexDirection: 'row', gap: 8, marginBottom: 12, alignItems: 'flex-start' },
   errorText: { flex: 1, fontSize: 13, fontWeight: '600' },
   waiting: { alignItems: 'center', paddingVertical: 28, gap: 10 },
   waitingTxt: { fontSize: 16, fontWeight: '800' },
   waitingHint: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
-  appleBtn: {
-    borderRadius: 14, paddingVertical: 16, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: 8,
+  subscribeBtn: {
+    borderRadius: 14, paddingVertical: 16, alignItems: 'center', justifyContent: 'center',
   },
-  appleMark: { color: '#FFF', fontSize: 20, fontWeight: '700' },
-  appleBtnText: { color: '#FFF', fontSize: 17, fontWeight: '600' },
-  disclaimer: { fontSize: 11, textAlign: 'center', marginTop: 14, lineHeight: 16 },
+  subscribeBtnText: { color: '#FFF', fontSize: 17, fontWeight: '800' },
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16 },
+  legalLink: { fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   expoGoWarn: { fontSize: 13, fontWeight: '600', lineHeight: 18, marginBottom: 12, textAlign: 'center' },
   successWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   successTitle: { fontSize: 22, fontWeight: '900' },

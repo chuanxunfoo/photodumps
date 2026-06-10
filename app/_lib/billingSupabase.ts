@@ -14,6 +14,12 @@ function planToProviderPlan(planId: StripePlanId): 'weekly' | 'monthly' | 'yearl
   return 'monthly';
 }
 
+function planToDbPlan(planId: StripePlanId): 'pro_weekly' | 'pro_monthly' | 'pro_yearly' {
+  if (planId === 'weekly') return 'pro_weekly';
+  if (planId === 'yearly') return 'pro_yearly';
+  return 'pro_monthly';
+}
+
 export async function syncBonusSwipesRow(userId: string, bonusSwipes: number): Promise<void> {
   await supabase
     .from('subscriptions')
@@ -69,7 +75,7 @@ export async function recordSubscriptionActivation(params: {
     supabase.from('subscriptions').upsert(
       {
         user_id: params.userId,
-        plan: params.planId === 'yearly' ? 'pro_yearly' : 'pro_monthly',
+        plan: planToDbPlan(params.planId),
         plan_type: providerPlan,
         status,
         provider: params.provider,

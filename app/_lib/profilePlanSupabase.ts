@@ -51,6 +51,18 @@ export async function fetchProfileByUserId(userId: string): Promise<ProfileRow |
   };
 }
 
+function rowFromRpc(data: unknown): ProfileRow | null {
+  if (!data || typeof data !== 'object') return null;
+  const r = data as Record<string, unknown>;
+  return {
+    id: String(r.id),
+    email: r.email != null ? String(r.email) : null,
+    username: r.username != null ? String(r.username) : null,
+    plan_type: normalizeProfilePlanType(r.plan_type),
+    updated_at: r.updated_at != null ? String(r.updated_at) : undefined,
+  };
+}
+
 export async function ensureProfileRow(params: {
   userId: string;
   email: string;
@@ -59,45 +71,43 @@ export async function ensureProfileRow(params: {
   phone?: string;
   planType?: ProfilePlanType;
 }): Promise<ProfileRow | null> {
-  const existing = await fetchProfileByUserId(params.userId);
-  if (existing) {
-    if (!existing.email || existing.email !== params.email) {
-      await supabase
-        .from('profiles')
-        .update({
-          email: params.email,
-          username: params.username,
-          full_name: params.fullName ?? null,
-          phone: params.phone ?? null,
-        })
-        .eq('id', params.userId);
-    }
-    return existing;
+  const email = params.email?.trim() || null;
+  const username = params.username?.trim() || `user_${params.userId.slice(0, 8)}`;
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('ensure_my_profile', {
+    p_username: username,
+    p_email: email,
+  });
+  if (!rpcError) {
+    const row = rowFromRpc(rpcData);
+    if (row) return row;
+  } else {
+    console.warn('[profiles] ensure_my_profile rpc failed', rpcError.message);
   }
+
+  const existing = await fetchProfileByUserId(params.userId);
+  if (existing) return existing;
+
   const plan = params.planType ?? 'hobby';
   const { data, error } = await supabase
     .from('profiles')
-    .insert({
-      id: params.userId,
-      email: params.email,
-      username: params.username,
-      full_name: params.fullName ?? null,
-      phone: params.phone ?? null,
-      plan_type: plan,
-    })
+    .upsert(
+      {
+        id: params.userId,
+        email,
+        username,
+        plan_type: plan,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    )
     .select('id, email, username, plan_type')
     .single();
   if (error) {
     console.warn('[profiles] insert failed', error.message);
     return null;
   }
-  const r = data as Record<string, unknown>;
-  return {
-    id: String(r.id),
-    email: r.email != null ? String(r.email) : null,
-    username: r.username != null ? String(r.username) : null,
-    plan_type: normalizeProfilePlanType(r.plan_type),
-  };
+  return rowFromRpc(data);
 }
 
 export async function updateProfilePlanType(userId: string, planType: ProfilePlanType): Promise<{ ok: boolean; error?: string }> {

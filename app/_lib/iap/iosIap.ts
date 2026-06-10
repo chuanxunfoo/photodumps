@@ -37,6 +37,44 @@ export function isIosIapAvailable(): boolean {
   return Platform.OS === 'ios' && !isExpoGo();
 }
 
+/** Restore App Store subscriptions for the current Apple ID. */
+export async function restoreIosPurchases(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  if (!isIosIapAvailable()) {
+    return { ok: false, error: 'Restore is available on iOS builds only.' };
+  }
+
+  const iap = await import('react-native-iap');
+  const { initConnection, endConnection, getAvailablePurchases } = iap;
+
+  try {
+    await initConnection();
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'App Store is unavailable right now. Try again.',
+    };
+  }
+
+  try {
+    const skus = allConfiguredIapSkus();
+    const purchases = await getAvailablePurchases();
+    const active = purchases.some(p => {
+      const id = String(p.productId ?? '').trim();
+      return skus.includes(id);
+    });
+    if (!active) {
+      return { ok: false, error: 'No active photodumps Pro subscription found for this Apple ID.' };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not restore purchases.' };
+  } finally {
+    await endConnection();
+  }
+}
+
 /**
  * Starts true App Store subscription flow (StoreKit sheet with app icon).
  */
@@ -72,7 +110,14 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
     finishTransaction,
   } = iap;
 
-  await initConnection();
+  try {
+    await initConnection();
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'App Store is unavailable right now. Try again.',
+    };
+  }
 
   try {
     const skus = allConfiguredIapSkus();

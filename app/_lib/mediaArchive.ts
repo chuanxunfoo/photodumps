@@ -1,11 +1,18 @@
-import * as MediaLibrary from 'expo-media-library';
+import type { Asset, Album, AssetsOptions } from 'expo-media-library';
 import { Platform } from 'react-native';
+
+import { withMediaLibraryMutex } from './firstLaunchPermissions';
+
+/** Lazy-load native module — top-level import crashes Hermes during hub navigation. */
+async function getMediaLibrary() {
+  return import('expo-media-library');
+}
 
 const PAGE_SIZE = 280;
 /** Photos older than this are "lost & found" candidates. */
 const RANDOM_AGE_MS = 18 * 30 * 24 * 60 * 60 * 1000;
 
-export type SwiperMediaItem = MediaLibrary.Asset & {
+export type SwiperMediaItem = Asset & {
   mediaType: 'photo' | 'video';
   sizeMB: number;
   device: string;
@@ -20,7 +27,7 @@ export const RANDOM_VAULT = {
   tagline: 'Old shots, screenshots & docs you forgot',
 } as const;
 
-export function mapAssetToSwiper(a: MediaLibrary.Asset): SwiperMediaItem {
+export function mapAssetToSwiper(a: Asset): SwiperMediaItem {
   const isVid = a.mediaType === 'video';
   return {
     ...a,
@@ -44,22 +51,26 @@ async function yieldUi(): Promise<void> {
 }
 
 export async function countAssetsInRange(createdAfter: number, createdBefore: number): Promise<number> {
-  const { totalCount } = await MediaLibrary.getAssetsAsync({
-    first: 0,
-    mediaType: ['photo', 'video'],
-    createdAfter,
-    createdBefore,
-    sortBy: 'creationTime',
+  return withMediaLibraryMutex(async () => {
+    const MediaLibrary = await getMediaLibrary();
+    const { totalCount } = await MediaLibrary.getAssetsAsync({
+      first: 0,
+      mediaType: ['photo', 'video'],
+      createdAfter,
+      createdBefore,
+      sortBy: 'creationTime',
+    });
+    return totalCount ?? 0;
   });
-  return totalCount ?? 0;
 }
 
 export async function fetchAssetsPaged(
-  options: Omit<MediaLibrary.AssetsOptions, 'first' | 'after'>,
+  options: Omit<AssetsOptions, 'first' | 'after'>,
   onProgress?: (loaded: number, total: number | null) => void,
-): Promise<MediaLibrary.Asset[]> {
+): Promise<Asset[]> {
+  const MediaLibrary = await getMediaLibrary();
   let after: string | undefined;
-  let collected: MediaLibrary.Asset[] = [];
+  let collected: Asset[] = [];
   let total: number | null = null;
   let pageIndex = 0;
 
@@ -91,8 +102,9 @@ function shuffleInPlace<T>(arr: T[]): T[] {
   return arr;
 }
 
-async function findScreenshotsAlbum(): Promise<MediaLibrary.Album | null> {
+async function findScreenshotsAlbum(): Promise<Album | null> {
   try {
+    const MediaLibrary = await getMediaLibrary();
     const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
     return albums.find(a => /screenshot/i.test(a.title)) ?? null;
   } catch {
@@ -109,11 +121,11 @@ export async function countRandomVaultAssets(): Promise<number> {
 
 export async function fetchRandomVaultAssets(
   onProgress?: (loaded: number, total: number | null) => void,
-): Promise<MediaLibrary.Asset[]> {
+): Promise<Asset[]> {
   const cutoff = Date.now() - RANDOM_AGE_MS;
-  const byId = new Map<string, MediaLibrary.Asset>();
+  const byId = new Map<string, Asset>();
 
-  const add = (list: MediaLibrary.Asset[]) => {
+  const add = (list: Asset[]) => {
     for (const a of list) byId.set(a.id, a);
     onProgress?.(byId.size, null);
   };
@@ -150,13 +162,13 @@ export async function fetchRandomVaultAssets(
   return shuffleInPlace(merged);
 }
 
-function estimateBytes(a: MediaLibrary.Asset): number {
+function estimateBytes(a: Asset): number {
   if (a.mediaType === 'video') return Math.max(400_000, a.duration * 380_000);
   return Math.max(80_000, a.width * a.height * 0.45);
 }
 
 /** Heavy photos/videos that free the most storage — not the whole roll. */
-export function scoreDeepCleanCandidate(a: MediaLibrary.Asset): number {
+export function scoreDeepCleanCandidate(a: Asset): number {
   const pixels = a.width * a.height;
   const bytes = estimateBytes(a);
   const longEdge = Math.max(a.width, a.height);
@@ -169,10 +181,11 @@ const DEEP_CLEAN_MAX_ITEMS = 420;
 
 export async function fetchDeepCleanCandidates(
   onProgress?: (loaded: number, total: number | null) => void,
-): Promise<MediaLibrary.Asset[]> {
+): Promise<Asset[]> {
+  const MediaLibrary = await getMediaLibrary();
   const pageSize = 320;
   let after: string | undefined;
-  const heavy: MediaLibrary.Asset[] = [];
+  const heavy: Asset[] = [];
   let scanned = 0;
   let total: number | null = null;
 
@@ -201,7 +214,7 @@ export async function fetchDeepCleanCandidates(
 }
 
 /** Heuristic: heavy photos / videos that free meaningful storage. */
-export function scoreStorageWeight(a: MediaLibrary.Asset): number {
+export function scoreStorageWeight(a: Asset): number {
   const isVid = a.mediaType === 'video';
   const pixels = a.width * a.height;
   const mb = isVid
@@ -211,7 +224,7 @@ export function scoreStorageWeight(a: MediaLibrary.Asset): number {
   return mb * 1.4 + longEdge / 900 + pixels / 2_500_000;
 }
 
-export function filterDeepCleanCandidates(assets: MediaLibrary.Asset[]): MediaLibrary.Asset[] {
+export function filterDeepCleanCandidates(assets: Asset[]): Asset[] {
   const MIN_MB = 2.8;
   const MIN_PIXELS = 2_200_000;
   const MIN_EDGE = 1400;

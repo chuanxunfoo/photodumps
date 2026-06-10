@@ -3,17 +3,24 @@
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  BarChart2, Check, Crown, Infinity as InfinityIcon,
+  BarChart2, Check, Crown, Infinity as InfinityIcon, Mail,
   Palette, Shield, Sparkles, Star, Zap,
 } from 'lucide-react-native';
 import { AppHeader } from '../components/AppHeader';
-import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, Dimensions, Easing, ScrollView,
+  Alert, Animated, Dimensions, Easing, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
-import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '../_lib/legalUrls';
+import { recordSubscriptionActivation } from '../_lib/billingSupabase';
+import { markPaywallComplete } from '../_lib/appLaunchFlow';
+import { safeReplace } from '../_lib/safeNavigate';
+import {
+  sendSubscriptionConfirmationEmail,
+  subscriptionSuccessMessage,
+} from '../_lib/subscriptionConfirm';
+import type { StripePlanId } from '../_lib/stripe/plans';
+import { openPrivacyDocument, openTermsDocument } from '../_lib/openLegalDocument';
 import { getSubscriptionCopy } from '../_lib/localeContent';
 import {
   calloutTextStyle,
@@ -29,7 +36,7 @@ import { useTheme } from './ThemeContext';
 
 const { width } = Dimensions.get('window');
 
-const PRO_ICONS = [InfinityIcon, Sparkles, BarChart2, Palette, Star, Check, Check, Shield];
+const PRO_ICONS = [InfinityIcon, Sparkles, BarChart2, Palette, Star, Mail, Check, Shield];
 
 type PlanId = 'free' | 'weekly' | 'monthly' | 'yearly';
 
@@ -178,20 +185,21 @@ const pc = StyleSheet.create({
   perDayTxt: { fontSize: 9, fontWeight: '900' },
 });
 
-type Props = { onClose: () => void };
+type Props = { onClose: () => void; postOnboarding?: boolean };
 
 /** Full-screen subscription page (routed at /subscription). */
-export default function SubscriptionScreen({ onClose }: Props) {
+export default function SubscriptionScreen({ onClose, postOnboarding = false }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, themeId, setPlan, refreshPlanFromSupabase, language } = useTheme();
+  const { theme, themeId, user, setPlan, refreshPlanFromSupabase, language } = useTheme();
   const heroStyle = subscriptionHeroStyle(themeId, theme);
   const callout = calloutTextStyle(theme);
   const sub = getSubscriptionCopy(language);
   const [selected, setSelected] = useState<PlanId>('monthly');
   const [showPay, setShowPay] = useState(false);
   const [payItem, setPayItem] = useState<PaymentItem | null>(null);
-  const enterOpacity = useRef(new Animated.Value(0)).current;
-  const enterY = useRef(new Animated.Value(16)).current;
+  const [iapBusy, setIapBusy] = useState(false);
+  const enterOpacity = useRef(new Animated.Value(1)).current;
+  const enterY = useRef(new Animated.Value(0)).current;
   const closingRef = useRef(false);
 
   const crownGlow = useRef(new Animated.Value(0)).current;
@@ -243,25 +251,32 @@ export default function SubscriptionScreen({ onClose }: Props) {
   }, [crownGlow]);
 
   useEffect(() => {
+    enterOpacity.setValue(0.94);
+    enterY.setValue(8);
     Animated.parallel([
       Animated.timing(enterOpacity, {
         toValue: 1,
-        duration: 230,
+        duration: 220,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(enterY, {
         toValue: 0,
-        duration: 260,
+        duration: 240,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
   }, [enterOpacity, enterY]);
 
-  const requestClose = () => {
+  const requestClose = async () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    try {
+      await markPaywallComplete();
+    } catch (e) {
+      console.warn('[subscription] markPaywallComplete failed', e);
+    }
     Animated.parallel([
       Animated.timing(enterOpacity, {
         toValue: 0,
@@ -276,8 +291,13 @@ export default function SubscriptionScreen({ onClose }: Props) {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      onClose();
-      closingRef.current = false;
+      try {
+        onClose();
+      } catch (e) {
+        console.warn('[subscription] onClose failed', e);
+      } finally {
+        closingRef.current = false;
+      }
     });
   };
 
@@ -299,12 +319,81 @@ export default function SubscriptionScreen({ onClose }: Props) {
   const featureTitle = isHobby ? sub.featHobbyTitle : sub.featProTitle;
   const featureColors = ['#FF0055', '#BF5AF2', '#00FFA3', '#FF8A00', '#FFD600', '#00E5FF', '#00FFA3', '#BF5AF2'];
 
-  const handleCTA = () => {
-    if (selected === 'free') {
-      void setPlan('hobby');
-      requestClose();
+  const handleRestore = async () => {
+    const { restoreIosPurchases } = await import('../_lib/iap/iosIap');
+    const res = await restoreIosPurchases();
+    if (res.ok) {
+      await refreshPlanFromSupabase();
+      Alert.alert('Restored', 'Your photodumps Pro subscription is active on this Apple ID.');
       return;
     }
+    Alert.alert('Restore purchases', res.error);
+  };
+
+  const finishHobbyAndEnterApp = async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    try {
+      await markPaywallComplete();
+      await new Promise((r) => setTimeout(r, 350));
+      if (postOnboarding) {
+        safeReplace('/hub?page=calendar');
+      } else {
+        onClose();
+      }
+    } catch (e) {
+      console.warn('[subscription] hobby continue failed', e);
+      safeReplace('/hub?page=calendar');
+    }
+  };
+
+  const handleCTA = async () => {
+    if (selected === 'free') {
+      await finishHobbyAndEnterApp();
+      return;
+    }
+
+    const planId = selected as StripePlanId;
+    const { isIosIapAvailable, purchaseIosSubscription } = await import('../_lib/iap/iosIap');
+
+    if (Platform.OS === 'ios' && isIosIapAvailable()) {
+      if (iapBusy) return;
+      setIapBusy(true);
+      try {
+        const result = await purchaseIosSubscription(planId);
+        if (!result.ok) {
+          if (!result.cancelled) Alert.alert('Subscription', result.error);
+          return;
+        }
+        await setPlan('pro');
+        await refreshPlanFromSupabase();
+        if (user?.uid) {
+          await recordSubscriptionActivation({
+            userId: user.uid,
+            planId,
+            provider: 'apple',
+            status: 'active',
+          });
+        }
+        if (user?.uid) {
+          const { emailSent } = await sendSubscriptionConfirmationEmail(planId);
+          const baseMsg = subscriptionSuccessMessage(planId);
+          Alert.alert(
+            'Welcome to Pro',
+            emailSent
+              ? `${baseMsg}\n\nA confirmation email was sent to ${user.email}.`
+              : baseMsg,
+          );
+        } else {
+          Alert.alert('Welcome to Pro', subscriptionSuccessMessage(planId));
+        }
+        requestClose();
+      } finally {
+        setIapBusy(false);
+      }
+      return;
+    }
+
     setPayItem({
       title: plan.payTitle,
       subtitle: plan.paySub,
@@ -326,7 +415,11 @@ export default function SubscriptionScreen({ onClose }: Props) {
     <>
       <Animated.View style={[s.fullPage, { backgroundColor: theme.bg, opacity: enterOpacity, transform: [{ translateY: enterY }] }]}>
         <SafeAreaView style={s.fullSafe} edges={['top']}>
-          <AppHeader variant="detail" onBack={requestClose} subtitle="photodumps Pro" />
+          <AppHeader
+            variant="detail"
+            onBack={postOnboarding ? undefined : requestClose}
+            subtitle="photodumps Pro"
+          />
 
           <ScrollView
             style={s.scrollView}
@@ -390,14 +483,19 @@ export default function SubscriptionScreen({ onClose }: Props) {
                 onPress={handleCTA}
                 colors={ctaColors}
                 textDark={ctaTextDark}
-                label={ctaLabel}
+                label={iapBusy ? 'Opening App Store…' : ctaLabel}
                 icon={selected !== 'free' ? <Zap size={18} color={ctaInk} /> : undefined}
               />
 
               {selected !== 'free' && (
-                <Text style={[s.ctaNote, { color: theme.textMuted }]}>
-                  {plan.usd} ({plan.myr}) · App Store · cancel anytime
-                </Text>
+                <>
+                  <Text style={[s.ctaNote, { color: theme.textMuted }]}>
+                    {plan.payTitle} · {plan.usd} ({plan.myr}) · auto-renewing · cancel anytime in Apple ID Subscriptions
+                  </Text>
+                  <Text style={[s.subDisclosure, { color: theme.textMuted }]}>
+                    Subscriptions renew automatically unless cancelled at least 24 hours before the period ends.
+                  </Text>
+                </>
               )}
 
               <View style={s.trust}>
@@ -413,14 +511,20 @@ export default function SubscriptionScreen({ onClose }: Props) {
                 ))}
               </View>
 
+              {postOnboarding && (
+                <TouchableOpacity onPress={requestClose} style={{ alignSelf: 'center', marginBottom: 8 }}>
+                  <Text style={[s.legalLink, { color: theme.textMuted }]}>Continue with Hobby (free)</Text>
+                </TouchableOpacity>
+              )}
+
               <View style={s.legal}>
-                <TouchableOpacity onPress={() => { void WebBrowser.openBrowserAsync(TERMS_OF_SERVICE_URL); }}>
+                <TouchableOpacity onPress={() => openTermsDocument()}>
                   <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.termsLink}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => { void WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL); }}>
+                <TouchableOpacity onPress={() => openPrivacyDocument()}>
                   <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.privacyLink}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => { void handleRestore(); }}>
                   <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.restore}</Text>
                 </TouchableOpacity>
               </View>
@@ -469,7 +573,8 @@ const s = StyleSheet.create({
     position: 'absolute', top: 0, bottom: 0, width: width * 0.45,
   },
   ctaTxt: { fontSize: 16, fontWeight: '900', letterSpacing: 0.8 },
-  ctaNote: { textAlign: 'center', fontSize: 11, fontWeight: '500', marginBottom: 16, lineHeight: 17 },
+  ctaNote: { textAlign: 'center', fontSize: 11, fontWeight: '500', marginBottom: 8, lineHeight: 17 },
+  subDisclosure: { textAlign: 'center', fontSize: 10, fontWeight: '500', marginBottom: 16, lineHeight: 15, paddingHorizontal: 8 },
   trust: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 14, flexWrap: 'wrap' },
   trustItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   trustTxt: { fontSize: 10, fontWeight: '700' },

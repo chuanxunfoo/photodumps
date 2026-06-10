@@ -68,6 +68,17 @@ function TracePreviewIcon({ trace, selected, theme }: { trace: TraceSettings; se
             strokeLinecap="round"
           />
         )}
+        {trace.dashWrap && (
+          <Path
+            d={HEART}
+            fill="none"
+            stroke="#F5D547"
+            strokeWidth={Math.max(1.4, strokeW * 0.55)}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            strokeDasharray="5 4"
+          />
+        )}
       </Svg>
     </View>
   );
@@ -76,7 +87,7 @@ function TracePreviewIcon({ trace, selected, theme }: { trace: TraceSettings; se
 export function StickerStyleBar({ trace, onChange, theme }: Props) {
   const applyPreset = (p: (typeof STYLE_PRESETS)[0]) => {
     void Haptics.selectionAsync();
-    onChange({ style: p.style, color: p.color, width: p.width });
+    onChange({ style: p.style, color: p.color, width: p.width, dashWrap: trace.dashWrap });
   };
 
   const isPreset = (p: (typeof STYLE_PRESETS)[0]) =>
@@ -90,13 +101,33 @@ export function StickerStyleBar({ trace, onChange, theme }: Props) {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.styleRow}>
         {STYLE_PRESETS.map(p => (
           <TouchableOpacity key={`${p.style}-${p.color}-${p.width}`} onPress={() => applyPreset(p)} activeOpacity={0.88}>
-            <TracePreviewIcon trace={p} selected={isPreset(p)} theme={theme} />
+            <TracePreviewIcon trace={{ ...p, dashWrap: trace.dashWrap }} selected={isPreset(p)} theme={theme} />
             <Text style={[st.presetLbl, { color: theme.textSub }, isPreset(p) && { color: theme.accent }]}>
               {p.label}
             </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          onChange({ ...trace, dashWrap: !trace.dashWrap });
+        }}
+        style={[
+          st.dashToggle,
+          { borderColor: trace.dashWrap ? theme.accent : theme.border },
+          trace.dashWrap && { backgroundColor: 'rgba(245,213,71,0.12)' },
+        ]}
+      >
+        <Text style={[st.dashToggleLbl, { color: trace.dashWrap ? theme.accent : theme.textSub }]}>
+          {trace.dashWrap ? 'Dash wrap on' : '+ Dash wrap'}
+        </Text>
+        <Text style={[st.dashToggleHint, { color: theme.textSub }]}>
+          Extra dashed ring — separate from outline style
+        </Text>
+      </TouchableOpacity>
 
       <Text style={[st.title, { color: theme.textSub, marginTop: 4 }]}>Colour</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.colorRow}>
@@ -177,4 +208,13 @@ const st = StyleSheet.create({
   sliderLbl: { fontSize: 11, fontWeight: '600', width: 52 },
   slider: { flex: 1, height: 28 },
   sliderVal: { fontSize: 12, fontWeight: '800', width: 22, textAlign: 'right' },
+  dashToggle: {
+    marginTop: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  dashToggleLbl: { fontSize: 12, fontWeight: '800' },
+  dashToggleHint: { fontSize: 9, fontWeight: '600', marginTop: 3, lineHeight: 12 },
 });

@@ -7,6 +7,8 @@ export function isExpoGo(): boolean {
 }
 
 export function isStripeNativeAvailable(): boolean {
+  /** iOS App Store build uses In-App Purchase only — no PassKit / Apple Pay merchant flow. */
+  if (Platform.OS === 'ios') return false;
   if (Platform.OS === 'web') return false;
   if (isExpoGo()) return false;
   return true;

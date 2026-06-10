@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Bell, BookmarkIcon, CircleDot, Crown, FileText, Globe, HelpCircle, LifeBuoy, Palette, Settings, Star,
+  Bell, BookmarkIcon, CircleDot, Crown, FileText, Globe, HelpCircle, LifeBuoy, Palette, Settings, Star, User,
 } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
 import {
@@ -9,6 +9,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { hubPush } from '../../_lib/exploreBack';
+import { AccountAuthSheet, openAccountActionsSheet, runAccountDeleteFlow } from '../AccountAuthSheet';
+import { signOutAccount } from '../../_lib/accountAuth';
+import { openPrivacyDocument, openTermsDocument } from '../../_lib/openLegalDocument';
 import { getExploreCopy } from '../../_lib/localeContent';
 import { getLocaleUi } from '../../_lib/localeUi';
 import { PREMIUM_THEMES, resolveTypeface, useTheme } from '../../(tabs)/ThemeContext';
@@ -26,7 +29,7 @@ type Props = { active?: boolean };
 
 export default function HubGeneralsPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, isPro, isAdmin, openSubscription, themeId, setThemeId, language } = useTheme();
+  const { theme, isPro, isAdmin, openSubscription, themeId, setThemeId, language, user, setUser } = useTheme();
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
@@ -34,6 +37,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
   const [showTheme, setShowTheme] = useState(false);
   const [showLang, setShowLang] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const openSubPage = useCallback(() => {
     try {
       router.push('/subscription');
@@ -42,6 +46,26 @@ export default function HubGeneralsPage({ active = false }: Props) {
     }
   }, []);
   const go = (pathname: Parameters<typeof hubPush>[0]) => () => hubPush(pathname, 'generals');
+
+  const openAccount = useCallback(() => {
+    if (user?.isLoggedIn) {
+      openAccountActionsSheet({
+        onSignOut: () => {
+          void signOutAccount(setUser);
+        },
+        onDelete: () => {
+          void runAccountDeleteFlow({ setUser, labels: u });
+        },
+        labels: {
+          signOut: u.settingsSignOut,
+          deleteAccount: u.settingsDeleteAccount,
+          cancel: u.captionCancel,
+        },
+      });
+      return;
+    }
+    setAccountOpen(true);
+  }, [setUser, u, user?.isLoggedIn]);
 
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
@@ -59,6 +83,16 @@ export default function HubGeneralsPage({ active = false }: Props) {
               <Text style={[es.galleryHint, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>{ex.sectionEveryoneHint}</Text>
             </View>
             <View style={es.section}>
+              <HubNavRow
+                theme={theme}
+                themeId={themeId}
+                slot={11}
+                fonts={fonts}
+                title={u.accountBarTitle}
+                subtitle={user?.isLoggedIn ? u.accountBarSubSignedIn : u.accountBarSubGuest}
+                icon={<User size={22} color="#FFFFFF" />}
+                onPress={openAccount}
+              />
               <HubNavRow theme={theme} themeId={themeId} slot={0} fonts={fonts} title={ex.settings} subtitle={ex.settingsSub} icon={<Settings size={22} color={ic(0)} />} onPress={go('/settings')} />
               <HubNavRow theme={theme} themeId={themeId} slot={1} fonts={fonts} title={ex.bookmarks} subtitle={ex.bookmarksSub} icon={<BookmarkIcon size={22} color={ic(1)} />} onPress={go('/explore-bookmarks')} />
               <HubNavRow theme={theme} themeId={themeId} slot={2} fonts={fonts} title={ex.notifications} subtitle={ex.notificationsSub} icon={<Bell size={22} color={ic(2)} />} onPress={go('/notifications')} />
@@ -132,8 +166,8 @@ export default function HubGeneralsPage({ active = false }: Props) {
               <Text style={[es.galleryHint, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>{ex.sectionLegalHint}</Text>
             </View>
             <View style={es.section}>
-              <HubNavRow theme={theme} themeId={themeId} slot={9} fonts={fonts} title={ex.terms} subtitle={ex.termsSub} icon={<FileText size={22} color={ic(9)} />} onPress={go('/explore-legal-terms')} />
-              <HubNavRow theme={theme} themeId={themeId} slot={10} fonts={fonts} title={ex.privacy} subtitle={ex.privacySub} icon={<FileText size={22} color={ic(10)} />} onPress={go('/explore-legal-privacy')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={9} fonts={fonts} title={ex.terms} subtitle={ex.termsSub} icon={<FileText size={22} color={ic(9)} />} onPress={() => openTermsDocument('generals')} />
+              <HubNavRow theme={theme} themeId={themeId} slot={10} fonts={fonts} title={ex.privacy} subtitle={ex.privacySub} icon={<FileText size={22} color={ic(10)} />} onPress={() => openPrivacyDocument('generals')} />
             </View>
 
             <View style={[es.klFooter, { borderColor: theme.border }]}>
@@ -157,6 +191,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
       <ThemeModal visible={showTheme} onClose={() => setShowTheme(false)} />
       <LanguageModal visible={showLang} onClose={() => setShowLang(false)} />
       <SupportModal visible={showSupport} onClose={() => setShowSupport(false)} copy={ex} />
+      <AccountAuthSheet visible={accountOpen} onClose={() => setAccountOpen(false)} />
     </View>
   );
 }

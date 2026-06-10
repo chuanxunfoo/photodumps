@@ -15,7 +15,9 @@ import { MinimalBackButton } from '../components/MinimalBackButton';
 import { DigicamDateStamp } from '../components/photobooth/DigicamDateStamp';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { useRequireProFeature } from '../_lib/useRequireProFeature';
+import { CAMERA_RIGS } from '../_lib/photobooth/rigs';
 import { saveDigiShot } from '../_lib/photobooth/storage';
+import type { CameraRigId, WbPreset } from '../_lib/photobooth/types';
 import { useRouter } from 'expo-router';
 import {
   Camera,
@@ -67,7 +69,12 @@ import {
   View,
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
-import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  GestureDetector,
+  Gesture,
+  GestureHandlerRootView,
+  ScrollView as GHScrollView,
+} from 'react-native-gesture-handler';
 import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
@@ -137,18 +144,13 @@ const FILTERS: { id: FilterId; label: string; color: string }[] = [
   { id: 'warm',      label: 'WARM',      color: '#FF8C00' },
 ];
 
-/** Single-photo bodies — each ships a tuned preview “recipe” (not OEM JPEG). */
-type CameraRigId = 'sony' | 'canon' | 'pixel' | 'polaroid' | 'fuji' | 'nikon' | 'leica';
-
-/** Digicam white-balance tint presets (preview). */
-type WbPreset = 'auto' | 'daylight' | 'cloudy' | 'tungsten';
-
 interface CapturedPhoto {
   uri: string;
   rigId?: CameraRigId;
   wbPreset?: WbPreset;
   evBias?: number;
   capturedAt: number;
+  filter?: FilterId;
 }
 
 const RIG_LCD_LINES: Record<CameraRigId, [string, string, string]> = {
@@ -157,36 +159,20 @@ const RIG_LCD_LINES: Record<CameraRigId, [string, string, string]> = {
   fuji:    ['Film Sim: Classic Neg', 'DR400 · Grain strong', 'Chrome / street'],
   nikon:   ['Picture Control: Flat', 'Act D-Lighting X-High', 'Rich journalism'],
   leica:   ['Monochrome HC', 'Highlight −1 · Shadow +1', 'EV −0.3 highlights'],
-  pixel:   ['Night Sight', 'Cool WB · deep blacks', 'Neon noir'],
   polaroid: ['Instax / 600 sim', '+1 EV · soft sharp', 'Warm · grain max'],
 };
-
-const CAMERA_RIGS: {
-  id: CameraRigId;
-  brand: string;
-  model: string;
-  tagline: string;
-  grad: [string, string];
-  filter: FilterId;
-}[] = [
-  { id: 'sony', brand: 'SONY', model: 'α7 IV', tagline: 'Cine (Portra 400)', grad: ['#0c1929', '#94a3b8'], filter: 'none' },
-  { id: 'canon', brand: 'Canon', model: 'EOS R6', tagline: 'Warm nostalgia', grad: ['#3f1d12', '#f97316'], filter: 'none' },
-  { id: 'pixel', brand: 'Pixel', model: 'Night Sight', tagline: 'Neon noir', grad: ['#1e1b4b', '#22d3ee'], filter: 'none' },
-  { id: 'polaroid', brand: 'Polaroid', model: '600', tagline: 'Instax warmth', grad: ['#e8e0d5', '#d97706'], filter: 'none' },
-  { id: 'fuji', brand: 'FUJIFILM', model: 'X-T5', tagline: 'Classic Neg', grad: ['#14532d', '#a16207'], filter: 'none' },
-  { id: 'nikon', brand: 'Nikon', model: 'Z9', tagline: 'Flat / punchy', grad: ['#0f172a', '#64748b'], filter: 'none' },
-  { id: 'leica', brand: 'Leica', model: 'M11', tagline: 'Mono HC', grad: ['#0a0a0a', '#eab308'], filter: 'none' },
-];
 
 const RIG_FOCAL_MM: Record<CameraRigId, string> = {
   sony: '50mm',
   canon: '85mm',
-  pixel: '26mm',
   polaroid: '75mm',
   fuji: '35mm',
   nikon: '70mm',
   leica: '28mm',
 };
+
+const DAZZ_RIG_CELL_W = 76;
+const DAZZ_RIG_IMG_H = 58;
 
 /** Parse focal length number from labels like "50mm" */
 function baseMmFromRig(rig: CameraRigId): number {
@@ -470,15 +456,6 @@ function RigLookOverlay({ rigId, w: _w, h: _h }: { rigId: CameraRigId; w: number
           <GrainSpecks dense={false} />
         </>
       );
-    case 'pixel':
-      return (
-        <>
-          <LinearGradient colors={['rgba(0,50,90,0.2)', 'transparent', 'rgba(0,0,0,0.58)']} locations={[0, 0.35, 1]} style={z} pointerEvents="none" />
-          <View style={[z, { backgroundColor: 'rgba(0,210,255,0.09)' }]} pointerEvents="none" />
-          <View style={[z, { backgroundColor: 'rgba(20,0,60,0.12)' }]} pointerEvents="none" />
-          <GrainSpecks dense={false} />
-        </>
-      );
     case 'polaroid':
       return (
         <>
@@ -664,12 +641,13 @@ function SaveScreen({
       >
         {photo ? (
           <>
-            <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
-            <FilterOverlay filter={photo.filter} w={pw} h={ph} />
-            <ColorGradeOverlay filter={photo.filter} strength={1.08} />
+            <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            <FilterOverlay filter={photo.filter ?? 'none'} w={pw} h={ph} />
+            <ColorGradeOverlay filter={photo.filter ?? 'none'} strength={1.08} />
             <RigLookOverlay rigId={photo.rigId ?? 'sony'} w={pw} h={ph} />
             <WbTintOverlay preset={photo.wbPreset ?? 'auto'} />
             <EvCompensationOverlay evBias={photo.evBias ?? 0} />
+            <DigicamDateStamp rigId={photo.rigId ?? 'sony'} capturedAt={photo.capturedAt} />
           </>
         ) : null}
         {stickers.map(s => {
@@ -738,7 +716,7 @@ const sv = StyleSheet.create({
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 
 export default function PhotoBoothScreen() {
-  useRequireProFeature();
+  const proAllowed = useRequireProFeature();
   const goBack = useExploreAwareBack();
   const router = useRouter();
   const { theme } = useTheme();
@@ -793,7 +771,6 @@ export default function PhotoBoothScreen() {
   const [saved,  setSaved]  = useState(false);
 
   // ── Animations ──
-  const flashAnim     = useRef(new Animated.Value(0)).current;
   const countdownAnim = useRef(new Animated.Value(1)).current;
 
   // ─── Permission side-effects ───────────────────────────────────────────────
@@ -890,12 +867,6 @@ export default function PhotoBoothScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [editPreviewBox.w, editPreviewBox.h]);
 
-  // ─── Flash ────────────────────────────────────────────────────────────────
-  const triggerFlash = () => {
-    flashAnim.setValue(1);
-    Animated.timing(flashAnim, { toValue: 0, duration: 350, useNativeDriver: false }).start();
-  };
-
   const captureAlignedPhoto = useCallback(async () => {
     const cam = cameraRef.current;
     if (!cam) return null;
@@ -963,7 +934,6 @@ export default function PhotoBoothScreen() {
         await runQuick321Once();
       }
 
-      triggerFlash();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const uri = await captureAlignedPhoto();
       if (uri) {
@@ -982,7 +952,7 @@ export default function PhotoBoothScreen() {
       setIsCapturing(false);
       setCountdown(null);
     }
-  }, [isCapturing, activeFilter, timerSec, selectedRig, wbPreset, evBias, captureAlignedPhoto]);
+  }, [isCapturing, timerSec, selectedRig, wbPreset, evBias, captureAlignedPhoto]);
 
   const saveUriToLibrary = async (uri: string) => {
     try {
@@ -1061,6 +1031,8 @@ export default function PhotoBoothScreen() {
     setZoom(0);
   };
 
+  if (!proAllowed) return null;
+
   // ─── Permission gates ─────────────────────────────────────────────────────
   if (!cameraPermission) {
     return (
@@ -1111,9 +1083,9 @@ export default function PhotoBoothScreen() {
             <View
               ref={saveExportRef}
               collapsable={false}
-              style={{ width: pw, height: ph, overflow: 'hidden', backgroundColor: '#000', borderRadius: 10 }}
+              style={{ width: pw, height: ph, overflow: 'hidden', backgroundColor: '#000' }}
             >
-              <Image source={{ uri: shot.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+              <Image source={{ uri: shot.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
               <RigLookOverlay rigId={rig} w={pw} h={ph} />
               <WbTintOverlay preset={shot.wbPreset ?? 'auto'} />
               <EvCompensationOverlay evBias={shot.evBias ?? 0} />
@@ -1160,21 +1132,15 @@ export default function PhotoBoothScreen() {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing={facing}
-        flash={facing === 'back' ? flashMode : 'off'}
+        flash={flashMode}
         enableTorch={torchOn}
         zoom={zoom}
-        isPinchToZoomEnabled={false}
       />
 
       <RigLookOverlay rigId={selectedRig} w={vfInnerW} h={vfInnerH} />
       <WbTintOverlay preset={wbPreset} />
       <EvCompensationOverlay evBias={evBias} />
       <DigicamDateStamp rigId={selectedRig} />
-
-      <Animated.View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, { backgroundColor: '#FFF', opacity: flashAnim }]}
-      />
 
       {countdown !== null && (
         <View style={ms.countdownWrap}>
@@ -1214,29 +1180,33 @@ export default function PhotoBoothScreen() {
             keyboardShouldPersistTaps="handled"
             nestedScrollEnabled
           >
-            <ScrollView
+            <GHScrollView
               horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={ms.rigStripContent}
+              nestedScrollEnabled
+              directionalLockEnabled
+              showsHorizontalScrollIndicator
+              contentContainerStyle={ms.dazzRigRow}
               style={ms.rigStripScroll}
             >
               {CAMERA_RIGS.map(rig => {
                 const sel = selectedRig === rig.id;
                 return (
-                  <TouchableOpacity key={rig.id} onPress={() => applyRig(rig.id)} activeOpacity={0.9}>
-                    <LinearGradient
-                      colors={rig.grad}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[ms.rigCard, sel && ms.rigCardActive]}
-                    >
-                      <Text style={ms.rigBrand}>{rig.brand}</Text>
-                      <Text style={ms.rigModel}>{rig.model}</Text>
-                    </LinearGradient>
+                  <TouchableOpacity
+                    key={rig.id}
+                    onPress={() => applyRig(rig.id)}
+                    activeOpacity={0.85}
+                    style={ms.dazzRigCell}
+                  >
+                    <Image source={rig.image} style={ms.dazzRigImg} resizeMode="contain" />
+                    <View style={[ms.dazzRigLabelWrap, sel && ms.dazzRigLabelWrapActive]}>
+                      <Text style={[ms.dazzRigLabel, sel && ms.dazzRigLabelActive]} numberOfLines={1}>
+                        {rig.shortLabel}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </GHScrollView>
 
             <View style={ms.lcdSection}>
               <LinearGradient
@@ -1415,8 +1385,21 @@ const ms = StyleSheet.create({
   sectionActiveLine:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a' },
   sectionActiveLabel:      { color: '#555', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   sectionActiveValue:      { flex: 1, fontSize: 13, fontWeight: '900' },
-  rigStripScroll:          { minHeight: 118 },
-  rigStripContent:         { flexGrow: 1, alignItems: 'center', gap: 10, paddingVertical: 6, paddingRight: 4 },
+  rigStripScroll:          { flexGrow: 0, marginBottom: 4 },
+  dazzRigRow:              {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    paddingRight: 16,
+  },
+  dazzRigCell:             { width: DAZZ_RIG_CELL_W, alignItems: 'center', gap: 4 },
+  dazzRigImg:              { width: DAZZ_RIG_CELL_W, height: DAZZ_RIG_IMG_H },
+  dazzRigLabelWrap:        { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  dazzRigLabelWrapActive:  { backgroundColor: 'rgba(255,255,255,0.92)' },
+  dazzRigLabel:            { color: 'rgba(255,255,255,0.72)', fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  dazzRigLabelActive:      { color: '#0a0a0a' },
   settingsInner:           { borderRadius: 14, backgroundColor: '#080808', borderWidth: 1, borderColor: '#1a1a1a', padding: 12, gap: 10 },
   settingsDivider:         { height: 1, backgroundColor: '#222', marginVertical: 2 },
   lcdSection:              { alignItems: 'center', paddingTop: 4 },

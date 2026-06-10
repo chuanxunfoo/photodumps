@@ -9,6 +9,11 @@ export type LocaleUi = {
   settingsAccount: string;
   settingsUpgrade: string;
   settingsSignOut: string;
+  settingsDeleteAccount: string;
+  settingsDeleteAccountHint: string;
+  settingsDeleteConfirmTitle: string;
+  settingsDeleteConfirmMsg: string;
+  settingsDeleteSuccess: string;
   settingsUserId: string;
   settingsEmail: string;
   settingsUsername: string;
@@ -106,6 +111,26 @@ export type LocaleUi = {
   langModalHint: string;
   langIncluded: string;
   langPro: string;
+  accountBarTitle: string;
+  accountBarSubSignedIn: string;
+  accountBarSubGuest: string;
+  accountSignInTitle: string;
+  accountSignInSub: string;
+  accountContinueApple: string;
+  accountSignedInTitle: string;
+  accountSignedInMsg: string;
+  accountSignInFailed: string;
+  permissionsSetupEyebrow: string;
+  permissionsSetupTitle: string;
+  permissionsSetupLead: string;
+  permissionsPhotosTitle: string;
+  permissionsPhotosSub: string;
+  permissionsNotifTitle: string;
+  permissionsNotifSub: string;
+  permissionsAllowPhotos: string;
+  permissionsAllowNotif: string;
+  permissionsAllowed: string;
+  permissionsContinue: string;
 };
 
 const EN: LocaleUi = {
@@ -114,6 +139,12 @@ const EN: LocaleUi = {
   settingsAccount: 'ACCOUNT',
   settingsUpgrade: 'Upgrade to Pro',
   settingsSignOut: 'Sign out',
+  settingsDeleteAccount: 'Delete account',
+  settingsDeleteAccountHint: 'Permanently removes your account and profile data. This cannot be undone.',
+  settingsDeleteConfirmTitle: 'Delete your account?',
+  settingsDeleteConfirmMsg:
+    'All account data will be permanently deleted. Active App Store subscriptions must be cancelled separately in Settings → Apple ID → Subscriptions.',
+  settingsDeleteSuccess: 'Your account has been deleted.',
   settingsUserId: 'User ID',
   settingsEmail: 'Email',
   settingsUsername: 'Username',
@@ -163,8 +194,8 @@ const EN: LocaleUi = {
   insightsLibraryPulse: 'LIBRARY PULSE',
   insightsEmptyHint: 'Sign in, then delete from Swipe or Supercut — every removal through photodumps counts toward your totals.',
   insightsAllMedia: 'ALL MEDIA',
-  insightsGmail: 'Gmail (Inbox Detox)',
-  insightsGmailHint: 'Cleared via Inbox Detox batches',
+  insightsGmail: 'Gmail (email clean)',
+  insightsGmailHint: 'Cleared via email clean batches',
   dumpQueuePhotos: 'photos',
   hubFeatures: 'Features',
   hubGenerals: 'Generals',
@@ -213,6 +244,26 @@ const EN: LocaleUi = {
   langModalHint: 'Choose any language.',
   langIncluded: 'LANGUAGES',
   langPro: 'LANGUAGES',
+  accountBarTitle: 'account',
+  accountBarSubSignedIn: 'Signed in · tap for sign out or delete',
+  accountBarSubGuest: 'Sign in with Apple for sync & offers',
+  accountSignInTitle: 'Sign in to unlock your full experience',
+  accountSignInSub: 'Signing in only gives you access to promotional offers and product updates.',
+  accountContinueApple: 'Continue with Apple',
+  accountSignedInTitle: 'Signed in',
+  accountSignedInMsg: 'Welcome back. You are signed in as {email}.',
+  accountSignInFailed: 'Sign-in failed',
+  permissionsSetupEyebrow: 'ALMOST THERE',
+  permissionsSetupTitle: 'Allow access to get started',
+  permissionsSetupLead: 'photodumps needs photo access to swipe your library, and notifications for streaks and reminders.',
+  permissionsPhotosTitle: 'Photo library',
+  permissionsPhotosSub: 'Required to browse, keep, and delete photos on your device.',
+  permissionsNotifTitle: 'Notifications',
+  permissionsNotifSub: 'Optional reminders for streaks, weekly digests, and Pro features.',
+  permissionsAllowPhotos: 'Allow photo access',
+  permissionsAllowNotif: 'Allow notifications',
+  permissionsAllowed: 'Allowed',
+  permissionsContinue: 'Continue to calendar',
 };
 
 const MS: Partial<LocaleUi> = {

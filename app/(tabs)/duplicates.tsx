@@ -98,7 +98,7 @@ function StackCell({ uris, count, onPress }: { uris: string[]; count: number; on
 }
 
 export default function DuplicatesScreen() {
-  useRequireProFeature();
+  const proAllowed = useRequireProFeature();
   const router = useRouter();
   const goBack = useExploreAwareBack();
   const { theme } = useTheme();
@@ -147,6 +147,8 @@ export default function DuplicatesScreen() {
       params: { mode: 'duplicates', duplicateKey },
     });
   };
+
+  if (!proAllowed) return null;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>

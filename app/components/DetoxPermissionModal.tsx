@@ -1,4 +1,4 @@
-import { Lock, Mail, ShieldCheck } from 'lucide-react-native';
+import { Mail } from 'lucide-react-native';
 import React, { useEffect, useRef } from 'react';
 import {
   Animated,
@@ -13,6 +13,7 @@ import {
 
 import type { ThemeColors } from '../(tabs)/ThemeContext';
 import { resolveTypeface } from '../(tabs)/ThemeContext';
+import { primaryButtonColors } from '../_lib/buttonContrast';
 
 type Props = {
   visible: boolean;
@@ -21,6 +22,7 @@ type Props = {
   onClose: () => void;
   theme: ThemeColors;
   fonts: ReturnType<typeof resolveTypeface>;
+  primaryBtn: ReturnType<typeof primaryButtonColors>;
 };
 
 export function DetoxPermissionModal({
@@ -30,6 +32,7 @@ export function DetoxPermissionModal({
   onClose,
   theme,
   fonts,
+  primaryBtn,
 }: Props) {
   const scale = useRef(new Animated.Value(0.9)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -67,40 +70,34 @@ export function DetoxPermissionModal({
             <Mail size={30} color={theme.text} strokeWidth={2} />
           </View>
 
-          <Text style={[styles.eyebrow, { color: theme.textMuted, fontFamily: fonts.titleFont }]}>
-            ONE-TIME SETUP
-          </Text>
           <Text style={[styles.title, { color: theme.text, fontFamily: fonts.titleFont }]}>
-            Connect Gmail securely
+            Connect Gmail
           </Text>
           <Text style={[styles.message, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-            We only ask once. On Google’s screen, check both read access and{' '}
-            <Text style={{ fontWeight: '800' }}>Manage your mail</Text> — that second one is required to delete batches
-            you confirm.
+            One-time setup. On Google, allow{' '}
+            <Text style={{ fontWeight: '800', color: theme.text }}>
+              Read, compose, and send emails
+            </Text>{' '}
+            (includes trash / remove) plus{' '}
+            <Text style={{ fontWeight: '800', color: theme.text }}>View your email messages</Text>.
           </Text>
 
-          <View style={styles.points}>
-            <View style={styles.pointRow}>
-              <ShieldCheck size={16} color="#6B9BD1" strokeWidth={2.2} />
-              <Text style={[styles.pointText, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                Read-only scan to measure real storage per email
-              </Text>
-            </View>
-            <View style={styles.pointRow}>
-              <Lock size={16} color="#7EB09B" strokeWidth={2.2} />
-              <Text style={[styles.pointText, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                Delete only after you confirm each small batch
-              </Text>
-            </View>
+          <View style={[styles.trustBox, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
+            <Text style={[styles.trustTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
+              Your inbox stays safe
+            </Text>
+            <Text style={[styles.trustBody, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
+              We never delete without your OK. Small batches only. Revoke access anytime in Google Account settings.
+            </Text>
           </View>
 
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={onConnect}
             disabled={connecting}
-            style={[styles.btn, { backgroundColor: theme.text, opacity: connecting ? 0.65 : 1 }]}
+            style={[styles.btn, { backgroundColor: primaryBtn.bg, opacity: connecting ? 0.65 : 1 }]}
           >
-            <Text style={[styles.btnTxt, { fontFamily: fonts.titleFont }]}>
+            <Text style={[styles.btnTxt, { color: primaryBtn.text, fontFamily: fonts.titleFont }]}>
               {connecting ? 'Opening Google…' : 'Continue with Google'}
             </Text>
           </TouchableOpacity>
@@ -137,12 +134,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 2.4, marginBottom: 6 },
   title: { fontSize: 24, fontWeight: '900', textAlign: 'center', letterSpacing: -0.4 },
   message: { fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 21, marginTop: 10 },
-  points: { width: '100%', marginTop: 18, gap: 10 },
-  pointRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  pointText: { flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 19 },
+  trustBox: {
+    width: '100%',
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  trustTitle: { fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  trustBody: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
   btn: {
     marginTop: 22,
     width: '100%',
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  btnTxt: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.2 },
+  btnTxt: { fontSize: 15, fontWeight: '900', letterSpacing: 0.2 },
   skipBtn: { marginTop: 12, paddingVertical: 6 },
   skipTxt: { fontSize: 13, fontWeight: '700' },
 });

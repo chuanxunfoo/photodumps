@@ -43,7 +43,7 @@ const TIERS = [
   {
     id: 'basic',
     label: 'BASIC',
-    myr: 'MYR 3.99', usd: 'USD 0.99',
+    price: 'USD 0.99',
     accentColor: '#00C2FF',
     prizes: [
       { swipes: 300,  label: '200 Swipes',  color: '#00C2FF', symbolLine1: '200',  symbolLine2: 'SWIPES', prob: 0.92 },
@@ -54,7 +54,7 @@ const TIERS = [
   {
     id: 'plus',
     label: 'PLUS',
-    myr: 'MYR 7.99', usd: 'USD 1.99',
+    price: 'USD 1.99',
     accentColor: '#BF5AF2',
     prizes: [
       { swipes: 800, label: '800 Swipes', color: '#BF5AF2', symbolLine1: '800', symbolLine2: 'SWIPES', prob: 0.92  },
@@ -65,7 +65,7 @@ const TIERS = [
   {
     id: 'max',
     label: 'MAX',
-    myr: 'MYR 11.99', usd: 'USD 2.99',
+    price: 'USD 2.99',
     accentColor: '#FFD600',
     prizes: [
       { swipes: 2000,  label: '2000 Swipes',  color: '#FFD600', symbolLine1: '2000',  symbolLine2: 'SWIPES', prob: 0.92  },
@@ -453,8 +453,8 @@ export default function SpinWheelScreen() {
     setPayItem({
       title: `${tier.label} Spin Pack`,
       subtitle: 'Guaranteed prize every spin!',
-      amount: tier.myr,
-      usd: tier.usd,
+      amount: tier.price,
+      usd: '',
       checkoutMode: 'payment',
       productKey: tier.id,
     });
@@ -493,7 +493,7 @@ export default function SpinWheelScreen() {
           void recordSpinPurchase({
             userId: user.uid,
             tier: tier.id,
-            amountMyrDisplay: tier.myr,
+            amountMyrDisplay: tier.price,
             swipesWon: p.swipes,
           });
         }
@@ -501,7 +501,7 @@ export default function SpinWheelScreen() {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }
-  }, [tier.id, tier.myr, user?.uid]);
+  }, [tier.id, tier.price, user?.uid]);
 
   const floorOpacity = floorSheen.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.12] });
 
@@ -554,7 +554,7 @@ export default function SpinWheelScreen() {
               <TierArcadeButton
                 key={t.id}
                 label={t.label}
-                price={t.myr}
+                price={t.price}
                 accent={t.accentColor}
                 selected={tierIdx === i}
                 disabled={spinning}
@@ -644,11 +644,11 @@ export default function SpinWheelScreen() {
             >
               <Zap size={20} color={spinning ? '#555' : '#000'} />
               <Text style={[s.spinBtnTxt, { color: spinning ? '#555' : '#000' }]}>
-                {spinning ? 'SPINNING…' : `SPIN FOR ${tier.myr}`}
+                {spinning ? 'SPINNING…' : `SPIN FOR ${tier.price}`}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={s.spinNote}>{tier.usd} · Every spin wins a prize</Text>
+          <Text style={s.spinNote}>Every spin wins a prize</Text>
 
           <View style={[s.compareCard, { borderColor: 'rgba(255,255,255,0.08)' }]}>
             <Text style={s.compareHead}>COMPARE TIERS</Text>
@@ -661,7 +661,7 @@ export default function SpinWheelScreen() {
                 <View style={[s.compareDot, { backgroundColor: t.accentColor }]} />
                 <Text style={[s.compareLabel, { color: t.accentColor }]}>{t.label}</Text>
                 <Text style={s.compareDesc}>Guaranteed win every spin</Text>
-                <Text style={[s.comparePrice, { color: tierIdx === i ? '#FFF' : 'rgba(255,255,255,0.45)' }]}>{t.myr}</Text>
+                <Text style={[s.comparePrice, { color: tierIdx === i ? '#FFF' : 'rgba(255,255,255,0.45)' }]}>{t.price}</Text>
               </TouchableOpacity>
             ))}
           </View>

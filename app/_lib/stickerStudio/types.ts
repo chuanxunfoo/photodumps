@@ -7,6 +7,8 @@ export type TraceSettings = {
   color: string;
   /** Outline thickness in px (offset radius). */
   width: number;
+  /** Extra dashed ring around the shape — independent of style (White / Toon / etc.). */
+  dashWrap?: boolean;
 };
 
 /** @deprecated Old stickers may still have frameId in storage. */
@@ -56,4 +58,5 @@ export const DEFAULT_TRACE: TraceSettings = {
   style: 'toon',
   color: '#FFFFFF',
   width: 9,
+  dashWrap: false,
 };

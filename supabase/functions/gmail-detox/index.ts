@@ -1,4 +1,9 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import {
+  googleOAuthConfigReport,
+  probeGoogleOAuthCredentials,
+  readGoogleOAuthEnv,
+} from '../_shared/googleOAuthEnv.ts';
 import { getSupabaseAdmin, getSupabaseUser } from '../_shared/supabaseAdmin.ts';
 
 type DetoxGroupKey =
@@ -29,6 +34,8 @@ const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const SCAN_LIST_MAX = 40;
 const SIZE_BATCH = 12;
 const CLEANUP_BATCH_MAX = 6;
+const SCAN_SIZE_SAMPLE = 16;
+const DEFAULT_BYTES_PER_MESSAGE = 48_000;
 
 const CLEANUP_PRIORITY: DetoxGroupKey[] = [
   'spam_phishing',
@@ -85,6 +92,17 @@ function buildAuthHeaders(token: string): HeadersInit {
   };
 }
 
+function mergeScopeStrings(existing: string, incoming: string): string {
+  const parts = new Set(
+    `${existing} ${incoming}`.split(/\s+/).map((s) => s.trim()).filter(Boolean),
+  );
+  return [...parts].join(' ');
+}
+
+function hasModifyScope(scopes: string): boolean {
+  return /gmail\.modify|www\.googleapis\.com\/auth\/gmail\.modify/i.test(scopes);
+}
+
 async function accessTokenCanDelete(accessToken: string): Promise<boolean> {
   try {
     const res = await fetch(
@@ -102,14 +120,19 @@ async function accessTokenCanDelete(accessToken: string): Promise<boolean> {
   }
 }
 
-async function refreshGoogleAccessToken(refreshToken: string): Promise<string> {
-  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
-  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      'Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET in Supabase Edge Function secrets.',
-    );
-  }
+async function resolveCanDelete(accessToken: string, scopes: string): Promise<boolean> {
+  if (hasModifyScope(scopes)) return true;
+  if (await accessTokenCanDelete(accessToken)) return true;
+  if (!scopes.trim()) return true;
+  return false;
+}
+
+async function refreshGoogleAccessToken(
+  refreshToken: string,
+  userId: string,
+  storedScopes: string,
+): Promise<{ accessToken: string; scopes: string }> {
+  const { clientId, clientSecret } = readGoogleOAuthEnv();
 
   const body = new URLSearchParams({
     client_id: clientId,
@@ -126,20 +149,43 @@ async function refreshGoogleAccessToken(refreshToken: string): Promise<string> {
 
   if (!res.ok) {
     const text = await res.text();
+    if (/invalid_client|OAuth client was not found/i.test(text)) {
+      throw new Error(
+        'GMAIL_OAUTH_CONFIG: Google OAuth client ID/secret in Supabase do not match Google Cloud. Update GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Edge Function secrets.',
+      );
+    }
+    if (res.status === 400 && /invalid_grant|expired or revoked/i.test(text)) {
+      throw new Error(
+        'GMAIL_RECONNECT_REQUIRED: Your Google connection expired. Tap Start scan to sign in to Gmail again.',
+      );
+    }
     throw new Error(`Google token refresh failed (${res.status}): ${text}`);
   }
 
   const json = await res.json();
   const accessToken = String(json.access_token ?? '');
   if (!accessToken) throw new Error('Google token refresh returned no access_token.');
-  return accessToken;
+  const scopes = mergeScopeStrings(storedScopes, String(json.scope ?? ''));
+
+  const admin = getSupabaseAdmin();
+  await admin.from('gmail_oauth_tokens').update({
+    provider_token: accessToken,
+    scopes,
+    updated_at: new Date().toISOString(),
+  }).eq('user_id', userId);
+
+  return { accessToken, scopes };
 }
 
-async function getGoogleTokensForUser(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
+async function getGoogleTokensForUser(userId: string): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  scopes: string;
+}> {
   const admin = getSupabaseAdmin();
   const { data, error } = await admin
     .from('gmail_oauth_tokens')
-    .select('provider_token, provider_refresh_token, updated_at')
+    .select('provider_token, provider_refresh_token, scopes, updated_at')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -155,8 +201,18 @@ async function getGoogleTokensForUser(userId: string): Promise<{ accessToken: st
     );
   }
 
-  const accessToken = await refreshGoogleAccessToken(refreshToken);
-  return { accessToken, refreshToken };
+  const storedScopes = String(data.scopes ?? '');
+
+  try {
+    const { accessToken, scopes } = await refreshGoogleAccessToken(refreshToken, userId, storedScopes);
+    return { accessToken, refreshToken, scopes };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('GMAIL_RECONNECT_REQUIRED') || msg.includes('GMAIL_OAUTH_CONFIG')) {
+      await admin.from('gmail_oauth_tokens').delete().eq('user_id', userId);
+    }
+    throw e;
+  }
 }
 
 async function gmailGetProfile(accessToken: string): Promise<{ messagesTotal: number; threadsTotal: number }> {
@@ -225,62 +281,38 @@ async function sizeMessages(accessToken: string, ids: string[]): Promise<Map<str
   return sizes;
 }
 
-async function scanGroup(
+async function scanGroupListOnly(
   accessToken: string,
   group: { key: DetoxGroupKey; label: string; query: string },
-): Promise<{ summary: GroupSummary; sizes: Map<string, number>; capped: boolean }> {
+): Promise<{ key: DetoxGroupKey; label: string; ids: string[]; capped: boolean }> {
   const { ids, capped } = await gmailListMessageIds(accessToken, group.query, SCAN_LIST_MAX);
-  const sizeMap = await sizeMessages(accessToken, ids);
-  let bytes = 0;
-  for (const size of sizeMap.values()) bytes += size;
-
-  return {
-    summary: {
-      key: group.key,
-      label: group.label,
-      count: ids.length,
-      bytes,
-      capped,
-    },
-    sizes: sizeMap,
-    capped,
-  };
+  return { key: group.key, label: group.label, ids, capped };
 }
 
 /** Each message counts toward one category only (highest-priority match). */
-function buildAllocatedGroups(
-  groupResults: Array<{ summary: GroupSummary; sizes: Map<string, number>; capped: boolean }>,
-): { groups: GroupSummary[]; uniqueSizes: Map<string, number> } {
-  const uniqueSizes = new Map<string, number>();
+function buildAllocatedGroupsFromLists(
+  groupResults: Array<{ key: DetoxGroupKey; label: string; ids: string[]; capped: boolean }>,
+): { groups: GroupSummary[]; allocatedIds: string[] } {
   const owner = new Map<string, DetoxGroupKey>();
 
-  for (const result of groupResults) {
-    for (const [id, size] of result.sizes) {
-      if (!uniqueSizes.has(id)) uniqueSizes.set(id, size);
-    }
-  }
-
   for (const key of CLEANUP_PRIORITY) {
-    const result = groupResults.find((r) => r.summary.key === key);
+    const result = groupResults.find((r) => r.key === key);
     if (!result) continue;
-    for (const id of result.sizes.keys()) {
+    for (const id of result.ids) {
       if (!owner.has(id)) owner.set(id, key);
     }
   }
 
-  const totals = new Map<DetoxGroupKey, { count: number; bytes: number; capped: boolean }>();
-  for (const g of GROUPS) totals.set(g.key, { count: 0, bytes: 0, capped: false });
+  const totals = new Map<DetoxGroupKey, { count: number; capped: boolean }>();
+  for (const g of GROUPS) totals.set(g.key, { count: 0, capped: false });
 
-  for (const [id, size] of uniqueSizes) {
-    const key = owner.get(id);
-    if (!key) continue;
-    const t = totals.get(key)!;
-    t.count += 1;
-    t.bytes += size;
+  for (const id of owner.keys()) {
+    const key = owner.get(id)!;
+    totals.get(key)!.count += 1;
   }
 
   for (const result of groupResults) {
-    const t = totals.get(result.summary.key);
+    const t = totals.get(result.key);
     if (t) t.capped = result.capped;
   }
 
@@ -290,30 +322,70 @@ function buildAllocatedGroups(
       key: g.key,
       label: g.label,
       count: t.count,
-      bytes: t.bytes,
+      bytes: 0,
       capped: t.capped,
     };
   });
 
-  return { groups, uniqueSizes };
+  const orderedIds: string[] = [];
+  for (const key of CLEANUP_PRIORITY) {
+    const result = groupResults.find((r) => r.key === key);
+    if (!result) continue;
+    for (const id of result.ids) {
+      if (owner.get(id) === key) orderedIds.push(id);
+    }
+  }
+
+  return { groups, allocatedIds: orderedIds };
+}
+
+function pickMessageIds(raw: unknown, max = CLEANUP_BATCH_MAX): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids: string[] = [];
+  for (const item of raw) {
+    const id = String(item ?? '').trim();
+    if (!id || ids.includes(id)) continue;
+    ids.push(id);
+    if (ids.length >= max) break;
+  }
+  return ids;
+}
+
+async function estimateBytesFromSample(
+  accessToken: string,
+  messageIds: string[],
+): Promise<number> {
+  if (!messageIds.length) return DEFAULT_BYTES_PER_MESSAGE;
+  const sampleIds = messageIds.slice(0, SCAN_SIZE_SAMPLE);
+  const sampleSizes = await sizeMessages(accessToken, sampleIds);
+  if (!sampleSizes.size) return DEFAULT_BYTES_PER_MESSAGE;
+  let sum = 0;
+  for (const size of sampleSizes.values()) sum += size;
+  return Math.max(1024, Math.round(sum / sampleSizes.size));
 }
 
 async function collectCleanupCandidates(
   accessToken: string,
   selectedGroups: DetoxGroupKey[],
+  maxCandidates = CLEANUP_BATCH_MAX,
 ): Promise<string[]> {
   const ordered: string[] = [];
   const seen = new Set<string>();
 
   for (const key of CLEANUP_PRIORITY) {
     if (!selectedGroups.includes(key)) continue;
+    if (ordered.length >= maxCandidates) break;
+
     const group = GROUPS.find((g) => g.key === key);
     if (!group) continue;
-    const { ids } = await gmailListMessageIds(accessToken, group.query, SCAN_LIST_MAX);
+
+    const need = maxCandidates - ordered.length;
+    const { ids } = await gmailListMessageIds(accessToken, group.query, need);
     for (const id of ids) {
       if (seen.has(id)) continue;
       seen.add(id);
       ordered.push(id);
+      if (ordered.length >= maxCandidates) break;
     }
   }
 
@@ -323,9 +395,15 @@ async function collectCleanupCandidates(
 async function previewNextBatch(
   accessToken: string,
   selectedGroups: DetoxGroupKey[],
+  messageIds: string[] = [],
 ): Promise<BatchPreview> {
-  const candidates = await collectCleanupCandidates(accessToken, selectedGroups);
-  const batchIds = candidates.slice(0, CLEANUP_BATCH_MAX);
+  const batchIds = messageIds.length
+    ? messageIds.slice(0, CLEANUP_BATCH_MAX)
+    : await collectCleanupCandidates(accessToken, selectedGroups, CLEANUP_BATCH_MAX);
+  if (!batchIds.length) {
+    return { batchCount: 0, batchBytes: 0, remainingCount: 0 };
+  }
+
   const batchSizes = await sizeMessages(accessToken, batchIds);
   let batchBytes = 0;
   for (const size of batchSizes.values()) batchBytes += size;
@@ -333,7 +411,7 @@ async function previewNextBatch(
   return {
     batchCount: batchIds.length,
     batchBytes,
-    remainingCount: Math.max(0, candidates.length - batchIds.length),
+    remainingCount: 0,
   };
 }
 
@@ -343,33 +421,60 @@ async function scanMailbox(accessToken: string): Promise<{
   groups: GroupSummary[];
   mailboxMessagesTotal: number;
   nextBatch: BatchPreview;
+  deleteCandidateIds: string[];
 }> {
   const [profile, ...groupResults] = await Promise.all([
     gmailGetProfile(accessToken),
-    ...GROUPS.map((group) => scanGroup(accessToken, group)),
+    ...GROUPS.map((group) => scanGroupListOnly(accessToken, group)),
   ]);
 
-  const { groups, uniqueSizes } = buildAllocatedGroups(groupResults);
+  const { groups, allocatedIds } = buildAllocatedGroupsFromLists(groupResults);
+  const totalMessages = allocatedIds.length;
+  const avgBytes = await estimateBytesFromSample(accessToken, allocatedIds);
+  const totalBytes = totalMessages * avgBytes;
 
-  let totalBytes = 0;
-  for (const size of uniqueSizes.values()) totalBytes += size;
+  for (const g of groups) {
+    g.bytes = g.count * avgBytes;
+  }
 
-  const selectedKeys = groups.filter((g) => g.count > 0).map((g) => g.key);
-  const nextBatch = selectedKeys.length
-    ? await previewNextBatch(accessToken, selectedKeys)
-    : { batchCount: 0, batchBytes: 0, remainingCount: 0 };
+  const batchCount = Math.min(CLEANUP_BATCH_MAX, totalMessages);
+  const nextBatch: BatchPreview = {
+    batchCount,
+    batchBytes: batchCount * avgBytes,
+    remainingCount: Math.max(0, totalMessages - batchCount),
+  };
 
   return {
     totalBytes,
-    totalMessages: uniqueSizes.size,
+    totalMessages,
     groups,
     mailboxMessagesTotal: profile.messagesTotal,
     nextBatch,
+    deleteCandidateIds: allocatedIds.slice(0, CLEANUP_BATCH_MAX),
   };
 }
 
-async function batchDelete(accessToken: string, ids: string[]): Promise<void> {
-  if (!ids.length) return;
+async function batchDelete(accessToken: string, ids: string[]): Promise<number> {
+  if (!ids.length) return 0;
+  let removed = 0;
+  for (const id of ids) {
+    const res = await fetch(`${GMAIL_API_BASE}/messages/${id}/trash`, {
+      method: 'POST',
+      headers: buildAuthHeaders(accessToken),
+    });
+    if (res.ok) {
+      removed += 1;
+      continue;
+    }
+    const txt = await res.text();
+    if (res.status === 403 && /insufficient authentication scopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(txt)) {
+      throw new Error(
+        'GMAIL_MODIFY_REQUIRED: Allow “Read, compose, and send emails” on the Google permission screen.',
+      );
+    }
+  }
+  if (removed > 0) return removed;
+
   const res = await fetch(`${GMAIL_API_BASE}/messages/batchDelete`, {
     method: 'POST',
     headers: buildAuthHeaders(accessToken),
@@ -379,42 +484,44 @@ async function batchDelete(accessToken: string, ids: string[]): Promise<void> {
     const txt = await res.text();
     if (res.status === 403 && /insufficient authentication scopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(txt)) {
       throw new Error(
-        'GMAIL_MODIFY_REQUIRED: Approve “Manage your mail” on the one-time Google permission screen.',
+        'GMAIL_MODIFY_REQUIRED: Allow “Read, compose, and send emails” on the Google permission screen.',
       );
     }
-    throw new Error(`Gmail batchDelete failed (${res.status}): ${txt}`);
+    throw new Error(`Gmail delete failed (${res.status}): ${txt.slice(0, 200)}`);
   }
+  return ids.length;
 }
 
-async function cleanupMailbox(accessToken: string, selectedGroups: DetoxGroupKey[]): Promise<{
+async function cleanupMailbox(
+  accessToken: string,
+  selectedGroups: DetoxGroupKey[],
+  messageIds: string[] = [],
+): Promise<{
   deletedCount: number;
   deletedBytes: number;
   remainingCount: number;
   batchLimit: number;
   nextBatch: BatchPreview;
 }> {
-  const candidates = await collectCleanupCandidates(accessToken, selectedGroups);
-  const batchIds = candidates.slice(0, CLEANUP_BATCH_MAX);
-  const remainingIds = candidates.slice(CLEANUP_BATCH_MAX);
-
-  const batchSizes = await sizeMessages(accessToken, batchIds);
-  let deletedBytes = 0;
-  for (const size of batchSizes.values()) deletedBytes += size;
-
-  if (batchIds.length) {
-    await batchDelete(accessToken, batchIds);
+  let batchIds = messageIds.slice(0, CLEANUP_BATCH_MAX);
+  if (!batchIds.length) {
+    batchIds = await collectCleanupCandidates(accessToken, selectedGroups, CLEANUP_BATCH_MAX);
   }
 
-  const nextBatch = remainingIds.length
-    ? await previewNextBatch(accessToken, selectedGroups)
-    : { batchCount: 0, batchBytes: 0, remainingCount: 0 };
+  let deletedBytes = 0;
+  let deletedCount = 0;
+  if (batchIds.length) {
+    const batchSizes = await sizeMessages(accessToken, batchIds);
+    for (const size of batchSizes.values()) deletedBytes += size;
+    deletedCount = await batchDelete(accessToken, batchIds);
+  }
 
   return {
-    deletedCount: batchIds.length,
+    deletedCount,
     deletedBytes,
-    remainingCount: remainingIds.length,
+    remainingCount: 0,
     batchLimit: CLEANUP_BATCH_MAX,
-    nextBatch,
+    nextBatch: { batchCount: 0, batchBytes: 0, remainingCount: 0 },
   };
 }
 
@@ -427,11 +534,28 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action ?? 'scan');
-    const { accessToken } = await getGoogleTokensForUser(user.id);
+    const { accessToken, scopes } = await getGoogleTokensForUser(user.id);
+
+    if (action === 'verify_oauth') {
+      const { clientId, clientSecret } = readGoogleOAuthEnv();
+      const probe = await probeGoogleOAuthCredentials(clientId, clientSecret);
+      const report = googleOAuthConfigReport(clientId);
+      return jsonResponse({
+        ok: probe.ok,
+        googleAcceptsClient: probe.ok,
+        probeReason: probe.ok ? 'invalid_grant (expected)' : (probe as { reason: string }).reason,
+        ...report,
+        hint: !probe.ok
+          ? (probe as { reason: string }).reason === 'invalid_client'
+            ? 'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in Supabase does not match Google Cloud Web client photodumps-supabase-web'
+            : `Google probe failed: ${(probe as { reason: string }).reason}`
+          : 'Credentials accepted by Google',
+      });
+    }
 
     if (action === 'scan') {
       const scan = await scanMailbox(accessToken);
-      const canDelete = await accessTokenCanDelete(accessToken);
+      const canDelete = await resolveCanDelete(accessToken, scopes);
       return jsonResponse({
         ok: true,
         totalBytes: scan.totalBytes,
@@ -442,6 +566,7 @@ Deno.serve(async (req) => {
         scanDepthPerGroup: SCAN_LIST_MAX,
         cleanupBatchMax: CLEANUP_BATCH_MAX,
         canDelete,
+        deleteCandidateIds: scan.deleteCandidateIds,
       });
     }
 
@@ -454,15 +579,16 @@ Deno.serve(async (req) => {
       if (!selectedGroups.length) {
         return jsonResponse({ error: 'No valid groups selected.' }, 400);
       }
-      const preview = await previewNextBatch(accessToken, selectedGroups);
+      const messageIds = pickMessageIds(body.messageIds);
+      const preview = await previewNextBatch(accessToken, selectedGroups, messageIds);
       return jsonResponse({ ok: true, ...preview, batchLimit: CLEANUP_BATCH_MAX });
     }
 
     if (action === 'cleanup') {
-      const canDelete = await accessTokenCanDelete(accessToken);
+      const canDelete = await resolveCanDelete(accessToken, scopes);
       if (!canDelete) {
         return jsonResponse(
-          { error: 'GMAIL_MODIFY_REQUIRED: Approve “Manage your mail” on the one-time Google permission screen.' },
+          { error: 'GMAIL_MODIFY_REQUIRED: Allow “Read, compose, and send emails” on the Google permission screen.' },
           403,
         );
       }
@@ -472,11 +598,12 @@ Deno.serve(async (req) => {
       const selectedGroups = raw
         .map((x) => String(x) as DetoxGroupKey)
         .filter((x) => allowed.has(x));
-      if (!selectedGroups.length) {
+      if (!selectedGroups.length && !pickMessageIds(body.messageIds).length) {
         return jsonResponse({ error: 'No valid groups selected for cleanup.' }, 400);
       }
 
-      const result = await cleanupMailbox(accessToken, selectedGroups);
+      const messageIds = pickMessageIds(body.messageIds);
+      const result = await cleanupMailbox(accessToken, selectedGroups, messageIds);
       return jsonResponse({
         ok: true,
         deletedCount: result.deletedCount,

@@ -111,10 +111,11 @@ export default function HubFeaturesPage({ active = false }: Props) {
                 themeId={themeId}
                 slot={HUB_SLOT_BASE + 8}
                 fonts={fonts}
-                title="Inbox Detox"
-                subtitle="Clear old, spam, ads & suspicious emails to reclaim storage"
+                title={ex.emailClean}
+                subtitle={ex.emailCleanSub}
+                proLock={!isPaid}
                 icon={<MailWarning size={22} color={ic(HUB_SLOT_BASE + 8)} />}
-                onPress={go('/email-clean')}
+                onPress={() => gatePro(go('/email-clean'))}
               />
             </View>
           </ScrollView>

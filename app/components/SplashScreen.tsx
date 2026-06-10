@@ -1,18 +1,10 @@
-import {
-  CormorantGaramond_500Medium_Italic,
-} from '@expo-google-fonts/cormorant-garamond';
-import {
-  DMSans_600SemiBold,
-  DMSans_700Bold,
-  DMSans_900Black,
-} from '@expo-google-fonts/dm-sans';
 import { Image } from 'expo-image';
-import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -84,15 +76,24 @@ function AnimatedLetter({
   );
 }
 
+const titleFont = Platform.select({
+  ios: 'System',
+  android: 'sans-serif-black',
+  default: undefined,
+});
+const bodyFont = Platform.select({
+  ios: 'System',
+  android: 'sans-serif-medium',
+  default: undefined,
+});
+const accentFont = Platform.select({
+  ios: 'Georgia',
+  android: 'serif',
+  default: 'serif',
+});
+
 export function SplashScreen({ onDone }: Props) {
   const insets = useSafeAreaInsets();
-  const [fontsLoaded] = useFonts({
-    DMSans_600SemiBold,
-    DMSans_700Bold,
-    DMSans_900Black,
-    CormorantGaramond_500Medium_Italic,
-  });
-
   const [lettersDone, setLettersDone] = useState(false);
 
   const logoScale = useRef(new Animated.Value(0.42)).current;
@@ -125,7 +126,6 @@ export function SplashScreen({ onDone }: Props) {
   }, [ruleW, startTagline]);
 
   useEffect(() => {
-    if (!fontsLoaded) return;
 
     Animated.parallel([
       Animated.spring(logoScale, { toValue: 1, friction: 5, tension: 72, useNativeDriver: true }),
@@ -146,17 +146,10 @@ export function SplashScreen({ onDone }: Props) {
     }, 5400);
 
     return () => clearTimeout(exit);
-  }, [beam, fadeOut, fontsLoaded, logoOp, logoScale, onDone]);
+  }, [beam, fadeOut, logoOp, logoScale, onDone]);
 
   const beamX = beam.interpolate({ inputRange: [0, 1], outputRange: [-120, 120] });
   const ruleScaleX = ruleW.interpolate({ inputRange: [0, 1], outputRange: [0.001, 1] });
-
-  if (!fontsLoaded) {
-    return <View style={styles.root} />;
-  }
-
-  const titleFont = 'DMSans_900Black';
-  const bodyFont = 'DMSans_600SemiBold';
 
   return (
     <Animated.View style={[styles.root, { opacity: fadeOut, paddingBottom: insets.bottom + 28 }]}>
@@ -226,7 +219,7 @@ export function SplashScreen({ onDone }: Props) {
       </View>
 
       <Animated.View style={[styles.footer, { opacity: footOp, paddingBottom: insets.bottom }]}>
-        <Text style={[styles.love, { fontFamily: 'CormorantGaramond_500Medium_Italic' }]}>
+        <Text style={[styles.love, { fontFamily: accentFont }]}>
           made with love
         </Text>
         <Text style={[styles.msm, { fontFamily: bodyFont }]}>MSM.CO</Text>

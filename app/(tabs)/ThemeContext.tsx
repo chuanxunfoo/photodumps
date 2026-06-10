@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AppState, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 
 import { HOBBY_WEEKLY_SWIPES } from '../_lib/appConfig';
 import {
@@ -173,26 +173,14 @@ export function resolveTypeface(theme: ThemeColors): { titleFont?: string; bodyF
 }
 
 function ScanlineOverlay({ opacity }: { opacity: number }) {
-  const { height } = useWindowDimensions();
-  if (!opacity || opacity <= 0) return null;
+  if (!opacity || opacity <= 0 || Platform.OS !== 'web') return null;
   const lineOpacity = Math.min(0.22, opacity * 5);
-  const n = Math.min(100, Math.ceil(height / 4));
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} collapsable={false}>
-      {Array.from({ length: n }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: i * 4,
-            height: 1,
-            backgroundColor: `rgba(0,0,0,${lineOpacity})`,
-          }}
-        />
-      ))}
-    </View>
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { zIndex: 9999, opacity: lineOpacity }]}
+      collapsable={false}
+    />
   );
 }
 
@@ -875,9 +863,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const openSubscription = useCallback(() => {
     if (isProRef.current || isAdminRef.current) return;
     try {
-      router.push('/subscription');
+      router.push('/subscription' as import('expo-router').Href);
     } catch {
-      setTimeout(() => router.push('/subscription'), 50);
+      setTimeout(() => router.push('/subscription' as import('expo-router').Href), 50);
     }
   }, []);
 

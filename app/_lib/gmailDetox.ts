@@ -37,6 +37,7 @@ type ScanResponse =
       scanDepthPerGroup?: number;
       cleanupBatchMax?: number;
       canDelete?: boolean;
+      deleteCandidateIds?: string[];
     }
   | { ok?: false; error?: string };
 
@@ -59,7 +60,13 @@ async function formatInvokeError(error: { message?: string; context?: Response }
   const msg = error.message ?? 'Request failed';
   const status = error.context?.status;
   if (status === 401) return 'Session expired. Please sign in again.';
-  if (status === 404) return 'gmail-detox function is not deployed yet.';
+  if (status === 404) return 'gmail-detox function is not deployed yet. Deploy it with: npx supabase functions deploy gmail-detox';
+  if (status === 504 || status === 546) {
+    return 'Gmail scan timed out on the server. Try again — a faster scan update may still be deploying.';
+  }
+  if (/failed to send a request|failed to fetch|network request failed|network error/i.test(msg)) {
+    return 'Email Clean server timed out or is unreachable. Wait a few seconds and try Confirm delete again.';
+  }
   if (error.context) {
     try {
       const data = (await error.context.json()) as { error?: string };
@@ -72,6 +79,12 @@ async function formatInvokeError(error: { message?: string; context?: Response }
 }
 
 function humanizeGmailError(raw: string): string {
+  if (/GMAIL_OAUTH_CONFIG|invalid_client|OAuth client was not found/i.test(raw)) {
+    return 'Google sign-in is misconfigured on the server. In Supabase → Edge Functions → Secrets, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to match your Google Cloud Web client (photodumps-supabase-web), then connect Gmail again.';
+  }
+  if (/GMAIL_RECONNECT_REQUIRED|invalid_grant|expired or revoked/i.test(raw)) {
+    return 'GMAIL_RECONNECT_REQUIRED';
+  }
   if (/insufficient authentication scopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT|delete permission missing|GMAIL_MODIFY_REQUIRED/i.test(raw)) {
     return 'GMAIL_SETUP_REQUIRED';
   }
@@ -95,6 +108,7 @@ function parseBatchPreview(payload: {
 
 const SCAN_TIMEOUT_MS = 90_000;
 const PREVIEW_TIMEOUT_MS = 45_000;
+const CLEANUP_TIMEOUT_MS = 90_000;
 
 export async function scanGmailDetox(): Promise<{
   ok: true;
@@ -106,6 +120,7 @@ export async function scanGmailDetox(): Promise<{
   cleanupBatchMax: number;
   nextBatch: GmailDetoxBatchPreview;
   canDelete: boolean;
+  deleteCandidateIds: string[];
 } | {
   ok: false;
   error: string;
@@ -134,13 +149,19 @@ export async function scanGmailDetox(): Promise<{
       cleanupBatchMax: Number(payload.cleanupBatchMax ?? GMAIL_DETOX_BATCH_SIZE),
       nextBatch: parseBatchPreview(payload.nextBatch ?? {}),
       canDelete: Boolean(payload.canDelete),
+      deleteCandidateIds: Array.isArray(payload.deleteCandidateIds)
+        ? payload.deleteCandidateIds.filter((id): id is string => typeof id === 'string' && Boolean(id))
+        : [],
     };
   })();
 
   return Promise.race([scan, timeout]);
 }
 
-export async function previewGmailDetoxBatch(groups: DetoxGroupKey[]): Promise<{
+export async function previewGmailDetoxBatch(
+  groups: DetoxGroupKey[],
+  messageIds: string[] = [],
+): Promise<{
   ok: true;
   batchCount: number;
   batchBytes: number;
@@ -156,7 +177,7 @@ export async function previewGmailDetoxBatch(groups: DetoxGroupKey[]): Promise<{
 
   const preview = (async () => {
     const { data, error } = await supabase.functions.invoke('gmail-detox', {
-      body: { action: 'preview_batch', groups },
+      body: { action: 'preview_batch', groups, messageIds },
     });
     if (error) return { ok: false as const, error: await formatInvokeError(error as { message?: string; context?: Response }) };
     const payload = (data ?? {}) as PreviewResponse;
@@ -173,7 +194,10 @@ export async function previewGmailDetoxBatch(groups: DetoxGroupKey[]): Promise<{
   return Promise.race([preview, timeout]);
 }
 
-export async function cleanupGmailDetox(groups: DetoxGroupKey[]): Promise<{
+export async function cleanupGmailDetox(
+  groups: DetoxGroupKey[],
+  messageIds: string[] = [],
+): Promise<{
   ok: true;
   deletedCount: number;
   deletedBytes: number;
@@ -184,18 +208,29 @@ export async function cleanupGmailDetox(groups: DetoxGroupKey[]): Promise<{
   ok: false;
   error: string;
 }> {
-  const { data, error } = await supabase.functions.invoke('gmail-detox', {
-    body: { action: 'cleanup', groups },
+  const timeout = new Promise<{ ok: false; error: string }>((resolve) => {
+    setTimeout(
+      () => resolve({ ok: false, error: 'Delete timed out. Your emails may still have been removed — tap Scan to refresh.' }),
+      CLEANUP_TIMEOUT_MS,
+    );
   });
-  if (error) return { ok: false, error: await formatInvokeError(error as { message?: string; context?: Response }) };
-  const payload = (data ?? {}) as CleanupResponse;
-  if (!payload.ok) return { ok: false, error: payload.error ?? 'Cleanup failed.' };
-  return {
-    ok: true,
-    deletedCount: Number(payload.deletedCount ?? 0),
-    deletedBytes: Number(payload.deletedBytes ?? 0),
-    remainingCount: Number(payload.remainingCount ?? 0),
-    batchLimit: Number(payload.batchLimit ?? GMAIL_DETOX_BATCH_SIZE),
-    nextBatch: parseBatchPreview(payload.nextBatch ?? { remainingCount: payload.remainingCount }),
-  };
+
+  const cleanup = (async () => {
+    const { data, error } = await supabase.functions.invoke('gmail-detox', {
+      body: { action: 'cleanup', groups, messageIds },
+    });
+    if (error) return { ok: false as const, error: await formatInvokeError(error as { message?: string; context?: Response }) };
+    const payload = (data ?? {}) as CleanupResponse;
+    if (!payload.ok) return { ok: false as const, error: payload.error ?? 'Cleanup failed.' };
+    return {
+      ok: true as const,
+      deletedCount: Number(payload.deletedCount ?? 0),
+      deletedBytes: Number(payload.deletedBytes ?? 0),
+      remainingCount: Number(payload.remainingCount ?? 0),
+      batchLimit: Number(payload.batchLimit ?? GMAIL_DETOX_BATCH_SIZE),
+      nextBatch: parseBatchPreview(payload.nextBatch ?? { remainingCount: payload.remainingCount }),
+    };
+  })();
+
+  return Promise.race([cleanup, timeout]);
 }

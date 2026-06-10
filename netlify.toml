@@ -1,0 +1,11 @@
+# Legal pages, promo, and Gmail OAuth bridge — deploy with: npm run deploy:legal
+[build]
+  command = ""
+  publish = "public"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

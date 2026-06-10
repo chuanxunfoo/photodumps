@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { readPhotoBase64, writePngBase64 } from '../../_lib/photoFile';
+import type { TraceStyle } from '../../_lib/stickerStudio/types';
 
 export type TraceStrokeMode = 'smooth' | 'grainy';
 
@@ -66,6 +67,50 @@ function hexRgb(hex) {
   const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+function overlayDashedRing(out, src, alpha, w, h, color, thickness, scale) {
+  const ringR = Math.max(2, Math.round((thickness || 7) * scale * 0.72));
+  let ring = dilateRound(alpha, w, h, ringR);
+  ring = boxBlur(ring, w, h, 2);
+  let cx = w * 0.5, cy = h * 0.5, mass = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = alpha[y * w + x];
+      if (a > 48) { cx += x * a; cy += y * a; mass += a; }
+    }
+  }
+  if (mass > 0) { cx /= mass; cy /= mass; }
+  const gapR = Math.max(1, Math.round(ringR * 0.4));
+  const inner = dilateRound(alpha, w, h, gapR);
+  const [cr, cg, cb] = hexRgb(color);
+  const dashSegments = Math.max(18, Math.round(14 + (thickness || 7) * 1.1));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      const i = idx * 4;
+      const sa = src.data[i + 3];
+      if (sa > 210) continue;
+      const fill = ring[idx] / 255;
+      const inRing = fill > 0.07 && sa < 168 && ring[idx] > inner[idx] + 14;
+      if (!inRing) continue;
+      const angle = Math.atan2(y - cy, x - cx);
+      const phase = (angle + Math.PI) / (2 * Math.PI);
+      const seg = Math.floor(phase * dashSegments);
+      if (seg % 2 !== 0) continue;
+      const h2 = hash(x * 5 + 17, y * 3 + 41) / 4294967295;
+      const edge = Math.min(1, (ring[idx] - inner[idx]) / 110);
+      let a = Math.round(255 * (0.82 + h2 * 0.14) * Math.max(0.45, edge));
+      let R = cr, G = cg, B = cb;
+      if (h2 > 0.88) { R = Math.min(255, cr + 18); G = Math.min(255, cg + 16); B = Math.min(255, cb + 14); }
+      if (a < 12) continue;
+      if (a >= out.data[i + 3]) {
+        out.data[i] = R;
+        out.data[i + 1] = G;
+        out.data[i + 2] = B;
+        out.data[i + 3] = a;
+      }
+    }
+  }
+}
 function post(obj) {
   if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(obj));
 }
@@ -94,10 +139,14 @@ async function processJob(data) {
   const r = Math.max(2, Math.round(thickness * scale * 0.78));
   const grainy = data.mode === 'grainy';
   const glow = !!data.glow;
-  let stroke = dilateRound(alpha, w, h, r);
-  const blurRad = glow ? Math.max(3, Math.round(r * 0.45)) : Math.max(2, Math.round(r * 0.28));
-  stroke = boxBlur(stroke, w, h, blurRad);
-  if (glow) stroke = boxBlur(stroke, w, h, blurRad + 1);
+  const skipStroke = data.style === 'none';
+  let stroke = null;
+  if (!skipStroke) {
+    stroke = dilateRound(alpha, w, h, r);
+    const blurRad = glow ? Math.max(3, Math.round(r * 0.45)) : Math.max(2, Math.round(r * 0.28));
+    stroke = boxBlur(stroke, w, h, blurRad);
+    if (glow) stroke = boxBlur(stroke, w, h, blurRad + 1);
+  }
   const [cr, cg, cb] = hexRgb(data.color);
   const gapBase = grainy ? 0.05 + (1 - thickness / 40) * 0.08 : 0;
   for (let y = 0; y < h; y++) {
@@ -112,6 +161,7 @@ async function processJob(data) {
         out.data[i + 3] = sa;
         continue;
       }
+      if (skipStroke || !stroke) continue;
       const fill = stroke[idx] / 255;
       if (fill < 0.04 || sa > 80) continue;
       const h1 = hash(x, y) / 4294967295;
@@ -142,6 +192,9 @@ async function processJob(data) {
       out.data[i + 3] = a;
     }
   }
+  if (data.dashWrap) {
+    overlayDashedRing(out, src, alpha, w, h, data.color, data.dashWidth || 7, scale);
+  }
   ctx.putImageData(out, 0, 0);
   post({ type: 'done', dataUrl: canvas.toDataURL('image/png') });
 }
@@ -161,13 +214,26 @@ type Props = {
   color: string;
   width: number;
   mode: TraceStrokeMode;
+  style: TraceStyle;
   glow?: boolean;
+  dashWrap?: boolean;
   onResult: (fileUri: string) => void;
   onProcessing?: (busy: boolean) => void;
   onError?: (msg: string) => void;
 };
 
-export function TraceStrokeProcessor({ uri, color, width, mode, glow, onResult, onProcessing, onError }: Props) {
+export function TraceStrokeProcessor({
+  uri,
+  color,
+  width,
+  mode,
+  style,
+  glow,
+  dashWrap,
+  onResult,
+  onProcessing,
+  onError,
+}: Props) {
   const webRef = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
@@ -196,11 +262,21 @@ export function TraceStrokeProcessor({ uri, color, width, mode, glow, onResult, 
     const t = setTimeout(() => {
       onProcessing?.(true);
       webRef.current?.postMessage(
-        JSON.stringify({ type: 'process', imageDataUrl: dataUrl, color, width, mode, glow: !!glow }),
+        JSON.stringify({
+          type: 'process',
+          imageDataUrl: dataUrl,
+          color,
+          width,
+          mode,
+          style,
+          glow: !!glow,
+          dashWrap: !!dashWrap,
+          dashWidth: 7,
+        }),
       );
     }, 140);
     return () => clearTimeout(t);
-  }, [ready, dataUrl, color, width, mode, glow, onProcessing]);
+  }, [ready, dataUrl, color, width, mode, style, glow, dashWrap, onProcessing]);
 
   const onMessage = useCallback(
     async (ev: WebViewMessageEvent) => {

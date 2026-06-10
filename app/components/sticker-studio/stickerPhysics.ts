@@ -12,9 +12,9 @@ export type PhysicsBody = {
   rotation: number;
 };
 
-export const JAR_H = 252;
-export const STICKER_D = 64;
-export const STICKERS_PER_JAR = 9;
+export const JAR_H = 268;
+export const STICKER_D = 96;
+export const STICKERS_PER_JAR = 8;
 
 export function chunkStickers<T>(items: T[], perJar: number): T[][] {
   if (items.length === 0) return [[]];
@@ -31,7 +31,7 @@ export function spawnBodies(
   height: number,
   diameter: number = STICKER_D,
 ): PhysicsBody[] {
-  const r = diameter * 0.48;
+  const r = diameter * 0.5;
   const pad = r + 8;
   const innerW = Math.max(diameter, width - pad * 2);
   const innerH = Math.max(diameter, height - pad * 2);

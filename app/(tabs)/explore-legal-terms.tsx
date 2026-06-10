@@ -5,11 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { getLegalCopy } from '../_lib/localeContent';
 import { MinimalBackButton } from '../components/MinimalBackButton';
-import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TERMS_OF_SERVICE_URL } from '../_lib/legalUrls';
+import { openTermsOnWeb } from '../_lib/openLegalDocument';
 import { useTheme } from './ThemeContext';
 
 const LEGAL_BG = require('../assets/explore/legal-parchment.png');
@@ -75,7 +74,7 @@ export default function ExploreLegalTermsScreen() {
           </View>
           <TouchableOpacity
             style={s.webLink}
-            onPress={() => { void WebBrowser.openBrowserAsync(TERMS_OF_SERVICE_URL); }}
+            onPress={() => { void openTermsOnWeb(); }}
           >
             <Text style={s.webLinkTxt}>Open full terms on the web</Text>
           </TouchableOpacity>

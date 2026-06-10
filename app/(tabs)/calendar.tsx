@@ -1,5 +1,4 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import * as MediaLibrary from 'expo-media-library';
 import { Redirect, useRouter } from 'expo-router';
 import { Calendar, ChevronDown, Flame, Image as ImageIcon, Shuffle, Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,6 +9,11 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
 import { GlassTicker } from '../components/GlassTicker';
+import {
+  getPhotoAccessStatus,
+  requestPhotoAccessFromUser,
+  type PhotoAccessStatus,
+} from '../_lib/firstLaunchPermissions';
 import {
   countAssetsInRange,
   countRandomVaultAssets,
@@ -228,6 +232,8 @@ export function CalendarScreen() {
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [counts, setCounts]   = useState<Record<string, number>>({});
   const [randomCount, setRandomCount] = useState(0);
+  const [photoAccess, setPhotoAccess] = useState<PhotoAccessStatus | 'unknown'>('unknown');
+  const [requestingAccess, setRequestingAccess] = useState(false);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale   = useRef(new Animated.Value(0.97)).current;
 
@@ -236,13 +242,23 @@ export function CalendarScreen() {
       Animated.timing(headerOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.spring(headerScale,   { toValue: 1, friction: 8,   useNativeDriver: true }),
     ]).start();
-    loadCounts();
-  }, [year]);
+  }, [headerOpacity, headerScale]);
 
-  const loadCounts = async () => {
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void getPhotoAccessStatus().then((status) => {
+        if (!cancelled) setPhotoAccess(status);
+      });
+    }, 2500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+
+  const loadCounts = useCallback(async () => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') return;
       const result: Record<string, number> = {};
       for (const m of MONTH_DATA) {
         const { createdAfter, createdBefore } = monthRange(year, m.num - 1);
@@ -250,14 +266,38 @@ export function CalendarScreen() {
       }
       setCounts(result);
       setRandomCount(await countRandomVaultAssets());
-    } catch {}
-  };
+    } catch (e) {
+      console.warn('[calendar] loadCounts failed', e);
+    }
+  }, [year]);
+
+  useEffect(() => {
+    if (photoAccess === 'granted' || photoAccess === 'limited') {
+      void loadCounts();
+    }
+  }, [year, photoAccess, loadCounts]);
+
+  const handleEnablePhotos = useCallback(async () => {
+    if (requestingAccess) return;
+    setRequestingAccess(true);
+    try {
+      const status = await requestPhotoAccessFromUser();
+      setPhotoAccess(status);
+      if (status === 'granted' || status === 'limited') {
+        await loadCounts();
+      }
+    } finally {
+      setRequestingAccess(false);
+    }
+  }, [loadCounts, requestingAccess]);
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const capsuleGrad = calendarBannerGradient(themeId, theme);
   const capsuleTone = contrastOnGradient(capsuleGrad);
   const deepGrad = calendarDeepCleanGradient(themeId);
   const deepTone = contrastOnGradient(deepGrad);
+  const ink = theme.text;
+  const inkSub = theme.textSub;
 
   const navigateToMonth = (monthName: string) => {
     router.push({
@@ -297,6 +337,25 @@ export function CalendarScreen() {
               subtitle={`${total > 0 ? total : '—'} ${t.photos.toLowerCase()}`}
             />
 
+            {photoAccess !== 'granted' && photoAccess !== 'limited' && (
+              <TouchableOpacity
+                style={[cs.accessBanner, { backgroundColor: theme.card, borderColor: theme.border }]}
+                onPress={() => void handleEnablePhotos()}
+                disabled={requestingAccess}
+                activeOpacity={0.85}
+              >
+                <ImageIcon size={18} color={theme.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[cs.accessTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
+                    {requestingAccess ? 'Connecting…' : 'Connect your camera roll'}
+                  </Text>
+                  <Text style={[cs.accessSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
+                    Tap to allow photo access and load your months
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             <LinearGradient
               colors={capsuleGrad}
               start={{ x: 0, y: 0 }}
@@ -310,9 +369,9 @@ export function CalendarScreen() {
             {/* Stats row */}
             <View style={cs.statsRow}>
               {[
-                { icon: <ImageIcon size={16} color={theme.textSub} />, val: total > 0 ? total.toString() : '—', lbl: t.photos },
-                { icon: <Calendar size={16} color={theme.textSub} />,  val: year.toString(),                     lbl: t.year   },
-                { icon: <Sparkles size={16} color={theme.textSub} />,  val: '12',                                 lbl: t.months },
+                { icon: <ImageIcon size={16} color={inkSub} />, val: total > 0 ? total.toString() : '—', lbl: t.photos },
+                { icon: <Calendar size={16} color={inkSub} />,  val: year.toString(),                     lbl: t.year   },
+                { icon: <Sparkles size={16} color={inkSub} />,  val: '12',                                 lbl: t.months },
               ].map((s, i) => (
                 <View key={i} style={[cs.statCard, {
                   backgroundColor: theme.bg2,
@@ -321,8 +380,8 @@ export function CalendarScreen() {
                   borderWidth: theme.borderW,
                 }]}>
                   {s.icon}
-                  <Text style={[cs.statVal, { color: theme.text }]}>{s.val}</Text>
-                  <Text style={[cs.statLbl, { color: theme.textSub }]}>{s.lbl}</Text>
+                  <Text style={[cs.statVal, { color: ink }]}>{s.val}</Text>
+                  <Text style={[cs.statLbl, { color: inkSub }]}>{s.lbl}</Text>
                 </View>
               ))}
             </View>
@@ -362,8 +421,8 @@ export function CalendarScreen() {
             />
 
             <View style={cs.sectionLbl}>
-              <Shuffle size={11} color={theme.accent} />
-              <Text style={[cs.sectionLblText, { color: theme.textSub }]}>LOST &amp; FOUND</Text>
+              <Shuffle size={11} color={inkSub} />
+              <Text style={[cs.sectionLblText, { color: inkSub }]}>lost &amp; found</Text>
             </View>
 
             <View style={{ paddingBottom: 6 }}>
@@ -379,8 +438,8 @@ export function CalendarScreen() {
             </View>
 
             <View style={cs.sectionLbl}>
-              <Sparkles size={11} color={theme.accent} />
-              <Text style={[cs.sectionLblText, { color: theme.textSub }]}>
+              <Sparkles size={11} color={inkSub} />
+              <Text style={[cs.sectionLblText, { color: inkSub }]}>
                 {t.monthlyArchive} — {year}
               </Text>
             </View>
@@ -401,7 +460,7 @@ export function CalendarScreen() {
             </View>
 
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 3 }}>PHOTODUMPS  •  v3.0  •  PHOTO CLEANER</Text>
+              <Text style={{ color: inkSub, fontSize: 9, fontWeight: '700', letterSpacing: 2 }}>photodumps · v3.0</Text>
             </View>
           </ScrollView>
         </Animated.View>
@@ -440,13 +499,25 @@ const cs = StyleSheet.create({
   statCard:   { flex: 1, borderWidth: 1, borderRadius: 18, padding: 14, alignItems: 'center', gap: 4 },
   statVal:    { fontSize: 17, fontWeight: '900' },
   statLbl:    { fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  accessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 14,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  accessTitle: { fontSize: 14, fontWeight: '800' },
+  accessSub: { fontSize: 12, fontWeight: '600', marginTop: 2 },
   deepBtn:    { marginHorizontal: 16, marginVertical: 10, borderRadius: 22, overflow: 'hidden', borderWidth: 1 },
   deepInner:  { flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 },
   deepIcon:   { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   deepTitle:  { fontSize: 15, fontWeight: '900' },
   deepSub:    { fontSize: 12, fontWeight: '600', marginTop: 2 },
   sectionLbl: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
-  sectionLblText: { fontSize: 9, fontWeight: '900', letterSpacing: 4 },
+  sectionLblText: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'lowercase' },
 });
 
 export default function CalendarRoute() {

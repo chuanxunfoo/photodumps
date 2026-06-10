@@ -1,4 +1,5 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import { readGoogleOAuthEnv } from '../_shared/googleOAuthEnv.ts';
 import { getSupabaseAdmin, getSupabaseUser } from '../_shared/supabaseAdmin.ts';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -25,13 +26,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'code and redirectUri are required.' }, 400);
     }
 
-    const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
-    const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
-    if (!clientId || !clientSecret) {
-      return jsonResponse({
-        error: 'Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET in Edge Function secrets.',
-      }, 500);
-    }
+    const { clientId, clientSecret } = readGoogleOAuthEnv();
 
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
@@ -106,6 +101,7 @@ Deno.serve(async (req) => {
           user_id: user.id,
           provider_token: accessToken,
           provider_refresh_token: refreshToken,
+          scopes: mergedScopes,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' },

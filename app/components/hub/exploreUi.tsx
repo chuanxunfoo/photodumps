@@ -1,4 +1,4 @@
-﻿import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Crown, Hammer } from 'lucide-react-native';
 import { MinimalForwardChevron } from '../MinimalBackButton';
 import React, { useEffect, useRef } from 'react';

@@ -16,10 +16,15 @@ const GMAIL_SCOPES = [
 import {
   markGmailDetoxReady,
   markOAuthRedirectStarted,
+  clearOAuthRedirectMarker,
+  stashGmailOAuthReturn,
+  consumeGmailOAuthResume,
+  markOAuthCodeExchanged,
+  wasOAuthCodeExchanged,
   type GmailPendingAction,
 } from './gmailDetoxSetup';
 
-const AFTER_OAUTH_KEY = 'gmail_detox_after_oauth';
+export { markGmailOAuthResume } from './gmailDetoxSetup';
 
 type Extra = {
   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?: string;
@@ -65,10 +70,11 @@ export function getDefaultGmailOAuthRedirectUri(): string {
 }
 
 export function getWebGmailRedirectUri(): string {
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    const port = window.location.port || '8081';
-    const host = window.location.hostname === '127.0.0.1' ? 'localhost' : window.location.hostname;
-    return `http://${host}${port ? `:${port}` : ''}/gmail-callback`;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const { origin, hostname } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${origin.replace(/\/$/, '')}/gmail-callback`;
+    }
   }
   return 'http://localhost:8081/gmail-callback';
 }
@@ -126,23 +132,18 @@ function getOAuthClientConfig(): { clientId: string; redirectUri: string } {
   return { clientId: webClientId, redirectUri };
 }
 
-export function markGmailOAuthResume(action: GmailPendingAction | 'rescan'): void {
-  if (typeof sessionStorage === 'undefined') return;
-  sessionStorage.setItem(AFTER_OAUTH_KEY, action);
-}
-
-export function consumeGmailOAuthResume(): GmailPendingAction | 'rescan' | null {
-  if (typeof sessionStorage === 'undefined') return null;
-  const v = sessionStorage.getItem(AFTER_OAUTH_KEY);
-  sessionStorage.removeItem(AFTER_OAUTH_KEY);
-  if (v === 'scan' || v === 'clean' || v === 'rescan') return v;
-  return null;
-}
-
 export async function exchangeGmailOAuthCode(
   code: string,
   redirectUri: string,
 ): Promise<{ ok: true; hasModify: boolean } | { ok: false; error: string }> {
+  if (await wasOAuthCodeExchanged(code)) {
+    const modifyOk = await hasGmailModifyPermission();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user?.id;
+    if (modifyOk && userId) await markGmailDetoxReady(userId);
+    return { ok: true, hasModify: modifyOk };
+  }
+
   const { data, error } = await supabase.functions.invoke('gmail-oauth-exchange', {
     body: { code, redirectUri },
   });
@@ -165,8 +166,8 @@ export async function exchangeGmailOAuthCode(
     return { ok: false, error: String((data as { error: string }).error) };
   }
 
-  const payload = (data ?? {}) as { hasModify?: boolean };
-  const hasModify = Boolean(payload.hasModify);
+  const payload = (data ?? {}) as { hasModify?: boolean; scopes?: string };
+  const hasModify = Boolean(payload.hasModify) || scopesIncludeModify(String(payload.scopes ?? ''));
 
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user?.id;
@@ -174,6 +175,7 @@ export async function exchangeGmailOAuthCode(
     await markGmailDetoxReady(userId);
   }
 
+  await markOAuthCodeExchanged(code);
   return { ok: true, hasModify };
 }
 
@@ -192,7 +194,11 @@ export async function hasGmailConnection(): Promise<boolean> {
   return Boolean(data?.provider_refresh_token);
 }
 
-/** True when we believe delete is allowed — empty scopes = legacy row, try cleanup. */
+export function scopesIncludeModify(scopes: string): boolean {
+  const s = scopes.toLowerCase();
+  return s.includes('gmail.modify') || s.includes('mail.google.com');
+}
+
 export async function hasGmailModifyPermission(): Promise<boolean> {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user?.id;
@@ -207,8 +213,19 @@ export async function hasGmailModifyPermission(): Promise<boolean> {
   if (error || !data?.provider_refresh_token) return false;
   const scopes = String(data.scopes ?? '').trim();
   if (!scopes) return true;
-  if (scopes.includes('gmail.modify')) return true;
-  return !scopes.includes('gmail.readonly');
+  return scopesIncludeModify(scopes);
+}
+
+function extractOAuthCode(url: string): string | null {
+  try {
+    const parsed = Linking.parse(url);
+    const q = parsed.queryParams ?? {};
+    if (typeof q.code === 'string') return q.code;
+  } catch {
+    /* ignore */
+  }
+  const m = url.match(/[?&#]code=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 export async function connectGmailAccount(
@@ -227,6 +244,8 @@ export async function connectGmailAccount(
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
+  const appReturnUrl = Linking.createURL('gmail-callback');
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -237,14 +256,22 @@ export async function connectGmailAccount(
     include_granted_scopes: 'true',
   });
 
+  if (Platform.OS !== 'web') {
+    params.set('state', appReturnUrl);
+  }
+
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     sessionStorage.setItem('gmail_oauth_redirect_uri', redirectUri);
-    markOAuthRedirectStarted();
+    void markOAuthRedirectStarted();
     window.location.assign(authUrl);
     return { ok: false, error: 'Redirecting to Google…' };
   }
+
+  WebBrowser.maybeCompleteAuthSession();
+
+  void markOAuthRedirectStarted();
 
   const returnUrl = redirectUri.startsWith('https://')
     ? redirectUri
@@ -252,26 +279,26 @@ export async function connectGmailAccount(
 
   const result = await WebBrowser.openAuthSessionAsync(authUrl, returnUrl, {
     preferEphemeralSession: false,
+    showInRecents: false,
   });
 
   if (result.type === 'cancel' || result.type === 'dismiss') {
     return { ok: false, error: 'Gmail connection was cancelled.' };
   }
   if (result.type !== 'success' || !result.url) {
-    return { ok: false, error: 'Gmail connection did not complete.' };
+    return { ok: false, error: 'Gmail connection did not complete. Tap Open photodumps on the next screen, or try Scan emails again.' };
   }
 
-  const parsed = Linking.parse(result.url);
-  const q = parsed.queryParams ?? {};
-  const code = typeof q.code === 'string' ? q.code : null;
+  const code = extractOAuthCode(result.url);
   if (!code) {
-    const err = typeof q.error_description === 'string'
-      ? q.error_description
-      : typeof q.error === 'string'
-        ? q.error
-        : 'No authorization code returned from Google.';
-    return { ok: false, error: err };
+    return { ok: false, error: 'Could not read Google sign-in. Tap Open photodumps if you see that button, then try again.' };
   }
 
-  return exchangeGmailOAuthCode(code, redirectUri);
+  await clearOAuthRedirectMarker();
+  const exchange = await exchangeGmailOAuthCode(code, redirectUri);
+  if (!exchange.ok) return exchange;
+
+  const pending = (await consumeGmailOAuthResume()) === 'clean' ? 'clean' : 'scan';
+  await stashGmailOAuthReturn({ hasModify: exchange.hasModify, pending });
+  return exchange;
 }

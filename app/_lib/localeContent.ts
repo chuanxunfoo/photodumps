@@ -48,6 +48,8 @@ export type ExploreCopy = {
   stickerStudioSub: string;
   widgets: string;
   widgetsSub: string;
+  emailClean: string;
+  emailCleanSub: string;
   videoTrim: string;
   videoTrimSub: string;
   duplicates: string;
@@ -158,6 +160,8 @@ const EN: Bundle = {
     stickerStudioSub: 'AI cutouts · cute frames · collage',
     widgets: 'widgets',
     widgetsSub: 'Home screen templates · your stickers · captions',
+    emailClean: 'email clean',
+    emailCleanSub: 'Clear spam, promos and old mail in small batches',
     videoTrim: 'video trim',
     videoTrimSub: 'CapCut-style cut · quality export to gallery',
     duplicates: 'duplicates',
@@ -214,6 +218,7 @@ const EN: Bundle = {
       'AI duplicate & blur photo detection',
       'Full storage analytics & history',
       '4 exclusive premium colour themes',
+      'Email clean — Gmail spam & promo batches',
       'Priority support · Zero ads, ever',
     ],
     hobbyFeatures: [

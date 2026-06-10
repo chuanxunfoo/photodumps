@@ -91,7 +91,7 @@ export const HubPager = forwardRef<HubPagerHandle, Props>(function HubPager(
       >
         {children.map((child, i) => (
           <View key={i} style={[styles.page, { width: pageWidth }]} collapsable={false}>
-            {child}
+            {i === index ? child : null}
           </View>
         ))}
       </ScrollView>

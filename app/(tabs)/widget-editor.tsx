@@ -28,7 +28,7 @@ import {
   DEFAULT_CAPTION_WEIGHT,
 } from '../_lib/widgets/captionPresets';
 import { randomFreePosition } from '../_lib/widgets/placement';
-import { getWidgetById, saveWidget, updateWidget } from '../_lib/widgets/storage';
+import { getActiveWidgetId, getWidgetById, saveWidget, setActiveWidgetId, updateWidget } from '../_lib/widgets/storage';
 import {
   getWidgetTemplate,
   templateImage,
@@ -42,6 +42,7 @@ import { DraggableCaption } from '../components/widgets/DraggableCaption';
 import { WidgetCaptionModal } from '../components/widgets/WidgetCaptionModal';
 import { WidgetStickerPicker } from '../components/widgets/WidgetStickerPicker';
 import { getLocaleUi } from '../_lib/localeUi';
+import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import { useTheme } from './ThemeContext';
 
 const { width: SW } = Dimensions.get('window');
@@ -65,6 +66,7 @@ function blankCanvas() {
 }
 
 export default function WidgetEditorScreen() {
+  const proAllowed = useRequireProFeature();
   const router = useRouter();
   const params = useLocalSearchParams<{
     templateId?: string;
@@ -219,13 +221,18 @@ export default function WidgetEditorScreen() {
         stickers: placed,
         caption: caption ?? undefined,
       };
+      const hadActive = await getActiveWidgetId();
       if (isEditMode && editId) {
         await updateWidget(editId, payload, tmpUri);
       } else {
-        await saveWidget(payload, tmpUri);
+        const created = await saveWidget(payload, tmpUri);
+        if (!hadActive) await setActiveWidgetId(created.id);
       }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (!hadActive && !isEditMode) {
+        Alert.alert(u.widgetActiveTitle, u.widgetActiveMsg);
+      }
       router.replace('/widgets');
     } catch (e) {
       const detail = e instanceof Error ? e.message : '';
@@ -244,6 +251,8 @@ export default function WidgetEditorScreen() {
       setSaving(false);
     }
   };
+
+  if (!proAllowed) return null;
 
   if (loading) {
     return (

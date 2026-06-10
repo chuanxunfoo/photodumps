@@ -86,7 +86,9 @@ export async function saveWidget(
   const next = [widget, ...list.filter(w => w.id !== id)].slice(0, 48);
   await persistList(next);
   const active = await getActiveWidgetId();
-  void syncAll(next, active);
+  const nextActive = active ?? widget.id;
+  if (!active) await AsyncStorage.setItem(ACTIVE_KEY, nextActive);
+  void syncAll(next, nextActive);
   return widget;
 }
 

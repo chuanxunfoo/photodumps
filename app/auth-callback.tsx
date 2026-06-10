@@ -4,20 +4,24 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { isOAuthSession } from './_lib/authSession';
+import { isEmailVerificationCallback, isFederatedAuthSession } from './_lib/authSession';
 import { safeReplace } from './_lib/safeNavigate';
-import { createSessionFromUrl, parseOAuthRedirectParams } from './(tabs)/authOAuth';
+import { createSessionFromUrl, finalizeOAuthSession, isOAuthBrowserSessionActive, parseOAuthRedirectParams } from './(tabs)/authOAuth';
 import { supabase } from './(tabs)/supabase';
 import type { UserProfile } from './(tabs)/ThemeContext';
 import { useTheme } from './(tabs)/ThemeContext';
 
 async function profileFromSession(session: NonNullable<Awaited<ReturnType<typeof createSessionFromUrl>>>): Promise<UserProfile> {
   const u = session.user;
-  const meta = u.user_metadata as { username?: string } | undefined;
+  const meta = u.user_metadata as { username?: string; full_name?: string } | undefined;
   return {
     uid: u.id,
     email: u.email ?? '',
-    username: (typeof meta?.username === 'string' && meta.username) || u.email?.split('@')[0] || 'user',
+    username:
+      (typeof meta?.username === 'string' && meta.username) ||
+      (typeof meta?.full_name === 'string' && meta.full_name.split(' ')[0]) ||
+      u.email?.split('@')[0] ||
+      'user',
     isLoggedIn: true,
   };
 }
@@ -33,13 +37,18 @@ export default function AuthCallbackScreen() {
       try {
         const url = await Linking.getInitialURL();
         if (!url || !url.includes('auth-callback')) {
-          safeReplace('/auth');
+          safeReplace('/hub?page=generals');
+          return;
+        }
+
+        if (await isOAuthBrowserSessionActive()) {
+          safeReplace('/hub?page=generals');
           return;
         }
 
         const params = parseOAuthRedirectParams(url);
         if (params.error) {
-          safeReplace('/auth?error=1');
+          safeReplace('/hub?page=generals');
           return;
         }
 
@@ -50,30 +59,31 @@ export default function AuthCallbackScreen() {
             await setUser(await profileFromSession(session));
             router.replace('/reset-password');
           } else {
-            safeReplace('/auth?error=1');
+            safeReplace('/hub?page=generals');
           }
           return;
         }
 
         const session = await createSessionFromUrl(url);
         if (!session) {
-          safeReplace('/auth?error=1');
+          safeReplace('/hub?page=generals');
           return;
         }
 
-        if (isOAuthSession(session)) {
+        if (isFederatedAuthSession(session) || !isEmailVerificationCallback(params)) {
           if (!cancelled) setMessage('Welcome back');
+          await finalizeOAuthSession(session);
           await setUser(await profileFromSession(session));
-          const onboard = await AsyncStorage.getItem('@dumpit_onboard');
-          safeReplace(onboard ? '/hub' : '/onboarding');
+          await AsyncStorage.setItem('@dumpit_signed_once', '1');
+          safeReplace('/hub?page=generals');
           return;
         }
 
         if (!cancelled) setMessage('Email verified');
         await supabase.auth.signOut();
-        safeReplace('/auth?verified=1');
+        safeReplace('/hub?page=generals');
       } catch {
-        safeReplace('/auth?error=1');
+        safeReplace('/hub?page=generals');
       }
     })();
 

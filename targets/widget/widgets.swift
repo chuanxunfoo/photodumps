@@ -17,7 +17,7 @@ struct PhotodumpsWidgetEntry: TimelineEntry {
 
 struct PhotodumpsProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> PhotodumpsWidgetEntry {
-        PhotodumpsWidgetEntry(date: Date(), image: nil, caption: "Dumplt")
+        PhotodumpsWidgetEntry(date: Date(), image: nil, caption: "photodumps")
     }
 
     func snapshot(for configuration: SelectWidgetDesignIntent, in context: Context) async -> PhotodumpsWidgetEntry {
@@ -91,11 +91,11 @@ struct PhotodumpsWidgetView: View {
                     endPoint: .bottomTrailing
                 )
                 VStack(spacing: 6) {
-                    Text("Dumplt")
+                    Text("photodumps")
                         .font(.headline)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                    Text("Open Dumplt → save a widget → Edit this widget to pick a design")
+                    Text("Open photodumps → save a widget → Edit this widget to pick a design")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.85))
                         .multilineTextAlignment(.center)
@@ -117,8 +117,8 @@ struct PhotodumpsStickerWidget: Widget {
         AppIntentConfiguration(kind: kind, intent: SelectWidgetDesignIntent.self, provider: PhotodumpsProvider()) { entry in
             PhotodumpsWidgetView(entry: entry)
         }
-        .configurationDisplayName("Dumplt")
-        .description("Shows a sticker widget you saved in Dumplt.")
+        .configurationDisplayName("photodumps")
+        .description("Shows a sticker widget you saved in photodumps.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }

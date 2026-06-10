@@ -28,7 +28,7 @@ const { width: SW, height: SH } = Dimensions.get('window');
 const BUTTER = '#F5D547';
 const BUTTER_LIGHT = '#FFE566';
 const SCAN = Math.min(SW * 0.72, 280);
-const CUTOUT_PREVIEW = Math.round(SCAN * 0.78);
+const CUTOUT_PREVIEW = Math.round(SCAN * 0.82);
 const EXPORT_SZ = 320;
 const DEFAULT_DOCK_H = 300;
 const SCAN_BLOCK_H = SCAN + 8;
@@ -281,11 +281,11 @@ export function LiveStickerCamera({
               </View>
             )}
 
-            {showCenterCutout && cutout && (
-              <Animated.View
-                style={[st.cutoutCenter, { transform: [{ scale: cutoutPop }] }]}
-                pointerEvents="none"
-              >
+          </Animated.View>
+
+          {showCenterCutout && cutout && (
+            <View style={st.cutoutOverlay} pointerEvents="none">
+              <Animated.View style={{ transform: [{ scale: cutoutPop }] }}>
                 <FramedCutout
                   uri={cutout.uri}
                   trace={trace}
@@ -294,8 +294,8 @@ export function LiveStickerCamera({
                   exportRef={previewRef}
                 />
               </Animated.View>
-            )}
-          </Animated.View>
+            </View>
+          )}
         </View>
       </Animated.View>
 
@@ -447,7 +447,15 @@ const st = StyleSheet.create({
     alignItems: 'center',
     zIndex: 3,
   },
-  frameBox: { alignItems: 'center', justifyContent: 'center' },
+  frameBox: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  cutoutOverlay: {
+    position: 'absolute',
+    width: SCAN,
+    height: SCAN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 8,
+  },
   scanFrame: {
     width: SCAN,
     height: SCAN,
@@ -466,10 +474,6 @@ const st = StyleSheet.create({
   },
   guideCenter: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cutoutCenter: {
     alignItems: 'center',
     justifyContent: 'center',
   },

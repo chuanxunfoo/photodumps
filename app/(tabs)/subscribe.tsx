@@ -10,6 +10,8 @@ import {
   Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { openPrivacyDocument, openTermsDocument } from '../_lib/openLegalDocument';
+import { restoreIosPurchases } from '../_lib/iap/iosIap';
 import { PaymentModal } from './PaymentModal';
 import type { PlanType } from './ThemeContext';
 import {
@@ -235,9 +237,15 @@ export default function SubscribePage() {
 
           {/* LEGAL */}
           <View style={s.legal}>
-            {['Terms of Service', 'Privacy Policy', 'Restore Purchase'].map(l => (
-              <TouchableOpacity key={l}><Text style={[s.legalLink, { color: theme.textMuted }]}>{l}</Text></TouchableOpacity>
-            ))}
+            <TouchableOpacity onPress={() => openTermsDocument()}>
+              <Text style={[s.legalLink, { color: theme.textMuted }]}>Terms of Service</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => openPrivacyDocument()}>
+              <Text style={[s.legalLink, { color: theme.textMuted }]}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { void restoreIosPurchases(); }}>
+              <Text style={[s.legalLink, { color: theme.textMuted }]}>Restore Purchase</Text>
+            </TouchableOpacity>
           </View>
           <View style={{ height: 30 }} />
         </ScrollView>

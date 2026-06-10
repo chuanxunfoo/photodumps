@@ -28,9 +28,9 @@ export const SUBSCRIPTION_PLAN_META: Record<
 
 /** One-time spin wheel tiers (USD cents). */
 export const SPIN_PACK_META: Record<SpinPackId, { usdCents: number; label: string; bonusSwipes: number }> = {
-  basic: { usdCents: 199, label: 'Basic Spin', bonusSwipes: 25 },
-  plus: { usdCents: 499, label: 'Plus Spin', bonusSwipes: 75 },
-  max: { usdCents: 999, label: 'Max Spin', bonusSwipes: 200 },
+  basic: { usdCents: 99, label: 'Basic Spin', bonusSwipes: 25 },
+  plus: { usdCents: 199, label: 'Plus Spin', bonusSwipes: 75 },
+  max: { usdCents: 299, label: 'Max Spin', bonusSwipes: 200 },
 };
 
 export function spinPackFromTierLabel(label: string): SpinPackId {

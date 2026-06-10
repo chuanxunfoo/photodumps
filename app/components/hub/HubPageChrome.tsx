@@ -67,7 +67,7 @@ export function HubPageChrome({ sectionLabel, children, active = true }: Props) 
             </TouchableOpacity>
           )
         }
-        subtitle={`${sectionLabel} · ${isAdmin ? 'Admin' : isPro ? 'Pro' : 'Hobby'} · ${user?.email ?? u.hubSignedIn}`}
+        subtitle={`${sectionLabel} · ${isAdmin ? 'Admin' : isPro ? 'Pro' : 'Hobby'} · ${user?.email ?? 'Guest'}`}
       />
       {!isPro && !isAdmin && (
         <View style={[es.hobbyPill, { backgroundColor: theme.bg2, borderColor: theme.border, alignSelf: 'center', marginTop: 8, marginBottom: 4 }]}>

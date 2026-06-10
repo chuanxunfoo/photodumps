@@ -32,6 +32,7 @@ export function normalizeTrace(raw?: Partial<TraceSettings>, frameId?: LegacyFra
       style: raw.style,
       color: raw.color ?? DEFAULT_TRACE.color,
       width: typeof raw.width === 'number' ? raw.width : DEFAULT_TRACE.width,
+      dashWrap: !!raw.dashWrap,
     };
   }
   return legacyTraceFromFrameId(frameId);
