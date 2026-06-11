@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { InteractionManager } from 'react-native';
 import { hubPush } from '../../_lib/exploreBack';
 import { openPrivacyDocument, openTermsDocument } from '../../_lib/openLegalDocument';
 import { getExploreCopy } from '../../_lib/localeContent';
@@ -23,8 +24,6 @@ const EUGENE_PAPER = require('../../assets/explore/eugene-paper.png');
 const PALM_KL = require('../../assets/explore/palm-kl.png');
 
 type Props = { active?: boolean };
-type AccountSheetComponent = React.ComponentType<{ visible: boolean; onClose: () => void }>;
-
 export default function HubGeneralsPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, isPro, isAdmin, openSubscription, themeId, setThemeId, language, user, setUser } = useTheme();
@@ -35,17 +34,10 @@ export default function HubGeneralsPage({ active = false }: Props) {
   const [showTheme, setShowTheme] = useState(false);
   const [showLang, setShowLang] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [AccountSheet, setAccountSheet] = useState<AccountSheetComponent | null>(null);
   const [ThemeModalComp, setThemeModalComp] = useState<React.ComponentType<{ visible: boolean; onClose: () => void }> | null>(null);
   const [LanguageModalComp, setLanguageModalComp] = useState<React.ComponentType<{ visible: boolean; onClose: () => void }> | null>(null);
   const [SupportModalComp, setSupportModalComp] = useState<React.ComponentType<{ visible: boolean; onClose: () => void; copy: typeof ex }> | null>(null);
   const [showLetterArt, setShowLetterArt] = useState(false);
-  const ensureAccountSheet = useCallback(async () => {
-    const mod = await import('../AccountAuthSheet');
-    setAccountSheet(() => mod.AccountAuthSheet);
-    return mod;
-  }, []);
   const openSubPage = useCallback(() => {
     try {
       router.push('/subscription');
@@ -83,31 +75,38 @@ export default function HubGeneralsPage({ active = false }: Props) {
   }, [SupportModalComp]);
 
   const openAccount = useCallback(() => {
-    if (!user?.isLoggedIn) {
-      try {
-        router.push('/account-sign-in');
-      } catch {
-        setTimeout(() => router.push('/account-sign-in'), 50);
+    InteractionManager.runAfterInteractions(() => {
+      if (!user?.isLoggedIn) {
+        hubPush('/account-sign-in', 'generals');
+        return;
       }
-      return;
-    }
-    void (async () => {
-      const mod = await ensureAccountSheet();
-      mod.openAccountActionsSheet({
-        onSignOut: () => {
-          void import('../../_lib/accountAuth').then((auth) => auth.signOutAccount(setUser));
-        },
-        onDelete: () => {
-          void mod.runAccountDeleteFlow({ setUser, labels: u });
-        },
-        labels: {
-          signOut: u.settingsSignOut,
-          deleteAccount: u.settingsDeleteAccount,
-          cancel: u.captionCancel,
-        },
-      });
-    })();
-  }, [ensureAccountSheet, setUser, u, user?.isLoggedIn]);
+      void (async () => {
+        const actions = await import('../../_lib/accountActionsSheet');
+        actions.openAccountActionsSheet({
+          onSignOut: () => {
+            void import('../../_lib/accountAuth').then((auth) => auth.signOutAccount(setUser));
+          },
+          onDelete: () => {
+            void actions.runAccountDeleteFlow({
+              setUser,
+              labels: {
+                settingsDeleteConfirmTitle: u.settingsDeleteConfirmTitle,
+                settingsDeleteConfirmMsg: u.settingsDeleteConfirmMsg,
+                settingsDeleteAccount: u.settingsDeleteAccount,
+                settingsDeleteSuccess: u.settingsDeleteSuccess,
+                captionCancel: u.captionCancel,
+              },
+            });
+          },
+          labels: {
+            signOut: u.settingsSignOut,
+            deleteAccount: u.settingsDeleteAccount,
+            cancel: u.captionCancel,
+          },
+        });
+      })();
+    });
+  }, [setUser, u, user?.isLoggedIn]);
 
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
@@ -242,7 +241,6 @@ export default function HubGeneralsPage({ active = false }: Props) {
       {ThemeModalComp ? <ThemeModalComp visible={showTheme} onClose={() => setShowTheme(false)} /> : null}
       {LanguageModalComp ? <LanguageModalComp visible={showLang} onClose={() => setShowLang(false)} /> : null}
       {SupportModalComp ? <SupportModalComp visible={showSupport} onClose={() => setShowSupport(false)} copy={ex} /> : null}
-      {AccountSheet ? <AccountSheet visible={accountOpen} onClose={() => setAccountOpen(false)} /> : null}
     </View>
   );
 }

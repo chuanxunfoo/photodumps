@@ -7,7 +7,6 @@ import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import type { Session } from '@supabase/supabase-js';
 
-import { isNativeAppleSignInAvailable, signInWithAppleNative } from '../_lib/appleAuthNative';
 import { OAUTH_BROWSER_ACTIVE_KEY } from '../_lib/appLaunchFlow';
 import { connectGmailAccount } from '../_lib/gmailConnect';
 import { ensureProfileRow } from '../_lib/profilePlanSupabase';
@@ -201,6 +200,7 @@ export async function reconnectGoogleWithGmailScopes() {
 
 export async function signInWithApple() {
   if (Platform.OS === 'ios') {
+    const { isNativeAppleSignInAvailable, signInWithAppleNative } = await import('../_lib/appleAuthNative');
     const nativeAvailable = await isNativeAppleSignInAvailable();
     if (!nativeAvailable) {
       throw new Error(

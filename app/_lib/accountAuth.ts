@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 
 import type { UserProfile } from '../(tabs)/ThemeContext';
-import { signInWithAppleNative } from './appleAuthNative';
+import { SUPABASE_APPLE_SETUP_HINT } from './appleAuthConstants';
 import { ensureProfileRow } from './profilePlanSupabase';
 import { supabase } from '../(tabs)/supabase';
 
@@ -42,6 +42,7 @@ export async function signInWithAppleAccount(
   setUser: (u: UserProfile | null) => void | Promise<void>,
 ): Promise<UserProfile | null> {
   try {
+    const { signInWithAppleNative } = await import('./appleAuthNative');
     const session = await signInWithAppleNative();
     if (!session) return null;
     await AsyncStorage.setItem('@dumpit_signed_once', '1');
@@ -72,19 +73,19 @@ export async function signOutAccount(
 export function formatAuthError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   if (/unable to exchange external code|exchange.*code|invalid flow state|code verifier/i.test(msg)) {
-    return 'Sign-in was interrupted. Close photodumps completely, reopen it, and try again in one step.';
+    return 'Sign-in was interrupted. Close photodumps completely, reopen it, and try again.';
   }
   if (/sign.?up not completed|signup not completed/i.test(msg)) {
-    return 'Apple could not finish sign-in. Update to the latest TestFlight build (native Sign in with Apple), then try again from Generals → account.';
+    return 'Apple could not finish sign-in on this device. Use Generals → Account on the latest build.';
   }
-  if (/unacceptable audience|invalid claim|id_token|jwt|token.*invalid/i.test(msg)) {
-    return 'Apple sign-in is misconfigured in Supabase. Under Authentication → Providers → Apple, set the iOS bundle ID to com.yourname.dumpitapp, then try again.';
+  if (/unacceptable audience|invalid claim|id_token|jwt|token.*invalid|rejected the Apple token/i.test(msg)) {
+    return msg.includes('Supabase') ? msg : `${msg}\n\n${SUPABASE_APPLE_SETUP_HINT}`;
   }
-  if (/unsupported provider|provider is not enabled|validation_failed/i.test(msg)) {
-    return 'Apple sign-in is not enabled in Supabase. Enable Apple under Authentication → Providers and add dumpit://auth-callback as a redirect URL.';
+  if (/unsupported provider|provider is not enabled|validation_failed|disabled in Supabase/i.test(msg)) {
+    return msg.includes('Supabase') ? msg : `Apple sign-in is not enabled in Supabase. ${SUPABASE_APPLE_SETUP_HINT}`;
   }
   if (/Network request failed|Failed to fetch|invalid\.supabase\.co/i.test(msg)) {
-    return 'Cannot reach Supabase. Check your network and app configuration, then try again.';
+    return 'Cannot reach Supabase. Check your network and try again.';
   }
   return msg;
 }

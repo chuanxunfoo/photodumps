@@ -20,7 +20,7 @@ import {
   type ProfilePlanType,
 } from '../_lib/profilePlanSupabase';
 import { textOnAccent } from '../_lib/themeContrast';
-import { AccountAuthSheet, openAccountActionsSheet, runAccountDeleteFlow } from '../components/AccountAuthSheet';
+import { openAccountActionsSheet, runAccountDeleteFlow } from '../_lib/accountActionsSheet';
 import { signOutAccount } from '../_lib/accountAuth';
 import { useTheme } from './ThemeContext';
 
