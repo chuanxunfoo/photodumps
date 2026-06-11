@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { Sticker } from 'lucide-react-native';
 import type { SavedSticker } from '../../_lib/stickerStudio/types';
+import { ChalkboardSurface } from '../ChalkboardSurface';
+import type { ThemeId } from '../../(tabs)/ThemeContext';
 import {
   JAR_H,
   STICKER_D,
@@ -36,17 +38,20 @@ type ThemeSlice = {
 type Props = {
   stickers: SavedSticker[];
   theme: ThemeSlice;
+  themeId: ThemeId;
   onStickerPress: (s: SavedSticker) => void;
 };
 
 function PhysicsJarPage({
   stickers,
   theme,
+  themeId,
   onStickerPress,
   active,
 }: {
   stickers: SavedSticker[];
   theme: ThemeSlice;
+  themeId: ThemeId;
   onStickerPress: (s: SavedSticker) => void;
   active: boolean;
 }) {
@@ -112,14 +117,9 @@ function PhysicsJarPage({
   }, [active, width]);
 
   return (
-    <View
-      style={[
-        st.jarFrame,
-        {
-          borderColor: theme.border,
-          backgroundColor: theme.bg2,
-        },
-      ]}
+    <ChalkboardSurface
+      themeId={themeId}
+      style={st.jarFrame}
       onLayout={e => setWidth(e.nativeEvent.layout.width)}
     >
       {stickers.length === 0 ? (
@@ -154,13 +154,13 @@ function PhysicsJarPage({
           })}
         </View>
       )}
-    </View>
+    </ChalkboardSurface>
   );
 }
 
 const FALLBACK_W = Dimensions.get('window').width - 36;
 
-export function StickerPhysicsJar({ stickers, theme, onStickerPress }: Props) {
+export function StickerPhysicsJar({ stickers, theme, themeId, onStickerPress }: Props) {
   const pages = useMemo(() => chunkStickers(stickers, STICKERS_PER_JAR), [stickers]);
   const [page, setPage] = useState(0);
   const [jarW, setJarW] = useState(FALLBACK_W);
@@ -196,6 +196,7 @@ export function StickerPhysicsJar({ stickers, theme, onStickerPress }: Props) {
             <PhysicsJarPage
               stickers={pageStickers}
               theme={theme}
+              themeId={themeId}
               onStickerPress={onStickerPress}
               active={page === i}
             />
@@ -240,9 +241,6 @@ const st = StyleSheet.create({
   },
   jarFrame: {
     height: JAR_H,
-    borderRadius: 16,
-    borderWidth: 2,
-    overflow: 'hidden',
   },
   stage: {
     flex: 1,

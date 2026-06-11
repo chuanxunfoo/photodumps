@@ -75,7 +75,7 @@ const yieldToUi = () =>
 
 export default function StickerStudioScreen() {
   const goBack = useExploreAwareBack();
-  const { theme, language, isPro, isAdmin, openSubscription, user } = useTheme();
+  const { theme, themeId, language, isPro, isAdmin, openSubscription, user } = useTheme();
   const isPaid = isPro || isAdmin;
 
   const paywallStickerIfNeeded = async (): Promise<boolean> => {
@@ -690,6 +690,7 @@ export default function StickerStudioScreen() {
         titleFont={fonts.titleFont}
         headerSubtitle={ex.stickerStudio}
         theme={theme}
+        themeId={themeId}
         onBack={goBack}
         onNew={openNewCutout}
         onGallery={() => void pickFromGallery()}

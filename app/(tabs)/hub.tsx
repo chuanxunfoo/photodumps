@@ -21,6 +21,19 @@ function PagePlaceholder() {
   );
 }
 
+/** Preload heavy feature routes while user browses the hub. */
+function preloadFeatureRoutes() {
+  void Promise.allSettled([
+    import('./sticker-studio'),
+    import('./photobooth'),
+    import('./email-clean'),
+    import('./duplicates'),
+    import('./supercut'),
+    import('./explore-trim'),
+    import('./insights'),
+  ]);
+}
+
 export default function HubScreen() {
   const { theme } = useTheme();
   const params = useLocalSearchParams<{ page?: string }>();
@@ -31,14 +44,13 @@ export default function HubScreen() {
   const [FeaturesPage, setFeaturesPage] = useState<PageComponent | null>(null);
   const [GeneralsPage, setGeneralsPage] = useState<PageComponent | null>(null);
 
-  /** Defer calendar until hub shell is mounted — avoids MediaLibrary / OAuth native modules on paywall exit. */
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(() => {
       void import('./calendar').then((m) => {
         if (!cancelled) setCalendarScreen(() => m.CalendarScreen);
       });
-    }, 2000);
+    }, 600);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -46,26 +58,21 @@ export default function HubScreen() {
   }, []);
 
   useEffect(() => {
-    if (pageIndex !== 1 || FeaturesPage) return;
     let cancelled = false;
     void import('../components/hub/HubFeaturesPage').then((m) => {
       if (!cancelled) setFeaturesPage(() => m.default);
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [pageIndex, FeaturesPage]);
-
-  useEffect(() => {
-    if (pageIndex !== 2 || GeneralsPage) return;
-    let cancelled = false;
     void import('../components/hub/HubGeneralsPage').then((m) => {
       if (!cancelled) setGeneralsPage(() => m.default);
     });
     return () => {
       cancelled = true;
     };
-  }, [pageIndex, GeneralsPage]);
+  }, []);
+
+  useEffect(() => {
+    if (pageIndex === 1) preloadFeatureRoutes();
+  }, [pageIndex]);
 
   useFocusEffect(
     useCallback(() => {

@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +24,8 @@ import {
 import { deleteUserAccount } from '../_lib/accountDeletion';
 import { getLocaleUi } from '../_lib/localeUi';
 import { useTheme } from '../(tabs)/ThemeContext';
+
+const SHEET_H = Math.min(340, Dimensions.get('window').height * 0.42);
 
 type Props = {
   visible: boolean;
@@ -62,57 +66,108 @@ export function AccountAuthSheet({ visible, onClose }: Props) {
   const { theme, setUser, language } = useTheme();
   const u = getLocaleUi(language);
   const [busy, setBusy] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const slideY = useRef(new Animated.Value(SHEET_H + insets.bottom)).current;
+  const authPendingRef = useRef(false);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      slideY.setValue(SHEET_H + insets.bottom);
+      Animated.spring(slideY, {
+        toValue: 0,
+        damping: 22,
+        stiffness: 220,
+        mass: 0.9,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+    if (!mounted) return;
+    Animated.timing(slideY, {
+      toValue: SHEET_H + insets.bottom,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished && !authPendingRef.current) setMounted(false);
+    });
+  }, [visible, mounted, slideY, insets.bottom]);
+
+  const dismissSheet = () =>
+    new Promise<void>((resolve) => {
+      Animated.timing(slideY, {
+        toValue: SHEET_H + insets.bottom,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => resolve());
+    });
 
   const handleAppleSignIn = async () => {
     if (busy) return;
     setBusy(true);
+    authPendingRef.current = true;
     try {
+      onClose();
+      await dismissSheet();
+      await new Promise((r) => setTimeout(r, 280));
+
       const profile = await signInWithAppleAccount(setUser);
       if (!profile) return;
-      onClose();
       Alert.alert(
         u.accountSignedInTitle,
         u.accountSignedInMsg.replace('{email}', profile.email || 'your Apple ID'),
       );
     } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === 'ERR_REQUEST_CANCELED') return;
       Alert.alert(u.accountSignInFailed, formatAuthError(e));
     } finally {
+      authPendingRef.current = false;
       setBusy(false);
+      setMounted(false);
     }
   };
 
-  if (!visible) return null;
+  if (!mounted && !visible) return null;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={busy ? undefined : onClose}>
-        <View style={StyleSheet.absoluteFillObject} />
-      </Pressable>
-      <View style={[styles.sheetWrap, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-        <View style={[styles.sheet, { backgroundColor: theme.bg }]}>
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={busy}>
+    <Modal visible={mounted || visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <View style={st.root}>
+        <Pressable style={st.backdrop} onPress={busy ? undefined : onClose} />
+        <Animated.View
+          style={[
+            st.sheet,
+            {
+              backgroundColor: theme.bg,
+              paddingBottom: Math.max(insets.bottom, 8),
+              transform: [{ translateY: slideY }],
+            },
+          ]}
+        >
+          <View style={[st.handle, { backgroundColor: theme.border }]} />
+          <TouchableOpacity style={st.closeBtn} onPress={onClose} disabled={busy}>
             <Text style={{ color: theme.textMuted, fontSize: 22 }}>×</Text>
           </TouchableOpacity>
 
-          <Text style={[styles.title, { color: theme.text }]}>{u.accountSignInTitle}</Text>
-          <Text style={[styles.sub, { color: theme.textSub }]}>{u.accountSignInSub}</Text>
+          <Text style={[st.title, { color: theme.text }]}>{u.accountSignInTitle}</Text>
+          <Text style={[st.sub, { color: theme.textSub }]}>{u.accountSignInSub}</Text>
 
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => void handleAppleSignIn()}
             disabled={busy}
-            style={[styles.appleBtn, { opacity: busy ? 0.7 : 1 }]}
+            style={[st.appleBtn, { opacity: busy ? 0.7 : 1 }]}
           >
             {busy ? (
               <ActivityIndicator color="#FFF" />
             ) : (
               <>
                 <Ionicons name="logo-apple" size={22} color="#FFF" />
-                <Text style={styles.appleBtnText}>{u.accountContinueApple}</Text>
+                <Text style={st.appleBtnText}>{u.accountContinueApple}</Text>
               </>
             )}
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -152,33 +207,45 @@ export async function runAccountDeleteFlow(params: {
 
 type LocaleUiLabels = ReturnType<typeof getLocaleUi>;
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheetWrap: { justifyContent: 'flex-end' },
+const st = StyleSheet.create({
+  root: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
   sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 24,
-    paddingTop: 18,
-    paddingBottom: 12,
-    minHeight: 280,
+    paddingTop: 10,
+    minHeight: SHEET_H,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 12,
   },
   closeBtn: {
     alignSelf: 'flex-start',
     padding: 4,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
-    letterSpacing: -0.8,
-    marginBottom: 10,
+    letterSpacing: -0.6,
+    marginBottom: 8,
   },
   sub: {
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '500',
-    marginBottom: 28,
+    marginBottom: 24,
   },
   appleBtn: {
     backgroundColor: '#111111',

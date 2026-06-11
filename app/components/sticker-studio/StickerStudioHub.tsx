@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../AppHeader';
 import type { SavedSticker } from '../../_lib/stickerStudio/types';
+import type { ThemeId } from '../../(tabs)/ThemeContext';
 import { textOnAccent } from '../../_lib/themeContrast';
 import { StickerPhysicsJar } from './StickerPhysicsJar';
 import {
@@ -31,6 +32,7 @@ type Props = {
   titleFont?: string;
   headerSubtitle: string;
   theme: ThemeSlice;
+  themeId: ThemeId;
   onBack: () => void;
   onNew: () => void;
   onGallery: () => void;
@@ -45,6 +47,7 @@ export function StickerStudioHub({
   titleFont,
   headerSubtitle,
   theme,
+  themeId,
   onBack,
   onNew,
   onGallery,
@@ -75,7 +78,7 @@ export function StickerStudioHub({
         >
           <Text style={[st.pageTitle, { color: theme.text, fontFamily: titleFont }]}>Your stickers</Text>
 
-          <StickerPhysicsJar stickers={filtered} theme={theme} onStickerPress={onStickerPress} />
+          <StickerPhysicsJar stickers={filtered} theme={theme} themeId={themeId} onStickerPress={onStickerPress} />
 
           <ScrollView
             horizontal

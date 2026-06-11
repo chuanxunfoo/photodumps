@@ -25,6 +25,9 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarShowLabel: false,
           tabBarStyle: { display: 'none' },
+          contentStyle: { backgroundColor: theme.bg },
+          animation: 'fade',
+          sceneStyle: { backgroundColor: theme.bg },
         }}
       >
         <Tabs.Screen name="hub" />
