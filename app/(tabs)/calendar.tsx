@@ -8,18 +8,51 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../components/AppHeader';
-import { GlassTicker } from '../components/GlassTicker';
-import {
-  getPhotoAccessStatus,
-  requestPhotoAccessFromUser,
-  type PhotoAccessStatus,
-} from '../_lib/firstLaunchPermissions';
-import {
-  countAssetsInRange,
-  countRandomVaultAssets,
-  monthRange,
-  RANDOM_VAULT,
-} from '../_lib/mediaArchive';
+import type { PhotoAccessStatus } from '../_lib/firstLaunchPermissions';
+import { isHubReadyForCalendarNative } from '../_lib/launchStability';
+
+const RANDOM_VAULT = {
+  name: 'LOST & FOUND',
+  short: 'RND',
+  num: 0,
+  colors: ['#001828', '#0A3D5C', '#00B4D8'] as const,
+  tagline: 'Old shots, screenshots & docs you forgot',
+} as const;
+
+type GlassTickerProps = {
+  text: string;
+  hues?: [string, string, string];
+  speed?: number;
+  height?: number;
+  fontSize?: number;
+  textColor?: string;
+  blurTint?: 'light' | 'dark' | 'default';
+};
+
+function DeferredGlassTicker(props: GlassTickerProps) {
+  const [Ticker, setTicker] = useState<React.ComponentType<GlassTickerProps> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      if (cancelled) return;
+      if (!isHubReadyForCalendarNative()) {
+        setTimeout(poll, 400);
+        return;
+      }
+      void import('../components/GlassTicker').then((m) => {
+        if (!cancelled) setTicker(() => m.GlassTicker);
+      });
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!Ticker) {
+    return <View style={{ height: props.height ?? 32 }} />;
+  }
+  return <Ticker {...props} />;
+}
 import {
   CALENDAR_SLOT,
   calendarDeepCleanGradient,
@@ -244,21 +277,9 @@ export function CalendarScreen() {
     ]).start();
   }, [headerOpacity, headerScale]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(() => {
-      void getPhotoAccessStatus().then((status) => {
-        if (!cancelled) setPhotoAccess(status);
-      });
-    }, 2500);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, []);
-
   const loadCounts = useCallback(async () => {
     try {
+      const { countAssetsInRange, countRandomVaultAssets, monthRange } = await import('../_lib/mediaArchive');
       const result: Record<string, number> = {};
       for (const m of MONTH_DATA) {
         const { createdAfter, createdBefore } = monthRange(year, m.num - 1);
@@ -281,6 +302,7 @@ export function CalendarScreen() {
     if (requestingAccess) return;
     setRequestingAccess(true);
     try {
+      const { requestPhotoAccessFromUser } = await import('../_lib/firstLaunchPermissions');
       const status = await requestPhotoAccessFromUser();
       setPhotoAccess(status);
       if (status === 'granted' || status === 'limited') {
@@ -386,7 +408,7 @@ export function CalendarScreen() {
               ))}
             </View>
 
-            <GlassTicker
+            <DeferredGlassTicker
               text="PHOTODUMPS  •  AI PHOTO CLEANER  •  FREE YOUR STORAGE"
               speed={8000}
               hues={tickerHuesForTheme(themeId, theme)}
@@ -412,7 +434,7 @@ export function CalendarScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <GlassTicker
+            <DeferredGlassTicker
               text={`JAN  FEB  MAR  APR  MAY  JUN  JUL  AUG  SEP  OCT  NOV  DEC  •  ${year}`}
               hues={tickerHuesForTheme(themeId, theme)}
               textColor={tickerTextColorForTheme(themeId)}

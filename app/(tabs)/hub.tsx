@@ -2,6 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { HubPager, type HubPagerHandle } from '../components/hub/HubPager';
+import { isHubReadyForSidePages, markHubEntered } from '../_lib/launchStability';
 import { useTheme } from './ThemeContext';
 
 function pageToIndex(page?: string): number {
@@ -21,19 +22,6 @@ function PagePlaceholder() {
   );
 }
 
-/** Preload heavy feature routes while user browses the hub. */
-function preloadFeatureRoutes() {
-  void Promise.allSettled([
-    import('./sticker-studio'),
-    import('./photobooth'),
-    import('./email-clean'),
-    import('./duplicates'),
-    import('./supercut'),
-    import('./explore-trim'),
-    import('./insights'),
-  ]);
-}
-
 export default function HubScreen() {
   const { theme } = useTheme();
   const params = useLocalSearchParams<{ page?: string }>();
@@ -43,36 +31,65 @@ export default function HubScreen() {
   const [CalendarScreen, setCalendarScreen] = useState<PageComponent | null>(null);
   const [FeaturesPage, setFeaturesPage] = useState<PageComponent | null>(null);
   const [GeneralsPage, setGeneralsPage] = useState<PageComponent | null>(null);
+  const hubMarkedRef = useRef(false);
 
+  useEffect(() => {
+    if (!hubMarkedRef.current) {
+      hubMarkedRef.current = true;
+      markHubEntered();
+    }
+  }, []);
+
+  /** Calendar only — defer 4s so hub shell is stable (no MediaLibrary / Blur yet). */
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(() => {
       void import('./calendar').then((m) => {
         if (!cancelled) setCalendarScreen(() => m.CalendarScreen);
       });
-    }, 600);
+    }, 4000);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
   }, []);
 
+  /** Side pages load only when user swipes AND hub has been stable 8s+. */
   useEffect(() => {
-    let cancelled = false;
+    if (pageIndex !== 1 || FeaturesPage) return;
+    if (!isHubReadyForSidePages()) {
+      const poll = setInterval(() => {
+        if (isHubReadyForSidePages()) {
+          clearInterval(poll);
+          void import('../components/hub/HubFeaturesPage').then((m) => {
+            setFeaturesPage(() => m.default);
+          });
+        }
+      }, 500);
+      return () => clearInterval(poll);
+    }
     void import('../components/hub/HubFeaturesPage').then((m) => {
-      if (!cancelled) setFeaturesPage(() => m.default);
+      setFeaturesPage(() => m.default);
     });
-    void import('../components/hub/HubGeneralsPage').then((m) => {
-      if (!cancelled) setGeneralsPage(() => m.default);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [pageIndex, FeaturesPage]);
 
   useEffect(() => {
-    if (pageIndex === 1) preloadFeatureRoutes();
-  }, [pageIndex]);
+    if (pageIndex !== 2 || GeneralsPage) return;
+    if (!isHubReadyForSidePages()) {
+      const poll = setInterval(() => {
+        if (isHubReadyForSidePages()) {
+          clearInterval(poll);
+          void import('../components/hub/HubGeneralsPage').then((m) => {
+            setGeneralsPage(() => m.default);
+          });
+        }
+      }, 500);
+      return () => clearInterval(poll);
+    }
+    void import('../components/hub/HubGeneralsPage').then((m) => {
+      setGeneralsPage(() => m.default);
+    });
+  }, [pageIndex, GeneralsPage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,8 +100,18 @@ export default function HubScreen() {
   );
 
   const calendarNode = CalendarScreen ? <CalendarScreen /> : <PagePlaceholder />;
-  const featuresNode = FeaturesPage ? <FeaturesPage active={pageIndex === 1} /> : <PagePlaceholder />;
-  const generalsNode = GeneralsPage ? <GeneralsPage active={pageIndex === 2} /> : <PagePlaceholder />;
+  const featuresNode =
+    pageIndex === 1 && FeaturesPage ? (
+      <FeaturesPage active />
+    ) : (
+      <PagePlaceholder />
+    );
+  const generalsNode =
+    pageIndex === 2 && GeneralsPage ? (
+      <GeneralsPage active />
+    ) : (
+      <PagePlaceholder />
+    );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>

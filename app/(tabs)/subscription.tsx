@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { safeReplace } from '../_lib/safeNavigate';
+import { safeReplaceAfterPaywall } from '../_lib/safeNavigate';
 import SubscriptionScreen from './SubscriptionModal';
 
 /** Subscribe / plans — full screen route (replaces overlay modal). */
@@ -14,7 +14,7 @@ export default function SubscriptionRoute() {
       postOnboarding={isSetup}
       onClose={() => {
         if (isSetup) {
-          safeReplace('/hub?page=calendar');
+          safeReplaceAfterPaywall('/hub?page=calendar');
         } else {
           router.back();
         }

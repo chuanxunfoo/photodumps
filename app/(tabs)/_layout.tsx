@@ -13,7 +13,7 @@ export default function TabsLayout() {
     const t = setTimeout(() => {
       void recordDailyOpen();
       void getOrCreateStatsSessionId();
-    }, 5000);
+    }, 12000);
     return () => clearTimeout(t);
   }, []);
 

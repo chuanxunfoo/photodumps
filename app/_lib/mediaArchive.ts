@@ -2,9 +2,11 @@ import type { Asset, Album, AssetsOptions } from 'expo-media-library';
 import { Platform } from 'react-native';
 
 import { withMediaLibraryMutex } from './firstLaunchPermissions';
+import { waitUntilNativeIdle } from './launchStability';
 
 /** Lazy-load native module — top-level import crashes Hermes during hub navigation. */
 async function getMediaLibrary() {
+  await waitUntilNativeIdle();
   return import('expo-media-library');
 }
 

@@ -102,12 +102,16 @@ function InnerLayout({ onLaunchReady }: InnerLayoutProps) {
 export default function RootLayout() {
   const [deepLinksReady, setDeepLinksReady] = useState(false);
 
+  const handleLaunchReady = useCallback(() => {
+    setTimeout(() => setDeepLinksReady(true), 10000);
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StripeRoot>
         <ThemeProvider>
           <AppErrorBoundary>
-            <InnerLayout onLaunchReady={() => setDeepLinksReady(true)} />
+            <InnerLayout onLaunchReady={handleLaunchReady} />
             {deepLinksReady && <DeepLinkHandler />}
           </AppErrorBoundary>
         </ThemeProvider>

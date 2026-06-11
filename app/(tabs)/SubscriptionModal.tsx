@@ -14,13 +14,12 @@ import {
 } from 'react-native';
 import { recordSubscriptionActivation } from '../_lib/billingSupabase';
 import { markPaywallComplete } from '../_lib/appLaunchFlow';
-import { safeReplace } from '../_lib/safeNavigate';
+import { safeReplaceAfterPaywall } from '../_lib/safeNavigate';
 import {
   sendSubscriptionConfirmationEmail,
   subscriptionSuccessMessage,
 } from '../_lib/subscriptionConfirm';
 import type { StripePlanId } from '../_lib/stripe/plans';
-import { openPrivacyDocument, openTermsDocument } from '../_lib/openLegalDocument';
 import { getSubscriptionCopy } from '../_lib/localeContent';
 import {
   calloutTextStyle,
@@ -29,7 +28,6 @@ import {
   subscriptionHeroStyle,
 } from '../_lib/themeContrast';
 import type { ThemeColors } from './ThemeContext';
-import { PaymentModal } from './PaymentModal';
 import type { PaymentItem } from './PaymentModal';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
@@ -197,6 +195,12 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
   const [selected, setSelected] = useState<PlanId>('monthly');
   const [showPay, setShowPay] = useState(false);
   const [payItem, setPayItem] = useState<PaymentItem | null>(null);
+  const [PaymentModalComp, setPaymentModalComp] = useState<React.ComponentType<{
+    visible: boolean;
+    item: PaymentItem;
+    onClose: () => void;
+    onSuccess: () => void;
+  }> | null>(null);
   const [iapBusy, setIapBusy] = useState(false);
   const enterOpacity = useRef(new Animated.Value(1)).current;
   const enterY = useRef(new Animated.Value(0)).current;
@@ -335,15 +339,14 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     closingRef.current = true;
     try {
       await markPaywallComplete();
-      await new Promise((r) => setTimeout(r, 350));
       if (postOnboarding) {
-        safeReplace('/hub?page=calendar');
+        safeReplaceAfterPaywall('/hub?page=calendar');
       } else {
         onClose();
       }
     } catch (e) {
       console.warn('[subscription] hobby continue failed', e);
-      safeReplace('/hub?page=calendar');
+      safeReplaceAfterPaywall('/hub?page=calendar');
     }
   };
 
@@ -402,6 +405,9 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
       planId: selected,
       checkoutMode: 'subscription',
     });
+    if (!PaymentModalComp) {
+      void import('./PaymentModal').then((m) => setPaymentModalComp(() => m.PaymentModal));
+    }
     setShowPay(true);
   };
 
@@ -518,10 +524,10 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
               )}
 
               <View style={s.legal}>
-                <TouchableOpacity onPress={() => openTermsDocument()}>
+                <TouchableOpacity onPress={() => { void import('../_lib/openLegalDocument').then((m) => m.openTermsDocument()); }}>
                   <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.termsLink}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => openPrivacyDocument()}>
+                <TouchableOpacity onPress={() => { void import('../_lib/openLegalDocument').then((m) => m.openPrivacyDocument()); }}>
                   <Text style={[s.legalLink, { color: theme.textMuted }]}>{sub.privacyLink}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => { void handleRestore(); }}>
@@ -533,8 +539,8 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
         </SafeAreaView>
       </Animated.View>
 
-      {payItem && (
-        <PaymentModal visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
+      {payItem && PaymentModalComp && (
+        <PaymentModalComp visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
       )}
     </>
   );
