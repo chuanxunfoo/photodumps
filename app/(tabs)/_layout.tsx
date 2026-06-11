@@ -39,7 +39,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="onboarding" options={{ href: null }} />
         <Tabs.Screen name="auth" options={{ href: null }} />
         <Tabs.Screen name="subscribe" options={{ href: null }} />
-        <Tabs.Screen name="subscription" options={{ href: null }} />
+        <Tabs.Screen name="subscription" options={{ href: null, animation: 'none' }} />
         <Tabs.Screen name="payment" options={{ href: null }} />
         <Tabs.Screen name="duplicates" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
@@ -47,10 +47,11 @@ export default function TabsLayout() {
         <Tabs.Screen name="spin-wheel" options={{ href: null }} />
         <Tabs.Screen name="photobooth" options={{ href: null }} />
         <Tabs.Screen name="photobooth-gallery" options={{ href: null }} />
-        <Tabs.Screen name="sticker-studio" options={{ href: null }} />
+        <Tabs.Screen name="sticker-studio" options={{ href: null, animation: 'none' }} />
+        <Tabs.Screen name="account-sign-in" options={{ href: null, animation: 'none' }} />
         <Tabs.Screen name="widgets" options={{ href: null }} />
         <Tabs.Screen name="widget-editor" options={{ href: null }} />
-        <Tabs.Screen name="explore-trim" options={{ href: null }} />
+        <Tabs.Screen name="explore-trim" options={{ href: null, animation: 'none' }} />
         <Tabs.Screen name="explore-rate" options={{ href: null }} />
         <Tabs.Screen name="explore-faq" options={{ href: null }} />
         <Tabs.Screen name="explore-legal-terms" options={{ href: null }} />

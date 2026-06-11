@@ -9,7 +9,7 @@ import {
 import { AppHeader } from '../components/AppHeader';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Animated, Dimensions, Easing, Platform, ScrollView,
+  ActivityIndicator, Alert, Animated, Dimensions, Easing, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { recordSubscriptionActivation } from '../_lib/billingSupabase';
@@ -548,6 +548,13 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
       {payItem && PaymentModalComp && (
         <PaymentModalComp visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
       )}
+
+      <Modal visible={iapBusy} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#FFD600" />
+          <Text style={{ color: '#FFF', marginTop: 14, fontWeight: '700' }}>Opening App Store…</Text>
+        </View>
+      </Modal>
     </>
   );
 }

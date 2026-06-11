@@ -83,25 +83,29 @@ export default function HubGeneralsPage({ active = false }: Props) {
   }, [SupportModalComp]);
 
   const openAccount = useCallback(() => {
+    if (!user?.isLoggedIn) {
+      try {
+        router.push('/account-sign-in');
+      } catch {
+        setTimeout(() => router.push('/account-sign-in'), 50);
+      }
+      return;
+    }
     void (async () => {
       const mod = await ensureAccountSheet();
-      if (user?.isLoggedIn) {
-        mod.openAccountActionsSheet({
-          onSignOut: () => {
-            void import('../../_lib/accountAuth').then((auth) => auth.signOutAccount(setUser));
-          },
-          onDelete: () => {
-            void mod.runAccountDeleteFlow({ setUser, labels: u });
-          },
-          labels: {
-            signOut: u.settingsSignOut,
-            deleteAccount: u.settingsDeleteAccount,
-            cancel: u.captionCancel,
-          },
-        });
-        return;
-      }
-      setAccountOpen(true);
+      mod.openAccountActionsSheet({
+        onSignOut: () => {
+          void import('../../_lib/accountAuth').then((auth) => auth.signOutAccount(setUser));
+        },
+        onDelete: () => {
+          void mod.runAccountDeleteFlow({ setUser, labels: u });
+        },
+        labels: {
+          signOut: u.settingsSignOut,
+          deleteAccount: u.settingsDeleteAccount,
+          cancel: u.captionCancel,
+        },
+      });
     })();
   }, [ensureAccountSheet, setUser, u, user?.isLoggedIn]);
 

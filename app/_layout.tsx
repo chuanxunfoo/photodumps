@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
+
+import { bootIapManager } from './_lib/iap/iapManager';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -103,6 +105,9 @@ export default function RootLayout() {
   const [deepLinksReady, setDeepLinksReady] = useState(false);
 
   const handleLaunchReady = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      setTimeout(() => { void bootIapManager(); }, 3000);
+    }
     setTimeout(() => setDeepLinksReady(true), 10000);
   }, []);
 
