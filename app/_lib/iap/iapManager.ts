@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { InteractionManager, Platform } from 'react-native';
 
+import { markNativeQuiet, runNativeOperation } from '../launchStability';
 import { isExpoGo } from '../stripe/nativeAvailable';
 import type { StripePlanId } from '../stripe/plans';
 
@@ -83,12 +84,13 @@ function attachListeners(iap: typeof import('react-native-iap')) {
   });
 }
 
-/** Boot StoreKit once at app start — keeps listeners alive for every purchase. */
+/** Boot StoreKit when subscription screen opens — never at app launch. */
 export async function bootIapManager(): Promise<void> {
   if (!isIosIapAvailable()) return;
   if (bootPromise) return bootPromise;
 
-  bootPromise = (async () => {
+  markNativeQuiet(3000);
+  bootPromise = runNativeOperation(async () => {
     const iap = await import('react-native-iap');
     iapMod = iap;
     attachListeners(iap);
@@ -97,7 +99,7 @@ export async function bootIapManager(): Promise<void> {
     if (skus.length > 0) {
       await iap.fetchProducts({ skus, type: 'subs' }).catch(() => undefined);
     }
-  })().catch((e) => {
+  }).catch((e) => {
     bootPromise = null;
     listenersAttached = false;
     iapMod = null;
@@ -155,14 +157,12 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
 
   const iap = iapMod!;
 
-  try {
+  await runNativeOperation(async () => {
     await Promise.race([
       iap.fetchProducts({ skus: [productId], type: 'subs' }),
       new Promise<void>((resolve) => setTimeout(resolve, 2000)),
     ]);
-  } catch {
-    /* StoreKit may still show the sheet */
-  }
+  }).catch(() => undefined);
 
   return new Promise<IapPurchaseResult>((resolve) => {
     const timer = setTimeout(() => {

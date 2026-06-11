@@ -46,48 +46,41 @@ export default function HubScreen() {
       void import('./calendar').then((m) => {
         if (!cancelled) setCalendarScreen(() => m.CalendarScreen);
       });
-    }, 4000);
+    }, 6000);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
   }, []);
 
+  /** Side pages load only when user swipes there AND hub has been stable 10s+. */
   useEffect(() => {
-    if (pageIndex >= 1 && !FeaturesPage) {
-      void import('../components/hub/HubFeaturesPage').then((m) => setFeaturesPage(() => m.default));
+    if (pageIndex < 1 || FeaturesPage) return;
+    if (!isHubReadyForSidePages()) {
+      const poll = setInterval(() => {
+        if (isHubReadyForSidePages()) {
+          clearInterval(poll);
+          void import('../components/hub/HubFeaturesPage').then((m) => setFeaturesPage(() => m.default));
+        }
+      }, 500);
+      return () => clearInterval(poll);
     }
-    if (pageIndex >= 2 && !GeneralsPage) {
-      void import('../components/hub/HubGeneralsPage').then((m) => setGeneralsPage(() => m.default));
-    }
-  }, [pageIndex, FeaturesPage, GeneralsPage]);
+    void import('../components/hub/HubFeaturesPage').then((m) => setFeaturesPage(() => m.default));
+  }, [pageIndex, FeaturesPage]);
 
   useEffect(() => {
-    if (FeaturesPage && GeneralsPage) return;
-    let cancelled = false;
-    const warmSidePages = () => {
-      if (!isHubReadyForSidePages()) return false;
-      if (!FeaturesPage) {
-        void import('../components/hub/HubFeaturesPage').then((m) => {
-          if (!cancelled) setFeaturesPage(() => m.default);
-        });
-      }
-      if (!GeneralsPage) {
-        void import('../components/hub/HubGeneralsPage').then((m) => {
-          if (!cancelled) setGeneralsPage(() => m.default);
-        });
-      }
-      return true;
-    };
-    if (warmSidePages()) return () => { cancelled = true; };
-    const poll = setInterval(() => {
-      if (warmSidePages()) clearInterval(poll);
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-    };
-  }, [FeaturesPage, GeneralsPage]);
+    if (pageIndex < 2 || GeneralsPage) return;
+    if (!isHubReadyForSidePages()) {
+      const poll = setInterval(() => {
+        if (isHubReadyForSidePages()) {
+          clearInterval(poll);
+          void import('../components/hub/HubGeneralsPage').then((m) => setGeneralsPage(() => m.default));
+        }
+      }, 500);
+      return () => clearInterval(poll);
+    }
+    void import('../components/hub/HubGeneralsPage').then((m) => setGeneralsPage(() => m.default));
+  }, [pageIndex, GeneralsPage]);
 
   useFocusEffect(
     useCallback(() => {

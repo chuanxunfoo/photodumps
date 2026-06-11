@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  InteractionManager,
   Platform,
   StyleSheet,
   Text,
@@ -11,66 +10,31 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatAuthError, signInWithAppleAccount } from '../_lib/accountAuth';
-import { isNativeAppleSignInAvailable } from '../_lib/appleAuthNative';
+import { formatAuthError } from '../_lib/accountAuth';
 import { getLocaleUi } from '../_lib/localeUi';
-import { waitUntilNativeIdle } from '../_lib/launchStability';
+import { markAuthFlowStart, runNativeOperation } from '../_lib/launchStability';
 import { AppHeader } from '../components/AppHeader';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { useTheme } from './ThemeContext';
 
-type AppleButtonComponent = React.ComponentType<{
-  buttonType: number;
-  buttonStyle: number;
-  cornerRadius: number;
-  style: object;
-  onPress: () => void;
-}>;
-
+/**
+ * Pure React UI — zero expo-apple-authentication imports until the user taps the button.
+ */
 export default function AccountSignInScreen() {
   const goBack = useExploreAwareBack('generals');
   const { theme, setUser, language } = useTheme();
   const u = getLocaleUi(language);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [appleAvailable, setAppleAvailable] = useState(false);
-  const [AppleButton, setAppleButton] = useState<AppleButtonComponent | null>(null);
-  const [appleTypes, setAppleTypes] = useState<{
-    SIGN_IN: number;
-    BLACK: number;
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const boot = async () => {
-      await waitUntilNativeIdle();
-      await new Promise<void>((resolve) => {
-        InteractionManager.runAfterInteractions(() => resolve());
-      });
-      if (cancelled) return;
-      const available = await isNativeAppleSignInAvailable();
-      if (cancelled) return;
-      setAppleAvailable(available);
-      if (Platform.OS === 'ios' && available) {
-        const AppleAuthentication = await import('expo-apple-authentication');
-        if (cancelled) return;
-        setAppleButton(() => AppleAuthentication.AppleAuthenticationButton as unknown as AppleButtonComponent);
-        setAppleTypes({
-          SIGN_IN: AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN,
-          BLACK: AppleAuthentication.AppleAuthenticationButtonStyle.BLACK,
-        });
-      }
-      setReady(true);
-    };
-    void boot();
-    return () => { cancelled = true; };
-  }, []);
 
   const handleApple = async () => {
-    if (busy) return;
+    if (busy || Platform.OS !== 'ios') return;
     setBusy(true);
+    markAuthFlowStart();
     try {
-      const profile = await signInWithAppleAccount(setUser);
+      const profile = await runNativeOperation(async () => {
+        const { signInWithAppleAccount } = await import('../_lib/accountAuth');
+        return signInWithAppleAccount(setUser);
+      });
       if (!profile) return;
       Alert.alert(
         u.accountSignedInTitle,
@@ -94,25 +58,22 @@ export default function AccountSignInScreen() {
           <Text style={[styles.title, { color: theme.text }]}>{u.accountSignInTitle}</Text>
           <Text style={[styles.sub, { color: theme.textSub }]}>{u.accountSignInSub}</Text>
 
-          {!ready || busy ? (
-            <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 28 }} />
-          ) : !appleAvailable ? (
-            <Text style={{ color: theme.textMuted, marginTop: 20 }}>
-              Sign in with Apple is not available on this device.
-            </Text>
-          ) : AppleButton && appleTypes ? (
-            <AppleButton
-              buttonType={appleTypes.SIGN_IN}
-              buttonStyle={appleTypes.BLACK}
-              cornerRadius={16}
-              style={styles.appleBtn}
-              onPress={() => { void handleApple(); }}
-            />
-          ) : (
-            <TouchableOpacity style={styles.fallbackBtn} onPress={() => { void handleApple(); }}>
-              <Text style={styles.fallbackBtnText}>Continue with Apple</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.appleBtn, { opacity: busy ? 0.7 : 1 }]}
+            onPress={() => { void handleApple(); }}
+            disabled={busy}
+            activeOpacity={0.88}
+          >
+            {busy ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.appleBtnText}>{u.accountContinueApple}</Text>
+            )}
+          </TouchableOpacity>
+
+          <Text style={[styles.hint, { color: theme.textMuted }]}>
+            Uses your Apple ID securely. We never see your password.
+          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -124,13 +85,15 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   body: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginBottom: 10 },
-  sub: { fontSize: 15, lineHeight: 22, fontWeight: '500', marginBottom: 28 },
-  appleBtn: { width: '100%', height: 52 },
-  fallbackBtn: {
-    backgroundColor: '#111',
+  sub: { fontSize: 15, lineHeight: 22, fontWeight: '500', marginBottom: 32 },
+  appleBtn: {
+    backgroundColor: '#111111',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
-  fallbackBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  appleBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  hint: { fontSize: 12, lineHeight: 18, marginTop: 16, textAlign: 'center' },
 });

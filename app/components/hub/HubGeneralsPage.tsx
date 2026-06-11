@@ -10,6 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 import { InteractionManager } from 'react-native';
 import { hubPush } from '../../_lib/exploreBack';
+import { markAuthFlowStart } from '../../_lib/launchStability';
 import { openPrivacyDocument, openTermsDocument } from '../../_lib/openLegalDocument';
 import { getExploreCopy } from '../../_lib/localeContent';
 import { getLocaleUi } from '../../_lib/localeUi';
@@ -77,7 +78,8 @@ export default function HubGeneralsPage({ active = false }: Props) {
   const openAccount = useCallback(() => {
     InteractionManager.runAfterInteractions(() => {
       if (!user?.isLoggedIn) {
-        hubPush('/account-sign-in', 'generals');
+        markAuthFlowStart();
+        setTimeout(() => hubPush('/account-sign-in', 'generals'), 500);
         return;
       }
       void (async () => {

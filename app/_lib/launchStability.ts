@@ -1,22 +1,28 @@
 /**
- * iOS Hermes crashes when multiple TurboModules initialize concurrently
- * (common right after paywall → hub navigation). Serialize native access here.
+ * iOS Hermes SIGABRT when multiple TurboModules initialize concurrently.
+ * All native module work must go through runNativeOperation().
  */
 
 let nativeIdleAfterMs = 0;
 let hubEnteredAtMs = 0;
+let nativeChain: Promise<void> = Promise.resolve();
 
-/** Call before navigating away from subscription / onboarding paywall. */
 export function markPaywallExit(): void {
-  const quietUntil = Date.now() + 6000;
-  nativeIdleAfterMs = Math.max(nativeIdleAfterMs, quietUntil);
+  markNativeQuiet(8000);
 }
 
-/** Call when hub shell mounts. */
 export function markHubEntered(): void {
   hubEnteredAtMs = Date.now();
-  const quietUntil = Date.now() + 3500;
-  nativeIdleAfterMs = Math.max(nativeIdleAfterMs, quietUntil);
+  markNativeQuiet(5000);
+}
+
+/** Call before navigating to Apple Sign In. */
+export function markAuthFlowStart(): void {
+  markNativeQuiet(10000);
+}
+
+export function markNativeQuiet(durationMs: number): void {
+  nativeIdleAfterMs = Math.max(nativeIdleAfterMs, Date.now() + durationMs);
 }
 
 export function hubAgeMs(): number {
@@ -24,7 +30,6 @@ export function hubAgeMs(): number {
   return Date.now() - hubEnteredAtMs;
 }
 
-/** Block until the post-paywall quiet window has passed. */
 export async function waitUntilNativeIdle(): Promise<void> {
   const wait = nativeIdleAfterMs - Date.now();
   if (wait > 0) {
@@ -32,12 +37,24 @@ export async function waitUntilNativeIdle(): Promise<void> {
   }
 }
 
-/** True when hub has been up long enough to load secondary pages. */
-export function isHubReadyForSidePages(): boolean {
-  return hubAgeMs() >= 3800;
+/** Serialize every native TurboModule call app-wide (one at a time). */
+export async function runNativeOperation<T>(fn: () => Promise<T>): Promise<T> {
+  const op = async () => {
+    await waitUntilNativeIdle();
+    return fn();
+  };
+  const result = nativeChain.then(op, op);
+  nativeChain = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }
 
-/** True when calendar may touch MediaLibrary / Blur modules. */
+export function isHubReadyForSidePages(): boolean {
+  return hubAgeMs() >= 10000;
+}
+
 export function isHubReadyForCalendarNative(): boolean {
-  return hubAgeMs() >= 4500;
+  return hubAgeMs() >= 6000;
 }

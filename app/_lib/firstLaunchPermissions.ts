@@ -2,11 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { markPermissionsSetupComplete, PERMISSIONS_SETUP_KEY } from './appLaunchFlow';
-import { waitUntilNativeIdle } from './launchStability';
+import { runNativeOperation } from './launchStability';
 
 async function getMediaLibrary() {
-  await waitUntilNativeIdle();
-  return import('expo-media-library');
+  return runNativeOperation(() => import('expo-media-library'));
 }
 
 async function getNotifications() {
