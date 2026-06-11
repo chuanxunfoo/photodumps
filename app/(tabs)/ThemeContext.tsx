@@ -862,6 +862,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const openSubscription = useCallback(() => {
     if (isProRef.current || isAdminRef.current) return;
+    if (Platform.OS === 'ios') {
+      void import('../_lib/iap/iosIap').then((m) => m.warmIosIapConnection());
+    }
     try {
       router.push('/subscription' as import('expo-router').Href);
     } catch {

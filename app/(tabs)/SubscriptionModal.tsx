@@ -244,6 +244,12 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
   ];
 
   useEffect(() => {
+    if (Platform.OS === 'ios') {
+      void import('../_lib/iap/iosIap').then((m) => m.warmIosIapConnection());
+    }
+  }, []);
+
+  useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(crownGlow, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
@@ -489,7 +495,7 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
                 onPress={handleCTA}
                 colors={ctaColors}
                 textDark={ctaTextDark}
-                label={iapBusy ? 'Opening App Store…' : ctaLabel}
+                label={ctaLabel}
                 icon={selected !== 'free' ? <Zap size={18} color={ctaInk} /> : undefined}
               />
 

@@ -93,26 +93,14 @@ export function AccountAuthSheet({ visible, onClose }: Props) {
     });
   }, [visible, mounted, slideY, insets.bottom]);
 
-  const dismissSheet = () =>
-    new Promise<void>((resolve) => {
-      Animated.timing(slideY, {
-        toValue: SHEET_H + insets.bottom,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => resolve());
-    });
-
   const handleAppleSignIn = async () => {
     if (busy) return;
     setBusy(true);
     authPendingRef.current = true;
     try {
-      onClose();
-      await dismissSheet();
-      await new Promise((r) => setTimeout(r, 280));
-
       const profile = await signInWithAppleAccount(setUser);
       if (!profile) return;
+      onClose();
       Alert.alert(
         u.accountSignedInTitle,
         u.accountSignedInMsg.replace('{email}', profile.email || 'your Apple ID'),
@@ -124,7 +112,6 @@ export function AccountAuthSheet({ visible, onClose }: Props) {
     } finally {
       authPendingRef.current = false;
       setBusy(false);
-      setMounted(false);
     }
   };
 

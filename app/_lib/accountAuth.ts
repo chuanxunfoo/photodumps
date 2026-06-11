@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 
 import type { UserProfile } from '../(tabs)/ThemeContext';
+import { signInWithAppleNative } from './appleAuthNative';
 import { ensureProfileRow } from './profilePlanSupabase';
 import { supabase } from '../(tabs)/supabase';
 
@@ -41,7 +42,6 @@ export async function signInWithAppleAccount(
   setUser: (u: UserProfile | null) => void | Promise<void>,
 ): Promise<UserProfile | null> {
   try {
-    const { signInWithAppleNative } = await import('./appleAuthNative');
     const session = await signInWithAppleNative();
     if (!session) return null;
     await AsyncStorage.setItem('@dumpit_signed_once', '1');

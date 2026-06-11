@@ -26,7 +26,7 @@ export default function TabsLayout() {
           tabBarShowLabel: false,
           tabBarStyle: { display: 'none' },
           contentStyle: { backgroundColor: theme.bg },
-          animation: 'fade',
+          animation: 'shift',
           sceneStyle: { backgroundColor: theme.bg },
         }}
       >
