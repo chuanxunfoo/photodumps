@@ -1,5 +1,3 @@
-import * as MediaLibrary from 'expo-media-library';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import {
@@ -36,6 +34,15 @@ import {
 } from '../_lib/userStatsSupabase';
 import { insightsHeroGradient, insightsHeroText } from '../_lib/themeContrast';
 import { useTheme } from './ThemeContext';
+
+function HeroBlur() {
+  const [Blur, setBlur] = useState<React.ComponentType<{ intensity: number; tint: 'dark'; style: object }> | null>(null);
+  useEffect(() => {
+    void import('expo-blur').then((m) => setBlur(() => m.BlurView));
+  }, []);
+  if (!Blur) return null;
+  return <Blur intensity={24} tint="dark" style={StyleSheet.absoluteFill} />;
+}
 
 function fmtBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
@@ -114,6 +121,7 @@ export default function InsightsScreen() {
   const loadAnalytics = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
+      const MediaLibrary = await import('expo-media-library');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted' && status !== 'limited') return;
       const { assets } = await MediaLibrary.getAssetsAsync({
@@ -238,9 +246,7 @@ export default function InsightsScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Animated.View style={{ opacity: heroEntrance, transform: [{ scale: pulseScale }] }}>
             <LinearGradient colors={heroGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, { borderColor: heroTxt.border }]}>
-              {Platform.OS === 'ios' && theme.isDark ? (
-                <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
-              ) : null}
+              {Platform.OS === 'ios' && theme.isDark ? <HeroBlur /> : null}
               <View style={styles.heroContent}>
                 <View style={styles.heroBadge}>
                   <Sparkles size={16} color={heroTxt.badge} />

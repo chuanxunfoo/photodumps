@@ -1,125 +1,113 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
-import { HubPager, type HubPagerHandle } from '../components/hub/HubPager';
-import { isHubReadyForSidePages, markHubEntered } from '../_lib/launchStability';
-import { useTheme } from './ThemeContext';
-
-function pageToIndex(page?: string): number {
-  if (page === 'features') return 1;
-  if (page === 'generals') return 2;
-  return 0;
-}
-
-type PageComponent = React.ComponentType<{ active?: boolean }>;
-
-function PagePlaceholder() {
-  const { theme } = useTheme();
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.bg }}>
-      <ActivityIndicator size="large" color={theme.accent} />
-    </View>
-  );
-}
-
-export default function HubScreen() {
-  const { theme } = useTheme();
-  const params = useLocalSearchParams<{ page?: string }>();
-  const pagerRef = useRef<HubPagerHandle>(null);
-  const initialIndex = pageToIndex(params.page);
-  const [pageIndex, setPageIndex] = useState(initialIndex);
-  const [CalendarScreen, setCalendarScreen] = useState<PageComponent | null>(null);
-  const [FeaturesPage, setFeaturesPage] = useState<PageComponent | null>(null);
-  const [GeneralsPage, setGeneralsPage] = useState<PageComponent | null>(null);
-  const hubMarkedRef = useRef(false);
-
-  useEffect(() => {
-    if (!hubMarkedRef.current) {
-      hubMarkedRef.current = true;
-      markHubEntered();
-    }
-  }, []);
-
-  /** Calendar only — defer 4s so hub shell is stable (no MediaLibrary / Blur yet). */
-  useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(() => {
-      void import('./calendar').then((m) => {
-        if (!cancelled) setCalendarScreen(() => m.CalendarScreen);
-      });
-    }, 4000);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, []);
-
-  /** Side pages load only when user swipes AND hub has been stable 8s+. */
-  useEffect(() => {
-    if (pageIndex !== 1 || FeaturesPage) return;
-    if (!isHubReadyForSidePages()) {
-      const poll = setInterval(() => {
-        if (isHubReadyForSidePages()) {
-          clearInterval(poll);
-          void import('../components/hub/HubFeaturesPage').then((m) => {
-            setFeaturesPage(() => m.default);
-          });
-        }
-      }, 500);
-      return () => clearInterval(poll);
-    }
-    void import('../components/hub/HubFeaturesPage').then((m) => {
-      setFeaturesPage(() => m.default);
-    });
-  }, [pageIndex, FeaturesPage]);
-
-  useEffect(() => {
-    if (pageIndex !== 2 || GeneralsPage) return;
-    if (!isHubReadyForSidePages()) {
-      const poll = setInterval(() => {
-        if (isHubReadyForSidePages()) {
-          clearInterval(poll);
-          void import('../components/hub/HubGeneralsPage').then((m) => {
-            setGeneralsPage(() => m.default);
-          });
-        }
-      }, 500);
-      return () => clearInterval(poll);
-    }
-    void import('../components/hub/HubGeneralsPage').then((m) => {
-      setGeneralsPage(() => m.default);
-    });
-  }, [pageIndex, GeneralsPage]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const i = pageToIndex(params.page);
-      setPageIndex(i);
-      pagerRef.current?.scrollToIndex(i, false);
-    }, [params.page]),
-  );
-
-  const calendarNode = CalendarScreen ? <CalendarScreen /> : <PagePlaceholder />;
-  const featuresNode =
-    pageIndex === 1 && FeaturesPage ? (
-      <FeaturesPage active />
-    ) : (
-      <PagePlaceholder />
-    );
-  const generalsNode =
-    pageIndex === 2 && GeneralsPage ? (
-      <GeneralsPage active />
-    ) : (
-      <PagePlaceholder />
-    );
-
-  return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <HubPager ref={pagerRef} initialIndex={initialIndex} onIndexChange={setPageIndex}>
-        {calendarNode}
-        {featuresNode}
-        {generalsNode}
-      </HubPager>
-    </View>
-  );
-}
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { HubPager, type HubPagerHandle } from '../components/hub/HubPager';
+import { isHubReadyForSidePages, markHubEntered } from '../_lib/launchStability';
+import { useTheme } from './ThemeContext';
+
+function pageToIndex(page?: string): number {
+  if (page === 'features') return 1;
+  if (page === 'generals') return 2;
+  return 0;
+}
+
+type PageComponent = React.ComponentType<{ active?: boolean }>;
+
+function PagePlaceholder() {
+  const { theme } = useTheme();
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.bg }}>
+      <ActivityIndicator size="large" color={theme.accent} />
+    </View>
+  );
+}
+
+export default function HubScreen() {
+  const { theme } = useTheme();
+  const params = useLocalSearchParams<{ page?: string }>();
+  const pagerRef = useRef<HubPagerHandle>(null);
+  const initialIndex = pageToIndex(params.page);
+  const [pageIndex, setPageIndex] = useState(initialIndex);
+  const [CalendarScreen, setCalendarScreen] = useState<PageComponent | null>(null);
+  const [FeaturesPage, setFeaturesPage] = useState<PageComponent | null>(null);
+  const [GeneralsPage, setGeneralsPage] = useState<PageComponent | null>(null);
+  const hubMarkedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hubMarkedRef.current) {
+      hubMarkedRef.current = true;
+      markHubEntered();
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void import('./calendar').then((m) => {
+        if (!cancelled) setCalendarScreen(() => m.CalendarScreen);
+      });
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pageIndex >= 1 && !FeaturesPage) {
+      void import('../components/hub/HubFeaturesPage').then((m) => setFeaturesPage(() => m.default));
+    }
+    if (pageIndex >= 2 && !GeneralsPage) {
+      void import('../components/hub/HubGeneralsPage').then((m) => setGeneralsPage(() => m.default));
+    }
+  }, [pageIndex, FeaturesPage, GeneralsPage]);
+
+  useEffect(() => {
+    if (FeaturesPage && GeneralsPage) return;
+    let cancelled = false;
+    const warmSidePages = () => {
+      if (!isHubReadyForSidePages()) return false;
+      if (!FeaturesPage) {
+        void import('../components/hub/HubFeaturesPage').then((m) => {
+          if (!cancelled) setFeaturesPage(() => m.default);
+        });
+      }
+      if (!GeneralsPage) {
+        void import('../components/hub/HubGeneralsPage').then((m) => {
+          if (!cancelled) setGeneralsPage(() => m.default);
+        });
+      }
+      return true;
+    };
+    if (warmSidePages()) return () => { cancelled = true; };
+    const poll = setInterval(() => {
+      if (warmSidePages()) clearInterval(poll);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [FeaturesPage, GeneralsPage]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const i = pageToIndex(params.page);
+      setPageIndex(i);
+      pagerRef.current?.scrollToIndex(i, false);
+    }, [params.page]),
+  );
+
+  const calendarNode = CalendarScreen ? <CalendarScreen /> : <PagePlaceholder />;
+  const featuresNode = FeaturesPage ? <FeaturesPage active={pageIndex === 1} /> : <PagePlaceholder />;
+  const generalsNode = GeneralsPage ? <GeneralsPage active={pageIndex === 2} /> : <PagePlaceholder />;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <HubPager ref={pagerRef} initialIndex={initialIndex} onIndexChange={setPageIndex}>
+        {calendarNode}
+        {featuresNode}
+        {generalsNode}
+      </HubPager>
+    </View>
+  );
+}

@@ -2,23 +2,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell, BookmarkIcon, CircleDot, Crown, FileText, Globe, HelpCircle, LifeBuoy, Palette, Settings, Star, User,
 } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { hubPush } from '../../_lib/exploreBack';
-import { AccountAuthSheet, openAccountActionsSheet, runAccountDeleteFlow } from '../AccountAuthSheet';
-import { signOutAccount } from '../../_lib/accountAuth';
 import { openPrivacyDocument, openTermsDocument } from '../../_lib/openLegalDocument';
 import { getExploreCopy } from '../../_lib/localeContent';
 import { getLocaleUi } from '../../_lib/localeUi';
 import { PREMIUM_THEMES, resolveTypeface, useTheme } from '../../(tabs)/ThemeContext';
 import { HubPageChrome } from './HubPageChrome';
-import { SupportModal } from './SupportModal';
 import {
-  HubNavRow, LanguageModal, PRO_LOOK_CARD_W, PRO_LOOK_SNAP, ThemeModal, ThemeShowcaseCard,
+  HubNavRow, PRO_LOOK_CARD_W, PRO_LOOK_SNAP, ThemeShowcaseCard,
 } from './exploreUi';
 import { hubPageStyles as es } from './hubPageStyles';
 
@@ -26,6 +23,7 @@ const EUGENE_PAPER = require('../../assets/explore/eugene-paper.png');
 const PALM_KL = require('../../assets/explore/palm-kl.png');
 
 type Props = { active?: boolean };
+type AccountSheetComponent = React.ComponentType<{ visible: boolean; onClose: () => void }>;
 
 export default function HubGeneralsPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
@@ -33,11 +31,21 @@ export default function HubGeneralsPage({ active = false }: Props) {
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
-  const ic = () => '#FFFFFF';
+  const ic = (_slot?: number) => '#FFFFFF';
   const [showTheme, setShowTheme] = useState(false);
   const [showLang, setShowLang] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [AccountSheet, setAccountSheet] = useState<AccountSheetComponent | null>(null);
+  const [ThemeModalComp, setThemeModalComp] = useState<React.ComponentType<{ visible: boolean; onClose: () => void }> | null>(null);
+  const [LanguageModalComp, setLanguageModalComp] = useState<React.ComponentType<{ visible: boolean; onClose: () => void }> | null>(null);
+  const [SupportModalComp, setSupportModalComp] = useState<React.ComponentType<{ visible: boolean; onClose: () => void; copy: typeof ex }> | null>(null);
+  const [showLetterArt, setShowLetterArt] = useState(false);
+  const ensureAccountSheet = useCallback(async () => {
+    const mod = await import('../AccountAuthSheet');
+    setAccountSheet(() => mod.AccountAuthSheet);
+    return mod;
+  }, []);
   const openSubPage = useCallback(() => {
     try {
       router.push('/subscription');
@@ -47,25 +55,55 @@ export default function HubGeneralsPage({ active = false }: Props) {
   }, []);
   const go = (pathname: Parameters<typeof hubPush>[0]) => () => hubPush(pathname, 'generals');
 
-  const openAccount = useCallback(() => {
-    if (user?.isLoggedIn) {
-      openAccountActionsSheet({
-        onSignOut: () => {
-          void signOutAccount(setUser);
-        },
-        onDelete: () => {
-          void runAccountDeleteFlow({ setUser, labels: u });
-        },
-        labels: {
-          signOut: u.settingsSignOut,
-          deleteAccount: u.settingsDeleteAccount,
-          cancel: u.captionCancel,
-        },
-      });
-      return;
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setShowLetterArt(true), 120);
+    return () => clearTimeout(t);
+  }, [active]);
+
+  const openThemeModal = useCallback(() => {
+    setShowTheme(true);
+    if (!ThemeModalComp) {
+      void import('./exploreUi').then((m) => setThemeModalComp(() => m.ThemeModal));
     }
-    setAccountOpen(true);
-  }, [setUser, u, user?.isLoggedIn]);
+  }, [ThemeModalComp]);
+
+  const openLangModal = useCallback(() => {
+    setShowLang(true);
+    if (!LanguageModalComp) {
+      void import('./exploreUi').then((m) => setLanguageModalComp(() => m.LanguageModal));
+    }
+  }, [LanguageModalComp]);
+
+  const openSupportModal = useCallback(() => {
+    setShowSupport(true);
+    if (!SupportModalComp) {
+      void import('./SupportModal').then((m) => setSupportModalComp(() => m.SupportModal));
+    }
+  }, [SupportModalComp]);
+
+  const openAccount = useCallback(() => {
+    void (async () => {
+      const mod = await ensureAccountSheet();
+      if (user?.isLoggedIn) {
+        mod.openAccountActionsSheet({
+          onSignOut: () => {
+            void import('../../_lib/accountAuth').then((auth) => auth.signOutAccount(setUser));
+          },
+          onDelete: () => {
+            void mod.runAccountDeleteFlow({ setUser, labels: u });
+          },
+          labels: {
+            signOut: u.settingsSignOut,
+            deleteAccount: u.settingsDeleteAccount,
+            cancel: u.captionCancel,
+          },
+        });
+        return;
+      }
+      setAccountOpen(true);
+    })();
+  }, [ensureAccountSheet, setUser, u, user?.isLoggedIn]);
 
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
@@ -98,7 +136,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
               <HubNavRow theme={theme} themeId={themeId} slot={2} fonts={fonts} title={ex.notifications} subtitle={ex.notificationsSub} icon={<Bell size={22} color={ic(2)} />} onPress={go('/notifications')} />
               <HubNavRow theme={theme} themeId={themeId} slot={3} fonts={fonts} title={ex.faq} subtitle={ex.faqSub} icon={<HelpCircle size={22} color={ic(3)} />} onPress={go('/explore-faq')} />
               <HubNavRow theme={theme} themeId={themeId} slot={4} fonts={fonts} title={ex.rateUs} subtitle={ex.rateUsSub} icon={<Star size={22} color={ic(4)} />} onPress={go('/explore-rate')} />
-              <HubNavRow theme={theme} themeId={themeId} slot={5} fonts={fonts} title={ex.support} subtitle={ex.supportSub} icon={<LifeBuoy size={22} color={ic(5)} />} onPress={() => setShowSupport(true)} />
+              <HubNavRow theme={theme} themeId={themeId} slot={5} fonts={fonts} title={ex.support} subtitle={ex.supportSub} icon={<LifeBuoy size={22} color={ic(5)} />} onPress={openSupportModal} />
               <HubNavRow theme={theme} themeId={themeId} slot={6} fonts={fonts} title={ex.spinWheel} subtitle={ex.spinWheelSub} icon={<CircleDot size={22} color={ic(6)} />} onPress={go('/spin-wheel')} />
             </View>
 
@@ -145,20 +183,27 @@ export default function HubGeneralsPage({ active = false }: Props) {
             </View>
 
             <View style={es.section}>
-              <HubNavRow theme={theme} themeId={themeId} slot={7} fonts={fonts} title={ex.appTheme} subtitle={ex.appThemeSub} icon={<Palette size={22} color={ic(7)} />} onPress={() => setShowTheme(true)} />
-              <HubNavRow theme={theme} themeId={themeId} slot={8} fonts={fonts} title={ex.languages} subtitle={ex.languagesSub} icon={<Globe size={22} color={ic(8)} />} onPress={() => setShowLang(true)} />
+              <HubNavRow theme={theme} themeId={themeId} slot={7} fonts={fonts} title={ex.appTheme} subtitle={ex.appThemeSub} icon={<Palette size={22} color={ic(7)} />} onPress={openThemeModal} />
+              <HubNavRow theme={theme} themeId={themeId} slot={8} fonts={fonts} title={ex.languages} subtitle={ex.languagesSub} icon={<Globe size={22} color={ic(8)} />} onPress={openLangModal} />
             </View>
 
-            <View style={[es.letterOuter, { borderColor: theme.border }]}>
-              <ImageBackground source={EUGENE_PAPER} style={{ minHeight: 220 }} imageStyle={{ resizeMode: 'cover' }}>
-                <LinearGradient colors={['rgba(62,39,35,0.08)', 'rgba(62,39,35,0.14)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+            <View style={[es.letterOuter, { borderColor: theme.border, minHeight: 220, backgroundColor: theme.bg2 }]}>
+              {showLetterArt ? (
+                <ImageBackground source={EUGENE_PAPER} style={{ minHeight: 220 }} imageStyle={{ resizeMode: 'cover' }}>
+                  <LinearGradient colors={['rgba(62,39,35,0.08)', 'rgba(62,39,35,0.14)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+                  <View style={es.letterPanel}>
+                    <Text style={es.letterMeta}>FROM EUGENE</Text>
+                    <Text style={es.letterBody}>
+                      {`Hey friend,\n\nThank you for letting photodumps live on your phone. Every swipe you take helps prove that a tiny team can build something honest, fast, and a little bit chaotic in the best way.\n\nI'm grateful you are here — whether you are on Hobby or Pro, you are part of the story. Stay tuned: we are cooking more playful features, kinder defaults, and surprises you can feel.\n\nWith love,\nEugene`}
+                    </Text>
+                  </View>
+                </ImageBackground>
+              ) : (
                 <View style={es.letterPanel}>
                   <Text style={es.letterMeta}>FROM EUGENE</Text>
-                  <Text style={es.letterBody}>
-                    {`Hey friend,\n\nThank you for letting photodumps live on your phone. Every swipe you take helps prove that a tiny team can build something honest, fast, and a little bit chaotic in the best way.\n\nI'm grateful you are here — whether you are on Hobby or Pro, you are part of the story. Stay tuned: we are cooking more playful features, kinder defaults, and surprises you can feel.\n\nWith love,\nEugene`}
-                  </Text>
+                  <Text style={[es.letterBody, { color: theme.textSub }]}>Loading…</Text>
                 </View>
-              </ImageBackground>
+              )}
             </View>
 
             <View style={es.sectionHead}>
@@ -170,8 +215,10 @@ export default function HubGeneralsPage({ active = false }: Props) {
               <HubNavRow theme={theme} themeId={themeId} slot={10} fonts={fonts} title={ex.privacy} subtitle={ex.privacySub} icon={<FileText size={22} color={ic(10)} />} onPress={() => openPrivacyDocument('generals')} />
             </View>
 
-            <View style={[es.klFooter, { borderColor: theme.border }]}>
-              <ImageBackground source={PALM_KL} style={StyleSheet.absoluteFill} imageStyle={{ resizeMode: 'cover' }} pointerEvents="none" />
+            <View style={[es.klFooter, { borderColor: theme.border, backgroundColor: '#1a1a1a' }]}>
+              {showLetterArt ? (
+                <ImageBackground source={PALM_KL} style={StyleSheet.absoluteFill} imageStyle={{ resizeMode: 'cover' }} />
+              ) : null}
               <LinearGradient colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.9)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <View style={{ alignItems: 'center', zIndex: 2, paddingVertical: 28, paddingHorizontal: 22 }}>
                 <Text style={es.klFooterTitle}>{ex.footerMadeIn}</Text>
@@ -188,10 +235,10 @@ export default function HubGeneralsPage({ active = false }: Props) {
           </ScrollView>
         </HubPageChrome>
       </SafeAreaView>
-      <ThemeModal visible={showTheme} onClose={() => setShowTheme(false)} />
-      <LanguageModal visible={showLang} onClose={() => setShowLang(false)} />
-      <SupportModal visible={showSupport} onClose={() => setShowSupport(false)} copy={ex} />
-      <AccountAuthSheet visible={accountOpen} onClose={() => setAccountOpen(false)} />
+      {ThemeModalComp ? <ThemeModalComp visible={showTheme} onClose={() => setShowTheme(false)} /> : null}
+      {LanguageModalComp ? <LanguageModalComp visible={showLang} onClose={() => setShowLang(false)} /> : null}
+      {SupportModalComp ? <SupportModalComp visible={showSupport} onClose={() => setShowSupport(false)} copy={ex} /> : null}
+      {AccountSheet ? <AccountSheet visible={accountOpen} onClose={() => setAccountOpen(false)} /> : null}
     </View>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getLocaleUi } from '../_lib/localeUi';
+import { ProGateShell } from '../_lib/ProGateShell';
 import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import {
   deleteWidget,
@@ -111,7 +112,7 @@ export default function WidgetsScreen() {
     });
   };
 
-  if (!proAllowed) return null;
+  if (!proAllowed) return <ProGateShell />;
 
   const openNew = (templateId: string) => {
     router.push({

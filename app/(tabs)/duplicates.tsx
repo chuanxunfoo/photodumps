@@ -148,7 +148,14 @@ export default function DuplicatesScreen() {
     });
   };
 
-  if (!proAllowed) return null;
+  if (!proAllowed) {
+    return (
+      <View style={[styles.root, styles.center, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={[styles.scan, { color: theme.textSub }]}>OPENING SUBSCRIPTION…</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>

@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 
 import { hubPush, type HubPage } from './exploreBack';
 import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from './legalUrls';
@@ -23,9 +22,11 @@ export function openPrivacyDocument(fromHub?: HubPage) {
 
 /** Public URLs for App Store metadata and optional web mirror. */
 export async function openTermsOnWeb() {
+  const WebBrowser = await import('expo-web-browser');
   await WebBrowser.openBrowserAsync(TERMS_OF_SERVICE_URL);
 }
 
 export async function openPrivacyOnWeb() {
+  const WebBrowser = await import('expo-web-browser');
   await WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL);
 }

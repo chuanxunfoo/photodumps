@@ -15,7 +15,7 @@ export function markPaywallExit(): void {
 /** Call when hub shell mounts. */
 export function markHubEntered(): void {
   hubEnteredAtMs = Date.now();
-  const quietUntil = Date.now() + 5000;
+  const quietUntil = Date.now() + 3500;
   nativeIdleAfterMs = Math.max(nativeIdleAfterMs, quietUntil);
 }
 
@@ -34,7 +34,7 @@ export async function waitUntilNativeIdle(): Promise<void> {
 
 /** True when hub has been up long enough to load secondary pages. */
 export function isHubReadyForSidePages(): boolean {
-  return hubAgeMs() >= 8000;
+  return hubAgeMs() >= 3800;
 }
 
 /** True when calendar may touch MediaLibrary / Blur modules. */

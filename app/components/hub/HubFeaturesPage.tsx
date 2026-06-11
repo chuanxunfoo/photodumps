@@ -1,8 +1,8 @@
 import {
   BarChart2, Camera, Crown, Layers2, LayoutGrid, MailWarning, Scissors, Sticker, Zap,
 } from 'lucide-react-native';
-import React, { useCallback } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { hubPush, type HubChildRoute } from '../../_lib/exploreBack';
@@ -27,6 +27,7 @@ export default function HubFeaturesPage({ active = false }: Props) {
   const fonts = resolveTypeface(theme);
   const HUB_SLOT_BASE = 9;
   const isPaid = isPro || isAdmin;
+  const [navigating, setNavigating] = useState(false);
 
   const openSubPage = useCallback(() => {
     try {
@@ -44,7 +45,38 @@ export default function HubFeaturesPage({ active = false }: Props) {
     fn();
   };
 
-  const go = (pathname: HubChildRoute) => () => hubPush(pathname, 'features');
+  const go = useCallback((pathname: HubChildRoute) => () => {
+    setNavigating(true);
+    hubPush(pathname, 'features');
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    const routes: HubChildRoute[] = [
+      '/duplicates',
+      '/explore-trim',
+      '/supercut',
+      '/insights',
+      '/sticker-studio',
+      '/photobooth',
+      '/email-clean',
+    ];
+    routes.forEach((route) => {
+      try {
+        router.prefetch(route);
+      } catch {
+        // best-effort route warmup
+      }
+    });
+  }, [active]);
+
+  useEffect(() => {
+    if (!navigating) return;
+    const t = setTimeout(() => {
+      setNavigating(false);
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [navigating]);
 
   const onVideoTrim = async () => {
     if (isPaid) {
@@ -53,6 +85,7 @@ export default function HubFeaturesPage({ active = false }: Props) {
     }
     const uid = user?.uid;
     if (!uid) {
+      setNavigating(false);
       openSubscription();
       return;
     }
@@ -61,6 +94,7 @@ export default function HubFeaturesPage({ active = false }: Props) {
       return;
     }
     openSubscription();
+    setNavigating(false);
   };
 
   const onStickerStudio = async () => {
@@ -70,6 +104,7 @@ export default function HubFeaturesPage({ active = false }: Props) {
     }
     const uid = user?.uid;
     if (!uid) {
+      setNavigating(false);
       openSubscription();
       return;
     }
@@ -78,9 +113,10 @@ export default function HubFeaturesPage({ active = false }: Props) {
       return;
     }
     openSubscription();
+    setNavigating(false);
   };
 
-  const ic = () => '#FFFFFF';
+  const ic = (_slot?: number) => '#FFFFFF';
 
   return (
     <View style={[es.root, { backgroundColor: theme.bg }]}>
@@ -121,6 +157,23 @@ export default function HubFeaturesPage({ active = false }: Props) {
           </ScrollView>
         </HubPageChrome>
       </SafeAreaView>
+      {navigating ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.08)',
+          }}
+        >
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      ) : null}
     </View>
   );
 }

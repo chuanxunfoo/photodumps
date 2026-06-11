@@ -5,7 +5,17 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Dimensions, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Easing,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -963,7 +973,16 @@ export default function EmailCleanScreen() {
             ? 'Scan again'
             : 'Done';
 
-  if (!proAllowed) return null;
+  if (!proAllowed) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={{ color: theme.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>
+          OPENING SUBSCRIPTION...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>

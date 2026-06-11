@@ -42,6 +42,7 @@ import { DraggableCaption } from '../components/widgets/DraggableCaption';
 import { WidgetCaptionModal } from '../components/widgets/WidgetCaptionModal';
 import { WidgetStickerPicker } from '../components/widgets/WidgetStickerPicker';
 import { getLocaleUi } from '../_lib/localeUi';
+import { ProGateShell } from '../_lib/ProGateShell';
 import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import { useTheme } from './ThemeContext';
 
@@ -252,7 +253,7 @@ export default function WidgetEditorScreen() {
     }
   };
 
-  if (!proAllowed) return null;
+  if (!proAllowed) return <ProGateShell />;
 
   if (loading) {
     return (

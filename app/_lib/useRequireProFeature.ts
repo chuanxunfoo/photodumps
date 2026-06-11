@@ -2,8 +2,6 @@ import { type Href, router, useFocusEffect } from 'expo-router';
 
 import { useCallback } from 'react';
 
-import { InteractionManager } from 'react-native';
-
 
 
 import { useTheme } from '../(tabs)/ThemeContext';
@@ -32,7 +30,7 @@ export function useRequireProFeature(): boolean {
 
       if (allowed) return;
 
-      InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
 
         try {
 

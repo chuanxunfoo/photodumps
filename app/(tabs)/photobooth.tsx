@@ -1031,7 +1031,16 @@ export default function PhotoBoothScreen() {
     setZoom(0);
   };
 
-  if (!proAllowed) return null;
+  if (!proAllowed) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={{ color: theme.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>
+          OPENING SUBSCRIPTION...
+        </Text>
+      </View>
+    );
+  }
 
   // ─── Permission gates ─────────────────────────────────────────────────────
   if (!cameraPermission) {

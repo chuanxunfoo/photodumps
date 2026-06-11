@@ -345,7 +345,16 @@ export default function SupercutScreen() {
 
   const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.95] });
 
-  if (!proAllowed) return null;
+  if (!proAllowed) {
+    return (
+      <View style={[styles.root, { backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={{ color: theme.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>
+          OPENING SUBSCRIPTION...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
