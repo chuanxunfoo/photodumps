@@ -42,9 +42,9 @@ export async function signInWithAppleAccount(
   setUser: (u: UserProfile | null) => void | Promise<void>,
 ): Promise<UserProfile | null> {
   try {
-    const { presentAppleSignInSheet, sessionFromAppleCredential } = await import('./appleAuthNative');
-    const { credential, rawNonce } = await presentAppleSignInSheet();
-    const session = await sessionFromAppleCredential(credential, rawNonce);
+    const { signInWithAppleNative } = await import('./appleAuthNative');
+    const session = await signInWithAppleNative();
+    if (!session) return null;
     await AsyncStorage.setItem('@dumpit_signed_once', '1');
     return persistSessionUser(session, setUser);
   } catch (e: unknown) {
@@ -86,6 +86,9 @@ export function formatAuthError(err: unknown): string {
   }
   if (/Network request failed|Failed to fetch|invalid\.supabase\.co/i.test(msg)) {
     return 'Cannot reach Supabase. Check your network and try again.';
+  }
+  if (/not available on ios|UnavailabilityError|native module is missing|Expo Go/i.test(msg)) {
+    return 'Apple Sign In needs the latest TestFlight build — not Expo Go. Install build 41+ from TestFlight.';
   }
   return msg;
 }

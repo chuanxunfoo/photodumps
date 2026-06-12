@@ -370,12 +370,9 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
 
   const ensureSignedInWithApple = async (): Promise<string | null> => {
     if (user?.isLoggedIn && user.uid) return user.uid;
-    const { presentAppleSignInSheet, sessionFromAppleCredential } = await import('../_lib/appleAuthNative');
-    const { persistSessionUser } = await import('../_lib/accountAuth');
-    const { credential, rawNonce } = await presentAppleSignInSheet();
-    const session = await sessionFromAppleCredential(credential, rawNonce);
-    const profile = await persistSessionUser(session, setUser);
-    return profile.uid;
+    const { signInWithAppleAccount } = await import('../_lib/accountAuth');
+    const profile = await signInWithAppleAccount(setUser);
+    return profile?.uid ?? null;
   };
 
   const finishProPurchase = async (planId: StripePlanId, periodEndMs: number, uid: string) => {

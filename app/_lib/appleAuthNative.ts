@@ -1,25 +1,35 @@
-import * as AppleAuthentication from 'expo-apple-authentication';
 import type { Session } from '@supabase/supabase-js';
 
+import { appleAuthUnavailableReason, isNativeAppleAuthLinked } from './appleAuthAvailability';
 import { IOS_APP_BUNDLE_ID } from './appleAuthConstants';
 import { createAppleNonce } from './appleNonce';
 import { supabase } from '../(tabs)/supabase';
 
-export type AppleCredential = AppleAuthentication.AppleAuthenticationCredential;
+export type AppleCredential = {
+  identityToken: string | null;
+  fullName?: {
+    givenName?: string | null;
+    familyName?: string | null;
+  } | null;
+};
 
 let signInFlight: Promise<{ credential: AppleCredential; rawNonce: string }> | null = null;
 
 /**
- * Present the native Apple sheet — ONE TurboModule call, no expo-crypto / isAvailableAsync before it.
- * Must be invoked directly from a button onPress (user-gesture chain).
+ * Native Apple sheet only — throws if ExpoAppleAuthentication is not in the binary.
  */
 export async function presentAppleSignInSheet(): Promise<{
   credential: AppleCredential;
   rawNonce: string;
 }> {
+  if (!isNativeAppleAuthLinked()) {
+    throw new Error(appleAuthUnavailableReason() ?? 'Apple Sign In is not available on this device.');
+  }
+
   if (signInFlight) return signInFlight;
 
   signInFlight = (async () => {
+    const AppleAuthentication = await import('expo-apple-authentication');
     const { rawNonce, hashedNonce } = createAppleNonce();
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
@@ -66,7 +76,6 @@ async function exchangeAppleToken(identityToken: string, rawNonce: string): Prom
   return data.session;
 }
 
-/** Exchange Apple credential for Supabase session (network only — after sheet closes). */
 export async function sessionFromAppleCredential(
   credential: AppleCredential,
   rawNonce: string,
@@ -98,11 +107,16 @@ export async function sessionFromAppleCredential(
   return session;
 }
 
-/** Full native + Supabase flow (used from subscription sign-in). */
+/** Native Apple sheet when available; otherwise Supabase OAuth in Safari. */
 export async function signInWithAppleNative(): Promise<Session | null> {
   try {
-    const { credential, rawNonce } = await presentAppleSignInSheet();
-    return sessionFromAppleCredential(credential, rawNonce);
+    if (isNativeAppleAuthLinked()) {
+      const { credential, rawNonce } = await presentAppleSignInSheet();
+      return sessionFromAppleCredential(credential, rawNonce);
+    }
+
+    const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
+    return signInWithAppleOAuth();
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;
     if (code === 'ERR_REQUEST_CANCELED') return null;

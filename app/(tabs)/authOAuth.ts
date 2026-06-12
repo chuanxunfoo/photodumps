@@ -198,8 +198,14 @@ export async function reconnectGoogleWithGmailScopes() {
   return session;
 }
 
+/** Browser-based Apple sign-in (Supabase OAuth) — fallback when native module is missing. */
+export async function signInWithAppleOAuth() {
+  return signInWithOAuthProvider('apple');
+}
+
 export async function signInWithApple() {
-  if (Platform.OS === 'ios') {
+  const { isNativeAppleAuthLinked } = await import('../_lib/appleAuthAvailability');
+  if (Platform.OS === 'ios' && isNativeAppleAuthLinked()) {
     const { signInWithAppleNative } = await import('../_lib/appleAuthNative');
     try {
       const session = await signInWithAppleNative();
@@ -211,5 +217,5 @@ export async function signInWithApple() {
       throw e;
     }
   }
-  return signInWithOAuthProvider('apple');
+  return signInWithAppleOAuth();
 }

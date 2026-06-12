@@ -10,8 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatAuthError, persistSessionUser } from '../_lib/accountAuth';
-import { presentAppleSignInSheet, sessionFromAppleCredential } from '../_lib/appleAuthNative';
+import { formatAuthError, signInWithAppleAccount } from '../_lib/accountAuth';
 import { getLocaleUi } from '../_lib/localeUi';
 import { AppHeader } from '../components/AppHeader';
 import { useExploreAwareBack } from '../_lib/exploreBack';
@@ -31,9 +30,8 @@ export default function AccountSignInScreen() {
     if (busy || Platform.OS !== 'ios') return;
     setBusy(true);
     try {
-      const { credential, rawNonce } = await presentAppleSignInSheet();
-      const session = await sessionFromAppleCredential(credential, rawNonce);
-      const profile = await persistSessionUser(session, setUser);
+      const profile = await signInWithAppleAccount(setUser);
+      if (!profile) return;
       Alert.alert(
         u.accountSignedInTitle,
         u.accountSignedInMsg.replace('{email}', profile.email || 'your Apple ID'),
