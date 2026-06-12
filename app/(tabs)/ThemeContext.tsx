@@ -8,10 +8,13 @@ import {
   appPlanToProfilePlan,
   ensureProfileRow,
   fetchProfileByUserId,
+  fetchSubscriptionDetails,
   profilePlanToAppPlan,
   updateProfilePlanType,
   type ProfilePlanType,
+  type SubscriptionPlanInterval,
 } from '../_lib/profilePlanSupabase';
+import { readLocalSubscriptionMeta } from '../_lib/subscriptionLocal';
 import { syncBonusSwipesRow } from '../_lib/billingSupabase';
 import { isSupabaseConfigured, supabase } from './supabase';
 
@@ -642,6 +645,9 @@ interface ThemeContextType {
   refreshPlanFromSupabase: () => Promise<void>;
   bonusSwipes: number;
   addBonusSwipes: (n: number) => Promise<void>;
+  subscriptionPlan: SubscriptionPlanInterval | null;
+  subscriptionEndsAt: number | null;
+  setSubscriptionMeta: (plan: SubscriptionPlanInterval, periodEndMs: number) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType>({} as ThemeContextType);
@@ -654,6 +660,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [swipesLeft, setSwipesLeft] = useState(HOBBY_WEEKLY_SWIPES);
   const [plan, setPlanState] = useState<PlanType>('free');
   const [bonusSwipes, setBonusSwipes] = useState(0);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<SubscriptionPlanInterval | null>(null);
+  const [subscriptionEndsAt, setSubscriptionEndsAt] = useState<number | null>(null);
   const subOpenFnRef = useRef<(() => void) | null>(null);
   const isProRef = useRef(false);
   const isAdminRef = useRef(false);
@@ -700,6 +708,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
     const normalized = appPlanFromProfile(row?.plan_type ?? 'hobby');
     await applyPlanState(normalized, u.uid);
+
+    if (normalized === 'pro' || normalized === 'admin') {
+      const remote = await fetchSubscriptionDetails(u.uid);
+      const local = await readLocalSubscriptionMeta();
+      setSubscriptionPlan(remote.plan ?? local.planId);
+      setSubscriptionEndsAt(remote.periodEndMs ?? local.periodEndMs);
+    } else {
+      setSubscriptionPlan(null);
+      setSubscriptionEndsAt(null);
+    }
   };
 
   useEffect(() => {
@@ -856,13 +874,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem('@dumpit_swipes', String(next));
     return true;
   };
+  const setSubscriptionMeta = async (plan: SubscriptionPlanInterval, periodEndMs: number) => {
+    setSubscriptionPlan(plan);
+    setSubscriptionEndsAt(periodEndMs);
+    const { persistLocalSubscriptionMeta } = await import('../_lib/subscriptionLocal');
+    await persistLocalSubscriptionMeta(plan, periodEndMs);
+  };
+
   const setOnSubscriptionOpen = useCallback((fn: () => void) => {
     subOpenFnRef.current = fn;
   }, []);
 
   const openSubscription = useCallback(() => {
-    if (isProRef.current || isAdminRef.current) return;
-    if (Platform.OS === 'ios') {
+    if (Platform.OS === 'ios' && !isProRef.current && !isAdminRef.current) {
       void import('../_lib/iap/iapManager').then((m) => m.bootIapManager());
     }
     try {
@@ -882,6 +906,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       isPro, setIsPro,
       plan, setPlan, refreshPlanFromSupabase,
       bonusSwipes, addBonusSwipes,
+      subscriptionPlan, subscriptionEndsAt, setSubscriptionMeta,
       isAdmin, setIsAdmin,
       swipesLeft, useSwipe,
       openSubscription,

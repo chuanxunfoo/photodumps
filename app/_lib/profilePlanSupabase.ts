@@ -3,13 +3,58 @@ import type { PlanType } from '../(tabs)/ThemeContext';
 
 export type ProfilePlanType = 'hobby' | 'pro' | 'admin';
 
+export type SubscriptionPlanInterval = 'weekly' | 'monthly' | 'yearly';
+
 export type ProfileRow = {
   id: string;
   email: string | null;
   username: string | null;
   plan_type: ProfilePlanType;
+  subscription_plan?: SubscriptionPlanInterval | null;
+  subscription_ends_at?: string | null;
   updated_at?: string;
 };
+
+export type SubscriptionDetails = {
+  plan: SubscriptionPlanInterval | null;
+  periodEndMs: number | null;
+};
+
+function parseSubscriptionPlan(raw: unknown): SubscriptionPlanInterval | null {
+  const v = String(raw ?? '').toLowerCase();
+  if (v === 'weekly' || v === 'monthly' || v === 'yearly') return v;
+  return null;
+}
+
+export async function fetchSubscriptionDetails(userId: string): Promise<SubscriptionDetails> {
+  const [{ data: prof }, { data: sub }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('subscription_plan, subscription_ends_at')
+      .eq('id', userId)
+      .maybeSingle(),
+    supabase
+      .from('subscriptions')
+      .select('plan_type, current_period_end')
+      .eq('user_id', userId)
+      .maybeSingle(),
+  ]);
+
+  const plan =
+    parseSubscriptionPlan(prof?.subscription_plan) ??
+    parseSubscriptionPlan(sub?.plan_type);
+
+  const endIso =
+    (prof?.subscription_ends_at as string | null | undefined) ??
+    (sub?.current_period_end as string | null | undefined) ??
+    null;
+  const periodEndMs = endIso ? Date.parse(endIso) : null;
+
+  return {
+    plan,
+    periodEndMs: periodEndMs != null && Number.isFinite(periodEndMs) ? periodEndMs : null,
+  };
+}
 
 export function normalizeProfilePlanType(raw: unknown): ProfilePlanType {
   const v = String(raw ?? '').toLowerCase();
@@ -33,7 +78,7 @@ export function appPlanToProfilePlan(plan: PlanType): ProfilePlanType {
 export async function fetchProfileByUserId(userId: string): Promise<ProfileRow | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, username, plan_type')
+    .select('id, email, username, plan_type, subscription_plan, subscription_ends_at')
     .eq('id', userId)
     .maybeSingle();
   if (error) {
@@ -47,6 +92,8 @@ export async function fetchProfileByUserId(userId: string): Promise<ProfileRow |
     email: r.email != null ? String(r.email) : null,
     username: r.username != null ? String(r.username) : null,
     plan_type: normalizeProfilePlanType(r.plan_type),
+    subscription_plan: parseSubscriptionPlan(r.subscription_plan),
+    subscription_ends_at: r.subscription_ends_at != null ? String(r.subscription_ends_at) : null,
     updated_at: r.updated_at != null ? String(r.updated_at) : undefined,
   };
 }
@@ -59,6 +106,8 @@ function rowFromRpc(data: unknown): ProfileRow | null {
     email: r.email != null ? String(r.email) : null,
     username: r.username != null ? String(r.username) : null,
     plan_type: normalizeProfilePlanType(r.plan_type),
+    subscription_plan: parseSubscriptionPlan(r.subscription_plan),
+    subscription_ends_at: r.subscription_ends_at != null ? String(r.subscription_ends_at) : null,
     updated_at: r.updated_at != null ? String(r.updated_at) : undefined,
   };
 }
@@ -101,7 +150,7 @@ export async function ensureProfileRow(params: {
       },
       { onConflict: 'id' },
     )
-    .select('id, email, username, plan_type')
+    .select('id, email, username, plan_type, subscription_plan, subscription_ends_at')
     .single();
   if (error) {
     console.warn('[profiles] insert failed', error.message);
@@ -125,7 +174,7 @@ export async function fetchProfileByEmail(email: string): Promise<ProfileRow | n
   if (!trimmed) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, username, plan_type')
+    .select('id, email, username, plan_type, subscription_plan, subscription_ends_at')
     .ilike('email', trimmed)
     .limit(1)
     .maybeSingle();

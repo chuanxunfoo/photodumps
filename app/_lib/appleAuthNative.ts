@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 
 import { IOS_APP_BUNDLE_ID } from './appleAuthConstants';
-import { runNativeOperation } from './launchStability';
+import { markNativeQuiet, waitUntilNativeIdle } from './launchStability';
 import { supabase } from '../(tabs)/supabase';
 
 let signInFlight: Promise<Session | null> | null = null;
@@ -33,72 +33,71 @@ async function exchangeAppleToken(identityToken: string, rawNonce: string): Prom
   return data.session;
 }
 
+/**
+ * Apple Sign In must run on the main thread from a user gesture — not inside runNativeOperation
+ * (TurboModule exception conversion can SIGSEGV when queued with other native work).
+ */
 async function signInWithAppleNativeImpl(): Promise<Session | null> {
-  return runNativeOperation(async () => {
-    const AppleAuthentication = await import('expo-apple-authentication');
-    const Crypto = await import('expo-crypto');
-    const { InteractionManager, Platform } = await import('react-native');
+  markNativeQuiet(2500);
+  await waitUntilNativeIdle();
 
-    if (Platform.OS !== 'ios') {
-      throw new Error('Sign in with Apple is only available on iOS.');
-    }
+  const AppleAuthentication = await import('expo-apple-authentication');
+  const Crypto = await import('expo-crypto');
+  const { Platform } = await import('react-native');
 
-    let available = false;
-    try {
-      available = await AppleAuthentication.isAvailableAsync();
-    } catch {
-      available = false;
-    }
-    if (!available) {
-      throw new Error('Sign in with Apple is not available on this device.');
-    }
+  if (Platform.OS !== 'ios') {
+    throw new Error('Sign in with Apple is only available on iOS.');
+  }
 
-    const rawNonce = Crypto.randomUUID();
-    const hashedNonce = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      rawNonce,
-    );
+  let available = false;
+  try {
+    available = await AppleAuthentication.isAvailableAsync();
+  } catch {
+    available = false;
+  }
+  if (!available) {
+    throw new Error('Sign in with Apple is not available on this device.');
+  }
 
-    const credential = await new Promise<Awaited<ReturnType<typeof AppleAuthentication.signInAsync>>>(
-      (resolve, reject) => {
-        InteractionManager.runAfterInteractions(() => {
-          void AppleAuthentication.signInAsync({
-            requestedScopes: [
-              AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-              AppleAuthentication.AppleAuthenticationScope.EMAIL,
-            ],
-            nonce: hashedNonce,
-          }).then(resolve, reject);
-        });
-      },
-    );
+  const rawNonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce,
+  );
 
-    if (!credential.identityToken) {
-      throw new Error('Apple did not return a sign-in token. Try again.');
-    }
-
-    let session = await exchangeAppleToken(credential.identityToken, rawNonce);
-
-    const given = credential.fullName?.givenName?.trim();
-    const family = credential.fullName?.familyName?.trim();
-    const fullName = [given, family].filter(Boolean).join(' ').trim();
-    if (fullName) {
-      try {
-        await supabase.auth.updateUser({
-          data: {
-            full_name: fullName,
-            username: given ?? undefined,
-          },
-        });
-        const { data: refreshed } = await supabase.auth.getSession();
-        if (refreshed.session) session = refreshed.session;
-      } catch (e) {
-        console.warn('[apple] metadata update skipped', e);
-      }
-    }
-
-    return session;
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+    nonce: hashedNonce,
   });
+
+  if (!credential.identityToken) {
+    throw new Error('Apple did not return a sign-in token. Try again.');
+  }
+
+  let session = await exchangeAppleToken(credential.identityToken, rawNonce);
+
+  const given = credential.fullName?.givenName?.trim();
+  const family = credential.fullName?.familyName?.trim();
+  const fullName = [given, family].filter(Boolean).join(' ').trim();
+  if (fullName) {
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          full_name: fullName,
+          username: given ?? undefined,
+        },
+      });
+      const { data: refreshed } = await supabase.auth.getSession();
+      if (refreshed.session) session = refreshed.session;
+    } catch (e) {
+      console.warn('[apple] metadata update skipped', e);
+    }
+  }
+
+  return session;
 }
 
 export async function signInWithAppleNative(): Promise<Session | null> {
@@ -112,8 +111,10 @@ export async function signInWithAppleNative(): Promise<Session | null> {
 export async function isNativeAppleSignInAvailable(): Promise<boolean> {
   const { Platform } = await import('react-native');
   if (Platform.OS !== 'ios') return false;
-  return runNativeOperation(async () => {
-    const AppleAuthentication = await import('expo-apple-authentication');
-    return AppleAuthentication.isAvailableAsync();
-  });
+  const AppleAuthentication = await import('expo-apple-authentication');
+  try {
+    return await AppleAuthentication.isAvailableAsync();
+  } catch {
+    return false;
+  }
 }

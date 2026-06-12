@@ -14,7 +14,9 @@ import {
 } from 'react-native';
 import { recordSubscriptionActivation } from '../_lib/billingSupabase';
 import { markPaywallComplete } from '../_lib/appLaunchFlow';
+import { markAuthFlowStart } from '../_lib/launchStability';
 import { safeReplaceAfterPaywall } from '../_lib/safeNavigate';
+import { formatSubscriptionEndDate, planLabel } from '../_lib/subscriptionPeriod';
 import {
   sendSubscriptionConfirmationEmail,
   subscriptionSuccessMessage,
@@ -188,7 +190,10 @@ type Props = { onClose: () => void; postOnboarding?: boolean };
 /** Full-screen subscription page (routed at /subscription). */
 export default function SubscriptionScreen({ onClose, postOnboarding = false }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, themeId, user, setIsPro, setPlan, refreshPlanFromSupabase, language } = useTheme();
+  const {
+    theme, themeId, user, isPro, setIsPro, setPlan, refreshPlanFromSupabase, language,
+    subscriptionPlan, subscriptionEndsAt, setSubscriptionMeta,
+  } = useTheme();
   const heroStyle = subscriptionHeroStyle(themeId, theme);
   const callout = calloutTextStyle(theme);
   const sub = getSubscriptionCopy(language);
@@ -202,6 +207,7 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     onSuccess: () => void;
   }> | null>(null);
   const [iapBusy, setIapBusy] = useState(false);
+  const [signInBusy, setSignInBusy] = useState(false);
   const enterOpacity = useRef(new Animated.Value(1)).current;
   const enterY = useRef(new Animated.Value(0)).current;
   const closingRef = useRef(false);
@@ -244,10 +250,8 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
   ];
 
   useEffect(() => {
-    if (Platform.OS === 'ios') {
-      void import('../_lib/iap/iosIap').then((m) => m.warmIosIapConnection());
-    }
-  }, []);
+    if (isPro) void refreshPlanFromSupabase();
+  }, [isPro, refreshPlanFromSupabase]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -356,6 +360,51 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     }
   };
 
+  const ensureSignedInWithApple = async (): Promise<string | null> => {
+    if (user?.isLoggedIn && user.uid) return user.uid;
+    markAuthFlowStart();
+    const { signInWithAppleAccount } = await import('../_lib/accountAuth');
+    const profile = await signInWithAppleAccount(setUser);
+    return profile?.uid ?? null;
+  };
+
+  const finishProPurchase = async (planId: StripePlanId, periodEndMs: number, uid: string) => {
+    setIapBusy(false);
+    await setSubscriptionMeta(planId, periodEndMs);
+    await setIsPro(true);
+    void setPlan('pro', { skipRemote: true });
+    void markPaywallComplete();
+    if (postOnboarding) {
+      safeReplaceAfterPaywall('/hub?page=calendar');
+    } else {
+      requestClose();
+    }
+
+    void (async () => {
+      try {
+        await recordSubscriptionActivation({
+          userId: uid,
+          planId,
+          provider: 'apple',
+          status: 'active',
+          periodEndMs,
+        });
+        await refreshPlanFromSupabase();
+        const endLabel = formatSubscriptionEndDate(periodEndMs, language);
+        const baseMsg = `${subscriptionSuccessMessage(planId)}\n\nYour plan renews on ${endLabel}.`;
+        const { emailSent } = await sendSubscriptionConfirmationEmail(planId);
+        Alert.alert(
+          'Welcome to Pro',
+          emailSent
+            ? `${baseMsg}\n\nA confirmation email was sent to ${user?.email ?? 'your inbox'}.`
+            : baseMsg,
+        );
+      } catch (e) {
+        console.warn('[subscription] post-purchase sync failed', e);
+      }
+    })();
+  };
+
   const handleCTA = async () => {
     if (selected === 'free') {
       await finishHobbyAndEnterApp();
@@ -366,7 +415,23 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     const { isIosIapAvailable, purchaseIosSubscription } = await import('../_lib/iap/iosIap');
 
     if (Platform.OS === 'ios' && isIosIapAvailable()) {
-      if (iapBusy) return;
+      if (iapBusy || signInBusy) return;
+
+      setSignInBusy(true);
+      let uid: string | null = null;
+      try {
+        uid = await ensureSignedInWithApple();
+      } catch (e) {
+        const code = (e as { code?: string })?.code;
+        if (code !== 'ERR_REQUEST_CANCELED') {
+          Alert.alert('Sign in required', 'Sign in with Apple before subscribing to photodumps Pro.');
+        }
+        return;
+      } finally {
+        setSignInBusy(false);
+      }
+      if (!uid) return;
+
       setIapBusy(true);
       try {
         const result = await purchaseIosSubscription(planId);
@@ -374,44 +439,7 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
           if (!result.cancelled) Alert.alert('Subscription', result.error);
           return;
         }
-
-        setIapBusy(false);
-        await setIsPro(true);
-        void setPlan('pro', { skipRemote: true });
-        void markPaywallComplete();
-        if (postOnboarding) {
-          safeReplaceAfterPaywall('/hub?page=calendar');
-        } else {
-          requestClose();
-        }
-
-        void (async () => {
-          try {
-            await refreshPlanFromSupabase();
-            if (user?.uid) {
-              await recordSubscriptionActivation({
-                userId: user.uid,
-                planId,
-                provider: 'apple',
-                status: 'active',
-              });
-            }
-            const baseMsg = subscriptionSuccessMessage(planId);
-            if (user?.uid) {
-              const { emailSent } = await sendSubscriptionConfirmationEmail(planId);
-              Alert.alert(
-                'Welcome to Pro',
-                emailSent
-                  ? `${baseMsg}\n\nA confirmation email was sent to ${user.email}.`
-                  : baseMsg,
-              );
-            } else {
-              Alert.alert('Welcome to Pro', baseMsg);
-            }
-          } catch (e) {
-            console.warn('[subscription] post-purchase sync failed', e);
-          }
-        })();
+        await finishProPurchase(result.planId, result.periodEndMs, uid);
       } finally {
         setIapBusy(false);
       }
@@ -501,7 +529,25 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
                 </Text>
               </View>
 
-              <Text style={[s.planHead, { color: theme.textSub }]}>{sub.planHead}</Text>
+              {isPro && (
+                <View style={[s.manageCard, { backgroundColor: theme.bg2, borderColor: theme.border }]}>
+                  <Text style={[s.manageTitle, { color: theme.text }]}>Your Pro plan</Text>
+                  <Text style={[s.manageLine, { color: theme.textSub }]}>
+                    {subscriptionPlan ? `${planLabel(subscriptionPlan)} plan` : 'photodumps Pro'}
+                  </Text>
+                  {subscriptionEndsAt ? (
+                    <Text style={[s.manageRenew, { color: theme.accent }]}>
+                      Renews on {formatSubscriptionEndDate(subscriptionEndsAt, language)}
+                    </Text>
+                  ) : (
+                    <Text style={[s.manageLine, { color: theme.textMuted }]}>
+                      Active · manage renewal in Settings → Apple ID → Subscriptions
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              <Text style={[s.planHead, { color: theme.textSub }]}>{isPro ? 'CHANGE PLAN' : sub.planHead}</Text>
               {PLANS.map((p) => (
                 <PlanCard key={p.id} plan={p} theme={theme} selected={selected === p.id} onSelect={() => setSelected(p.id)} />
               ))}
@@ -564,10 +610,12 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
         <PaymentModalComp visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
       )}
 
-      <Modal visible={iapBusy} transparent animationType="fade">
+      <Modal visible={iapBusy || signInBusy} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color="#FFD600" />
-          <Text style={{ color: '#FFF', marginTop: 14, fontWeight: '700' }}>Opening App Store…</Text>
+          <Text style={{ color: '#FFF', marginTop: 14, fontWeight: '700' }}>
+            {signInBusy ? 'Signing in with Apple…' : 'Opening App Store…'}
+          </Text>
         </View>
       </Modal>
     </>
@@ -597,6 +645,10 @@ const s = StyleSheet.create({
     borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1,
   },
   calloutTxt: { fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 20 },
+  manageCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 14, gap: 4 },
+  manageTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase' },
+  manageLine: { fontSize: 14, fontWeight: '600' },
+  manageRenew: { fontSize: 15, fontWeight: '800', marginTop: 4 },
   planHead: { fontSize: 9, fontWeight: '900', letterSpacing: 4, marginBottom: 12 },
   ctaWrap: { borderRadius: 26, overflow: 'hidden', marginTop: 2, marginBottom: 10 },
   cta: {

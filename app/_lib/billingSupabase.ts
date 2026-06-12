@@ -60,16 +60,21 @@ export async function recordSubscriptionActivation(params: {
   planId: StripePlanId;
   provider: 'apple' | 'google' | 'stripe' | 'manual';
   status?: 'active' | 'trial' | 'cancelled' | 'expired';
+  periodEndMs?: number;
 }): Promise<void> {
   const status = params.status ?? 'active';
   const providerPlan = planToProviderPlan(params.planId);
   const nowIso = new Date().toISOString();
+  const periodEndIso = params.periodEndMs
+    ? new Date(params.periodEndMs).toISOString()
+    : null;
   await Promise.allSettled([
     supabase
       .from('profiles')
       .update({
         plan_type: 'pro',
         subscription_plan: providerPlan,
+        ...(periodEndIso ? { subscription_ends_at: periodEndIso } : {}),
       })
       .eq('id', params.userId),
     supabase.from('subscriptions').upsert(
@@ -80,6 +85,7 @@ export async function recordSubscriptionActivation(params: {
         status,
         provider: params.provider,
         current_period_start: nowIso,
+        ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
       },
       { onConflict: 'user_id' },
     ),

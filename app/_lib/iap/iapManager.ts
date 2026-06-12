@@ -1,20 +1,23 @@
 import Constants from 'expo-constants';
-import { InteractionManager, Platform } from 'react-native';
+import { AppState, InteractionManager, Platform } from 'react-native';
 
-import { markNativeQuiet, runNativeOperation } from '../launchStability';
+import { markNativeQuiet, runNativeOperation, waitUntilNativeIdle } from '../launchStability';
+import { periodEndMsFromPurchase, planIdFromProductId } from '../subscriptionPeriod';
 import { isExpoGo } from '../stripe/nativeAvailable';
 import type { StripePlanId } from '../stripe/plans';
 
 const ALL_PLAN_IDS: StripePlanId[] = ['weekly', 'monthly', 'yearly'];
 
-type IapPurchaseResult =
-  | { ok: true; productId: string }
+export type IapPurchaseResult =
+  | { ok: true; productId: string; planId: StripePlanId; periodEndMs: number }
   | { ok: false; error: string; cancelled?: boolean };
 
 type PendingPurchase = {
   productId: string;
+  planId: StripePlanId;
   settle: (result: IapPurchaseResult) => void;
   timer: ReturnType<typeof setTimeout>;
+  pollTimer: ReturnType<typeof setInterval> | null;
 };
 
 let iapMod: typeof import('react-native-iap') | null = null;
@@ -45,12 +48,30 @@ export function isIosIapAvailable(): boolean {
   return Platform.OS === 'ios' && !isExpoGo();
 }
 
+function stopPoll(p: PendingPurchase) {
+  if (p.pollTimer) {
+    clearInterval(p.pollTimer);
+    p.pollTimer = null;
+  }
+}
+
 function clearPending(result: IapPurchaseResult) {
   if (!pending) return;
   clearTimeout(pending.timer);
+  stopPoll(pending);
   const settle = pending.settle;
   pending = null;
   settle(result);
+}
+
+function settleSuccess(
+  purchase: { expirationDateIOS?: number | null; productId?: string | null },
+  productId: string,
+  planId: StripePlanId,
+) {
+  if (!pending) return;
+  const periodEndMs = periodEndMsFromPurchase(purchase, planId);
+  clearPending({ ok: true, productId, planId, periodEndMs });
 }
 
 function attachListeners(iap: typeof import('react-native-iap')) {
@@ -68,12 +89,13 @@ function attachListeners(iap: typeof import('react-native-iap')) {
     if (purchase.purchaseState === 'pending') return;
 
     const productId = matchesPending ? expectedId : purchasedId;
+    const planId = pending.planId ?? planIdFromProductId(productId) ?? 'monthly';
     try {
       await iap.finishTransaction({ purchase, isConsumable: false });
     } catch (e) {
       console.warn('[iap] finishTransaction failed', e);
     }
-    clearPending({ ok: true, productId });
+    settleSuccess(purchase, productId, planId);
   });
 
   iap.purchaseErrorListener((error) => {
@@ -87,12 +109,36 @@ function attachListeners(iap: typeof import('react-native-iap')) {
   });
 }
 
+async function pollForCompletedPurchase(iap: typeof import('react-native-iap'), planId: StripePlanId) {
+  if (!pending) return;
+  try {
+    const purchases = await iap.getAvailablePurchases();
+    const skus = allConfiguredIapSkus();
+    const hit = purchases.find((p) => {
+      const id = String(p.productId ?? '').trim();
+      return skus.includes(id);
+    });
+    if (hit) {
+      const productId = String(hit.productId ?? pending!.productId).trim();
+      const resolvedPlan = planIdFromProductId(productId) ?? planId;
+      try {
+        await iap.finishTransaction({ purchase: hit, isConsumable: false });
+      } catch {
+        /* already finished */
+      }
+      settleSuccess(hit, productId, resolvedPlan);
+    }
+  } catch (e) {
+    console.warn('[iap] poll getAvailablePurchases failed', e);
+  }
+}
+
 /** Boot StoreKit when subscription screen opens — never at app launch. */
 export async function bootIapManager(): Promise<void> {
   if (!isIosIapAvailable()) return;
   if (bootPromise) return bootPromise;
 
-  markNativeQuiet(3000);
+  markNativeQuiet(2000);
   bootPromise = runNativeOperation(async () => {
     const iap = await import('react-native-iap');
     iapMod = iap;
@@ -163,7 +209,7 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
   await runNativeOperation(async () => {
     await Promise.race([
       iap.fetchProducts({ skus: [productId], type: 'subs' }),
-      new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+      new Promise<void>((resolve) => setTimeout(resolve, 1500)),
     ]);
   }).catch(() => undefined);
 
@@ -172,21 +218,46 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
       if (pending) clearPending({ ok: false, error: 'Purchase timed out. Please try again.' });
     }, 120000);
 
+    const pollTimer = setInterval(() => {
+      void pollForCompletedPurchase(iap, planId);
+    }, 2500);
+
     pending = {
       productId,
+      planId,
       settle: resolve,
       timer,
+      pollTimer,
     };
 
-    InteractionManager.runAfterInteractions(() => {
-      void iap.requestPurchase({
-        type: 'subs',
-        request: { apple: { sku: productId } },
-      }).catch((e) => {
-        if (!pending) return;
-        clearPending({
-          ok: false,
-          error: e instanceof Error ? e.message : 'Could not open App Store purchase sheet.',
+    const onAppActive = (state: string) => {
+      if (state === 'active' && pending) {
+        void pollForCompletedPurchase(iap, planId);
+      }
+    };
+    const appSub = AppState.addEventListener('change', onAppActive);
+
+    const finishPoll = () => appSub.remove();
+
+    const originalSettle = pending.settle;
+    pending.settle = (result) => {
+      finishPoll();
+      originalSettle(result);
+    };
+
+    void waitUntilNativeIdle().then(() => {
+      InteractionManager.runAfterInteractions(() => {
+        void iap.requestPurchase({
+          type: 'subs',
+          request: { apple: { sku: productId } },
+        }).catch((e) => {
+          if (!pending) return;
+          const msg = e instanceof Error ? e.message : 'Could not open App Store purchase sheet.';
+          if (/cancel/i.test(msg)) {
+            clearPending({ ok: false, error: 'Purchase cancelled.', cancelled: true });
+            return;
+          }
+          void pollForCompletedPurchase(iap, planId);
         });
       });
     });
