@@ -18,13 +18,26 @@ export async function persistSessionUser(
     u.email?.split('@')[0] ||
     'user';
 
-  await ensureProfileRow({
-    userId: u.id,
-    email: u.email ?? '',
-    username: uname,
-    fullName: typeof meta?.full_name === 'string' ? meta.full_name : undefined,
-    planType: 'hobby',
-  }).catch(() => undefined);
+  let profileError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await ensureProfileRow({
+        userId: u.id,
+        email: u.email ?? '',
+        username: uname,
+        fullName: typeof meta?.full_name === 'string' ? meta.full_name : undefined,
+        planType: 'hobby',
+      });
+      profileError = undefined;
+      break;
+    } catch (e) {
+      profileError = e;
+      console.warn(`[auth] ensureProfileRow attempt ${attempt + 1} failed`, e);
+    }
+  }
+  if (profileError) {
+    console.warn('[auth] profile sync failed after retries; session remains valid', profileError);
+  }
 
   const profile: UserProfile = {
     uid: u.id,
@@ -76,7 +89,7 @@ export function formatAuthError(err: unknown): string {
     return 'Sign-in was interrupted. Close photodumps completely, reopen it, and try again.';
   }
   if (/sign.?up not completed|signup not completed/i.test(msg)) {
-    return 'Apple could not finish sign-in on this device. Use Generals → Account on the latest build.';
+    return "Apple couldn't verify your account. Trying again usually works — or update to the latest TestFlight build.";
   }
   if (/unacceptable audience|invalid claim|id_token|jwt|token.*invalid|rejected the Apple token/i.test(msg)) {
     return msg.includes('Supabase') ? msg : `${msg}\n\n${SUPABASE_APPLE_SETUP_HINT}`;

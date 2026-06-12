@@ -112,6 +112,23 @@ function rowFromRpc(data: unknown): ProfileRow | null {
   };
 }
 
+export async function ensureSubscriptionRow(userId: string): Promise<void> {
+  const { error } = await supabase.from('subscriptions').upsert(
+    {
+      user_id: userId,
+      plan: 'free',
+      status: 'active',
+      provider: 'manual',
+      plan_type: 'free',
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id' },
+  );
+  if (error) {
+    console.warn('[subscriptions] ensure failed', error.message);
+  }
+}
+
 export async function ensureProfileRow(params: {
   userId: string;
   email: string;
@@ -129,13 +146,19 @@ export async function ensureProfileRow(params: {
   });
   if (!rpcError) {
     const row = rowFromRpc(rpcData);
-    if (row) return row;
+    if (row) {
+      await ensureSubscriptionRow(params.userId);
+      return row;
+    }
   } else {
     console.warn('[profiles] ensure_my_profile rpc failed', rpcError.message);
   }
 
   const existing = await fetchProfileByUserId(params.userId);
-  if (existing) return existing;
+  if (existing) {
+    await ensureSubscriptionRow(params.userId);
+    return existing;
+  }
 
   const plan = params.planType ?? 'hobby';
   const { data, error } = await supabase
@@ -156,7 +179,9 @@ export async function ensureProfileRow(params: {
     console.warn('[profiles] insert failed', error.message);
     return null;
   }
-  return rowFromRpc(data);
+  const row = rowFromRpc(data);
+  if (row) await ensureSubscriptionRow(params.userId);
+  return row;
 }
 
 export async function updateProfilePlanType(userId: string, planType: ProfilePlanType): Promise<{ ok: boolean; error?: string }> {

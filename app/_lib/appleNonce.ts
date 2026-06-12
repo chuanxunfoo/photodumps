@@ -1,10 +1,10 @@
-import { sha256Hex } from './sha256';
+import { sha256Base64Url } from './sha256';
 
 const NONCE_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 export function createAppleNonce(): { rawNonce: string; hashedNonce: string } {
   const rawNonce = randomNonce(32);
-  const hashedNonce = sha256Hex(rawNonce);
+  const hashedNonce = sha256Base64Url(rawNonce);
   return { rawNonce, hashedNonce };
 }
 

@@ -32,10 +32,7 @@ export async function presentAppleSignInSheet(): Promise<{
     const AppleAuthentication = await import('expo-apple-authentication');
     const { rawNonce, hashedNonce } = createAppleNonce();
     const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-      ],
+      requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
       nonce: hashedNonce,
     });
     if (!credential.identityToken) {
@@ -49,12 +46,27 @@ export async function presentAppleSignInSheet(): Promise<{
   return signInFlight;
 }
 
+function isNonceRelatedAuthError(msg: string): boolean {
+  return /nonce|hash|invalid.*claim|passthrough/i.test(msg);
+}
+
 async function exchangeAppleToken(identityToken: string, rawNonce: string): Promise<Session> {
-  const { data, error } = await supabase.auth.signInWithIdToken({
-    provider: 'apple',
-    token: identityToken,
-    nonce: rawNonce,
-  });
+  const signIn = (withNonce: boolean) =>
+    supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: identityToken,
+      ...(withNonce ? { nonce: rawNonce } : {}),
+    });
+
+  let { data, error } = await signIn(true);
+
+  if (error) {
+    const msg = error.message ?? 'Apple sign-in failed.';
+    if (isNonceRelatedAuthError(msg)) {
+      console.warn('[apple] nonce exchange failed, retrying without nonce', msg);
+      ({ data, error } = await signIn(false));
+    }
+  }
 
   if (error) {
     const msg = error.message ?? 'Apple sign-in failed.';
@@ -107,19 +119,29 @@ export async function sessionFromAppleCredential(
   return session;
 }
 
+async function fallbackToAppleOAuth(reason: unknown): Promise<Session | null> {
+  const code = (reason as { code?: string })?.code;
+  if (code === 'ERR_REQUEST_CANCELED') return null;
+  console.warn('[apple] native sign-in failed, falling back to OAuth Safari flow', reason);
+  const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
+  return signInWithAppleOAuth();
+}
+
 /** Native Apple sheet when available; otherwise Supabase OAuth in Safari. */
 export async function signInWithAppleNative(): Promise<Session | null> {
-  try {
-    if (isNativeAppleAuthLinked()) {
-      const { credential, rawNonce } = await presentAppleSignInSheet();
-      return sessionFromAppleCredential(credential, rawNonce);
-    }
-
+  if (!isNativeAppleAuthLinked()) {
     const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
     return signInWithAppleOAuth();
-  } catch (e: unknown) {
-    const code = (e as { code?: string })?.code;
-    if (code === 'ERR_REQUEST_CANCELED') return null;
-    throw e;
+  }
+
+  try {
+    const { credential, rawNonce } = await presentAppleSignInSheet();
+    try {
+      return await sessionFromAppleCredential(credential, rawNonce);
+    } catch (exchangeErr) {
+      return fallbackToAppleOAuth(exchangeErr);
+    }
+  } catch (nativeErr) {
+    return fallbackToAppleOAuth(nativeErr);
   }
 }

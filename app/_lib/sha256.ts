@@ -93,8 +93,30 @@ function sha256Bytes(message: Uint8Array): Uint8Array {
   return out;
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const triplet = (b0 << 16) | (b1 << 8) | b2;
+    out += alphabet[(triplet >> 18) & 63];
+    out += alphabet[(triplet >> 12) & 63];
+    out += i + 1 < bytes.length ? alphabet[(triplet >> 6) & 63] : '';
+    out += i + 2 < bytes.length ? alphabet[triplet & 63] : '';
+  }
+  return out.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
 export function sha256Hex(input: string): string {
   const bytes = new TextEncoder().encode(input);
   const hash = sha256Bytes(bytes);
   return Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Apple Sign In expects SHA-256 of the raw nonce as base64url (not hex). */
+export function sha256Base64Url(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  return bytesToBase64Url(sha256Bytes(bytes));
 }
