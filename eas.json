@@ -22,6 +22,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "ios": {
+        "buildNumber": "43"
+      },
       "env": {
         "EXPO_PUBLIC_NATIVE_CUTOUT": "1",
         "EXPO_PUBLIC_IOS_IAP_WEEKLY_PRODUCT_ID": "com.yourname.dumpitapp.pro.weekly",
