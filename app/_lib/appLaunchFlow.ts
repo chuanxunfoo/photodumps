@@ -17,6 +17,10 @@ export async function markPermissionsSetupComplete(): Promise<void> {
   await AsyncStorage.setItem(PERMISSIONS_SETUP_KEY, '1');
 }
 
+export async function hasCompletedPermissionsFlow(): Promise<boolean> {
+  return (await AsyncStorage.getItem(PERMISSIONS_SETUP_KEY)) === '1';
+}
+
 export async function clearStaleOAuthBrowserFlag(): Promise<void> {
   await AsyncStorage.removeItem(OAUTH_BROWSER_ACTIVE_KEY);
 }

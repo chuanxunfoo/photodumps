@@ -188,7 +188,7 @@ type Props = { onClose: () => void; postOnboarding?: boolean };
 /** Full-screen subscription page (routed at /subscription). */
 export default function SubscriptionScreen({ onClose, postOnboarding = false }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, themeId, user, setPlan, refreshPlanFromSupabase, language } = useTheme();
+  const { theme, themeId, user, setIsPro, setPlan, refreshPlanFromSupabase, language } = useTheme();
   const heroStyle = subscriptionHeroStyle(themeId, theme);
   const callout = calloutTextStyle(theme);
   const sub = getSubscriptionCopy(language);
@@ -374,29 +374,44 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
           if (!result.cancelled) Alert.alert('Subscription', result.error);
           return;
         }
-        await setPlan('pro');
-        await refreshPlanFromSupabase();
-        if (user?.uid) {
-          await recordSubscriptionActivation({
-            userId: user.uid,
-            planId,
-            provider: 'apple',
-            status: 'active',
-          });
-        }
-        if (user?.uid) {
-          const { emailSent } = await sendSubscriptionConfirmationEmail(planId);
-          const baseMsg = subscriptionSuccessMessage(planId);
-          Alert.alert(
-            'Welcome to Pro',
-            emailSent
-              ? `${baseMsg}\n\nA confirmation email was sent to ${user.email}.`
-              : baseMsg,
-          );
+
+        setIapBusy(false);
+        await setIsPro(true);
+        void setPlan('pro', { skipRemote: true });
+        void markPaywallComplete();
+        if (postOnboarding) {
+          safeReplaceAfterPaywall('/hub?page=calendar');
         } else {
-          Alert.alert('Welcome to Pro', subscriptionSuccessMessage(planId));
+          requestClose();
         }
-        requestClose();
+
+        void (async () => {
+          try {
+            await refreshPlanFromSupabase();
+            if (user?.uid) {
+              await recordSubscriptionActivation({
+                userId: user.uid,
+                planId,
+                provider: 'apple',
+                status: 'active',
+              });
+            }
+            const baseMsg = subscriptionSuccessMessage(planId);
+            if (user?.uid) {
+              const { emailSent } = await sendSubscriptionConfirmationEmail(planId);
+              Alert.alert(
+                'Welcome to Pro',
+                emailSent
+                  ? `${baseMsg}\n\nA confirmation email was sent to ${user.email}.`
+                  : baseMsg,
+              );
+            } else {
+              Alert.alert('Welcome to Pro', baseMsg);
+            }
+          } catch (e) {
+            console.warn('[subscription] post-purchase sync failed', e);
+          }
+        })();
       } finally {
         setIapBusy(false);
       }

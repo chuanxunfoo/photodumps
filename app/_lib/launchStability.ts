@@ -6,6 +6,7 @@
 let nativeIdleAfterMs = 0;
 let hubEnteredAtMs = 0;
 let nativeChain: Promise<void> = Promise.resolve();
+let nativeOperationDepth = 0;
 
 export function markPaywallExit(): void {
   markNativeQuiet(8000);
@@ -16,9 +17,9 @@ export function markHubEntered(): void {
   markNativeQuiet(5000);
 }
 
-/** Call before navigating to Apple Sign In. */
+/** Brief quiet window before auth UI — avoid long blocks that stall the sign-in sheet. */
 export function markAuthFlowStart(): void {
-  markNativeQuiet(10000);
+  markNativeQuiet(1500);
 }
 
 export function markNativeQuiet(durationMs: number): void {
@@ -39,9 +40,18 @@ export async function waitUntilNativeIdle(): Promise<void> {
 
 /** Serialize every native TurboModule call app-wide (one at a time). */
 export async function runNativeOperation<T>(fn: () => Promise<T>): Promise<T> {
+  // Nested calls deadlock on nativeChain — run inline when already inside an op.
+  if (nativeOperationDepth > 0) {
+    return fn();
+  }
   const op = async () => {
     await waitUntilNativeIdle();
-    return fn();
+    nativeOperationDepth += 1;
+    try {
+      return await fn();
+    } finally {
+      nativeOperationDepth -= 1;
+    }
   };
   const result = nativeChain.then(op, op);
   nativeChain = result.then(

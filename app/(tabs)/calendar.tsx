@@ -266,6 +266,7 @@ export function CalendarScreen() {
   const [counts, setCounts]   = useState<Record<string, number>>({});
   const [randomCount, setRandomCount] = useState(0);
   const [photoAccess, setPhotoAccess] = useState<PhotoAccessStatus | 'unknown'>('unknown');
+  const [permissionsFlowDone, setPermissionsFlowDone] = useState(false);
   const [requestingAccess, setRequestingAccess] = useState(false);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale   = useRef(new Animated.Value(0.97)).current;
@@ -293,6 +294,36 @@ export function CalendarScreen() {
   }, [year]);
 
   useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      if (cancelled) return;
+      if (!isHubReadyForCalendarNative()) {
+        setTimeout(poll, 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const [{ getPhotoAccessStatus }, { hasCompletedPermissionsFlow }] = await Promise.all([
+            import('../_lib/firstLaunchPermissions'),
+            import('../_lib/appLaunchFlow'),
+          ]);
+          const [status, flowDone] = await Promise.all([
+            getPhotoAccessStatus(),
+            hasCompletedPermissionsFlow(),
+          ]);
+          if (cancelled) return;
+          setPhotoAccess(status);
+          setPermissionsFlowDone(flowDone);
+        } catch (e) {
+          console.warn('[calendar] photo access check failed', e);
+        }
+      })();
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     if (photoAccess === 'granted' || photoAccess === 'limited') {
       void loadCounts();
     }
@@ -305,6 +336,7 @@ export function CalendarScreen() {
       const { requestPhotoAccessFromUser } = await import('../_lib/firstLaunchPermissions');
       const status = await requestPhotoAccessFromUser();
       setPhotoAccess(status);
+      setPermissionsFlowDone(true);
       if (status === 'granted' || status === 'limited') {
         await loadCounts();
       }
@@ -359,7 +391,10 @@ export function CalendarScreen() {
               subtitle={`${total > 0 ? total : '—'} ${t.photos.toLowerCase()}`}
             />
 
-            {photoAccess !== 'granted' && photoAccess !== 'limited' && (
+            {!permissionsFlowDone
+              && photoAccess !== 'granted'
+              && photoAccess !== 'limited'
+              && photoAccess !== 'unknown' && (
               <TouchableOpacity
                 style={[cs.accessBanner, { backgroundColor: theme.card, borderColor: theme.border }]}
                 onPress={() => void handleEnablePhotos()}

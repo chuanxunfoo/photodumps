@@ -37,7 +37,7 @@ async function signInWithAppleNativeImpl(): Promise<Session | null> {
   return runNativeOperation(async () => {
     const AppleAuthentication = await import('expo-apple-authentication');
     const Crypto = await import('expo-crypto');
-    const { Platform } = await import('react-native');
+    const { InteractionManager, Platform } = await import('react-native');
 
     if (Platform.OS !== 'ios') {
       throw new Error('Sign in with Apple is only available on iOS.');
@@ -59,13 +59,19 @@ async function signInWithAppleNativeImpl(): Promise<Session | null> {
       rawNonce,
     );
 
-    const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-      ],
-      nonce: hashedNonce,
-    });
+    const credential = await new Promise<Awaited<ReturnType<typeof AppleAuthentication.signInAsync>>>(
+      (resolve, reject) => {
+        InteractionManager.runAfterInteractions(() => {
+          void AppleAuthentication.signInAsync({
+            requestedScopes: [
+              AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+              AppleAuthentication.AppleAuthenticationScope.EMAIL,
+            ],
+            nonce: hashedNonce,
+          }).then(resolve, reject);
+        });
+      },
+    );
 
     if (!credential.identityToken) {
       throw new Error('Apple did not return a sign-in token. Try again.');

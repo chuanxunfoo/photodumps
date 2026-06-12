@@ -60,17 +60,20 @@ function attachListeners(iap: typeof import('react-native-iap')) {
   iap.purchaseUpdatedListener(async (purchase) => {
     if (!pending) return;
     const purchasedId = String(purchase.productId ?? purchase.currentPlanId ?? '').trim();
-    if (purchasedId !== pending.productId) return;
-    if (purchase.purchaseState && purchase.purchaseState !== 'purchased') return;
+    const expectedId = pending.productId;
+    const skus = allConfiguredIapSkus();
+    const matchesPending = purchasedId === expectedId;
+    const matchesSku = skus.includes(purchasedId);
+    if (!matchesPending && !matchesSku) return;
+    if (purchase.purchaseState === 'pending') return;
+
+    const productId = matchesPending ? expectedId : purchasedId;
     try {
       await iap.finishTransaction({ purchase, isConsumable: false });
-      clearPending({ ok: true, productId: pending.productId });
     } catch (e) {
-      clearPending({
-        ok: false,
-        error: e instanceof Error ? e.message : 'Could not finalize App Store purchase.',
-      });
+      console.warn('[iap] finishTransaction failed', e);
     }
+    clearPending({ ok: true, productId });
   });
 
   iap.purchaseErrorListener((error) => {

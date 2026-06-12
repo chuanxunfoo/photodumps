@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatAuthError } from '../_lib/accountAuth';
 import { getLocaleUi } from '../_lib/localeUi';
-import { markAuthFlowStart, runNativeOperation } from '../_lib/launchStability';
+import { markAuthFlowStart } from '../_lib/launchStability';
 import { AppHeader } from '../components/AppHeader';
 import { useExploreAwareBack } from '../_lib/exploreBack';
 import { useTheme } from './ThemeContext';
@@ -31,10 +31,8 @@ export default function AccountSignInScreen() {
     setBusy(true);
     markAuthFlowStart();
     try {
-      const profile = await runNativeOperation(async () => {
-        const { signInWithAppleAccount } = await import('../_lib/accountAuth');
-        return signInWithAppleAccount(setUser);
-      });
+      const { signInWithAppleAccount } = await import('../_lib/accountAuth');
+      const profile = await signInWithAppleAccount(setUser);
       if (!profile) return;
       Alert.alert(
         u.accountSignedInTitle,
