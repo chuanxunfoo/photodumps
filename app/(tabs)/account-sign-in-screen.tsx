@@ -1,11 +1,11 @@
-import * as AppleAuthentication from 'expo-apple-authentication';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Platform,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -57,15 +57,18 @@ export default function AccountSignInScreen() {
           <Text style={[styles.sub, { color: theme.textSub }]}>{u.accountSignInSub}</Text>
 
           {showAppleBtn ? (
-            <View style={{ opacity: busy ? 0.7 : 1 }}>
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                cornerRadius={16}
-                style={styles.appleNativeBtn}
-                onPress={() => { void handleApple(); }}
-              />
-            </View>
+            <TouchableOpacity
+              style={[styles.appleBtn, { opacity: busy ? 0.7 : 1 }]}
+              onPress={() => { void handleApple(); }}
+              disabled={busy}
+              activeOpacity={0.88}
+            >
+              {busy ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.appleBtnText}>{u.accountContinueApple}</Text>
+              )}
+            </TouchableOpacity>
           ) : (
             <Text style={[styles.hint, { color: theme.textMuted }]}>
               Sign in with Apple is not available on this device.
@@ -91,6 +94,14 @@ const styles = StyleSheet.create({
   body: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginBottom: 10 },
   sub: { fontSize: 15, lineHeight: 22, fontWeight: '500', marginBottom: 32 },
-  appleNativeBtn: { width: '100%', height: 52 },
+  appleBtn: {
+    backgroundColor: '#111111',
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  appleBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   hint: { fontSize: 12, lineHeight: 18, marginTop: 16, textAlign: 'center' },
 });

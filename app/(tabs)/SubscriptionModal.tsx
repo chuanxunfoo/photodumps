@@ -7,6 +7,7 @@ import {
   Palette, Shield, Sparkles, Star, Zap,
 } from 'lucide-react-native';
 import { AppHeader } from '../components/AppHeader';
+import { MinimalBackButton } from '../components/MinimalBackButton';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, Dimensions, Easing, Modal, Platform, ScrollView,
@@ -349,20 +350,22 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     Alert.alert('Restore purchases', res.error);
   };
 
-  const finishHobbyAndEnterApp = async () => {
+  const goToCalendarHub = async () => {
     if (closingRef.current) return;
     closingRef.current = true;
     try {
       await markPaywallComplete();
-      if (postOnboarding) {
-        safeReplaceAfterPaywall('/hub?page=calendar');
-      } else {
-        onClose();
-      }
-    } catch (e) {
-      console.warn('[subscription] hobby continue failed', e);
       safeReplaceAfterPaywall('/hub?page=calendar');
+    } catch (e) {
+      console.warn('[subscription] go to calendar failed', e);
+      safeReplaceAfterPaywall('/hub?page=calendar');
+    } finally {
+      closingRef.current = false;
     }
+  };
+
+  const finishHobbyAndEnterApp = async () => {
+    await goToCalendarHub();
   };
 
   const ensureSignedInWithApple = async (): Promise<string | null> => {
@@ -477,11 +480,22 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     <>
       <Animated.View style={[s.fullPage, { backgroundColor: theme.bg, opacity: enterOpacity, transform: [{ translateY: enterY }] }]}>
         <SafeAreaView style={s.fullSafe} edges={['top']}>
-          <AppHeader
-            variant="detail"
-            onBack={postOnboarding ? undefined : requestClose}
-            subtitle="photodumps Pro"
-          />
+          {postOnboarding ? (
+            <View style={s.setupBackRow}>
+              <MinimalBackButton
+                onPress={() => { void goToCalendarHub(); }}
+                color={theme.text}
+                size={26}
+                accessibilityLabel="Back to calendar"
+              />
+            </View>
+          ) : (
+            <AppHeader
+              variant="detail"
+              onBack={requestClose}
+              subtitle="photodumps Pro"
+            />
+          )}
 
           <ScrollView
             style={s.scrollView}
@@ -632,6 +646,7 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
 const s = StyleSheet.create({
   fullPage: { flex: 1 },
   fullSafe: { flex: 1 },
+  setupBackRow: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 2 },
   scrollView: { flex: 1 },
   hdr: { paddingBottom: 22, paddingTop: 8 },
   hdrBody: { alignItems: 'center', paddingTop: 6, paddingHorizontal: 24, gap: 7 },
