@@ -119,29 +119,23 @@ export async function sessionFromAppleCredential(
   return session;
 }
 
-async function fallbackToAppleOAuth(reason: unknown): Promise<Session | null> {
-  const code = (reason as { code?: string })?.code;
-  if (code === 'ERR_REQUEST_CANCELED') return null;
-  console.warn('[apple] native sign-in failed, falling back to OAuth Safari flow', reason);
-  const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
-  return signInWithAppleOAuth();
-}
-
-/** Native Apple sheet when available; otherwise Supabase OAuth in Safari. */
+/** Native iOS Apple sheet only — no browser/OAuth (that flow breaks on device). */
 export async function signInWithAppleNative(): Promise<Session | null> {
   if (!isNativeAppleAuthLinked()) {
-    const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
-    return signInWithAppleOAuth();
+    const { isExpoGo } = await import('./stripe/nativeAvailable');
+    if (isExpoGo()) {
+      const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
+      return signInWithAppleOAuth();
+    }
+    throw new Error(appleAuthUnavailableReason() ?? 'Apple Sign In is not available on this device.');
   }
 
   try {
     const { credential, rawNonce } = await presentAppleSignInSheet();
-    try {
-      return await sessionFromAppleCredential(credential, rawNonce);
-    } catch (exchangeErr) {
-      return fallbackToAppleOAuth(exchangeErr);
-    }
-  } catch (nativeErr) {
-    return fallbackToAppleOAuth(nativeErr);
+    return await sessionFromAppleCredential(credential, rawNonce);
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    if (code === 'ERR_REQUEST_CANCELED') return null;
+    throw e;
   }
 }

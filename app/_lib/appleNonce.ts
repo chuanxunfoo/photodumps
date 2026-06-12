@@ -1,10 +1,11 @@
-import { sha256Base64Url } from './sha256';
+import { sha256Hex } from './sha256';
 
 const NONCE_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 export function createAppleNonce(): { rawNonce: string; hashedNonce: string } {
   const rawNonce = randomNonce(32);
-  const hashedNonce = sha256Base64Url(rawNonce);
+  // Expo + Supabase expect SHA-256 hex for the Apple sheet; raw nonce goes to signInWithIdToken.
+  const hashedNonce = sha256Hex(rawNonce);
   return { rawNonce, hashedNonce };
 }
 

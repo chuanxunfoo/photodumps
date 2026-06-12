@@ -431,7 +431,8 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
       } catch (e) {
         const code = (e as { code?: string })?.code;
         if (code !== 'ERR_REQUEST_CANCELED') {
-          Alert.alert('Sign in required', 'Sign in with Apple before subscribing to photodumps Pro.');
+          const { formatAuthError } = await import('../_lib/accountAuth');
+          Alert.alert('Sign in required', formatAuthError(e));
         }
         return;
       } finally {
@@ -478,12 +479,13 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
       <Animated.View style={[s.fullPage, { backgroundColor: theme.bg, opacity: enterOpacity, transform: [{ translateY: enterY }] }]}>
         <SafeAreaView style={s.fullSafe} edges={['top']}>
           {postOnboarding ? (
-            <View style={s.setupBackRow}>
+            <View style={s.setupHeader}>
               <MinimalBackButton
                 onPress={() => { void goToCalendarHub(); }}
                 color={theme.text}
                 size={26}
                 accessibilityLabel="Back to calendar"
+                style={s.setupBackBtn}
               />
             </View>
           ) : (
@@ -643,7 +645,17 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
 const s = StyleSheet.create({
   fullPage: { flex: 1 },
   fullSafe: { flex: 1 },
-  setupBackRow: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 2 },
+  setupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 8,
+    paddingTop: 2,
+    paddingBottom: 4,
+    minHeight: 44,
+    width: '100%',
+  },
+  setupBackBtn: { alignSelf: 'flex-start' },
   scrollView: { flex: 1 },
   hdr: { paddingBottom: 22, paddingTop: 8 },
   hdrBody: { alignItems: 'center', paddingTop: 6, paddingHorizontal: 24, gap: 7 },

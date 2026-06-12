@@ -204,18 +204,11 @@ export async function signInWithAppleOAuth() {
 }
 
 export async function signInWithApple() {
-  const { isNativeAppleAuthLinked } = await import('../_lib/appleAuthAvailability');
-  if (Platform.OS === 'ios' && isNativeAppleAuthLinked()) {
+  if (Platform.OS === 'ios') {
     const { signInWithAppleNative } = await import('../_lib/appleAuthNative');
-    try {
-      const session = await signInWithAppleNative();
-      if (!session) return null;
-      return finalizeOAuthSession(session);
-    } catch (e: unknown) {
-      const code = (e as { code?: string })?.code;
-      if (code === 'ERR_REQUEST_CANCELED') return null;
-      throw e;
-    }
+    const session = await signInWithAppleNative();
+    if (!session) return null;
+    return finalizeOAuthSession(session);
   }
   return signInWithAppleOAuth();
 }
