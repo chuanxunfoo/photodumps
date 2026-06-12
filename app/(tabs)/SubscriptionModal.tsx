@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { recordSubscriptionActivation } from '../_lib/billingSupabase';
 import { markPaywallComplete } from '../_lib/appLaunchFlow';
-import { markAuthFlowStart } from '../_lib/launchStability';
 import { safeReplaceAfterPaywall } from '../_lib/safeNavigate';
 import { formatSubscriptionEndDate, planLabel } from '../_lib/subscriptionPeriod';
 import {
@@ -250,6 +249,12 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
   ];
 
   useEffect(() => {
+    if (Platform.OS === 'ios') {
+      void import('../_lib/appleAuthNative');
+    }
+  }, []);
+
+  useEffect(() => {
     if (isPro) void refreshPlanFromSupabase();
   }, [isPro, refreshPlanFromSupabase]);
 
@@ -362,10 +367,12 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
 
   const ensureSignedInWithApple = async (): Promise<string | null> => {
     if (user?.isLoggedIn && user.uid) return user.uid;
-    markAuthFlowStart();
-    const { signInWithAppleAccount } = await import('../_lib/accountAuth');
-    const profile = await signInWithAppleAccount(setUser);
-    return profile?.uid ?? null;
+    const { presentAppleSignInSheet, sessionFromAppleCredential } = await import('../_lib/appleAuthNative');
+    const { persistSessionUser } = await import('../_lib/accountAuth');
+    const { credential, rawNonce } = await presentAppleSignInSheet();
+    const session = await sessionFromAppleCredential(credential, rawNonce);
+    const profile = await persistSessionUser(session, setUser);
+    return profile.uid;
   };
 
   const finishProPurchase = async (planId: StripePlanId, periodEndMs: number, uid: string) => {

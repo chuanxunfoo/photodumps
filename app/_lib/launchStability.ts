@@ -17,9 +17,9 @@ export function markHubEntered(): void {
   markNativeQuiet(5000);
 }
 
-/** Brief quiet window before auth UI — avoid long blocks that stall the sign-in sheet. */
+/** Pause other native TurboModule work before Apple Sign In navigation. */
 export function markAuthFlowStart(): void {
-  markNativeQuiet(1500);
+  markNativeQuiet(4000);
 }
 
 export function markNativeQuiet(durationMs: number): void {

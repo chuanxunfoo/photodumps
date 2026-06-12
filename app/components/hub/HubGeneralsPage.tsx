@@ -79,7 +79,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
     InteractionManager.runAfterInteractions(() => {
       if (!user?.isLoggedIn) {
         markAuthFlowStart();
-        setTimeout(() => hubPush('/account-sign-in', 'generals'), 500);
+        setTimeout(() => hubPush('/account-sign-in', 'generals'), 800);
         return;
       }
       void (async () => {

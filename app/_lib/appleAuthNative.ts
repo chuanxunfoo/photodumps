@@ -1,10 +1,43 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
 import type { Session } from '@supabase/supabase-js';
 
 import { IOS_APP_BUNDLE_ID } from './appleAuthConstants';
-import { markNativeQuiet, waitUntilNativeIdle } from './launchStability';
+import { createAppleNonce } from './appleNonce';
 import { supabase } from '../(tabs)/supabase';
 
-let signInFlight: Promise<Session | null> | null = null;
+export type AppleCredential = AppleAuthentication.AppleAuthenticationCredential;
+
+let signInFlight: Promise<{ credential: AppleCredential; rawNonce: string }> | null = null;
+
+/**
+ * Present the native Apple sheet — ONE TurboModule call, no expo-crypto / isAvailableAsync before it.
+ * Must be invoked directly from a button onPress (user-gesture chain).
+ */
+export async function presentAppleSignInSheet(): Promise<{
+  credential: AppleCredential;
+  rawNonce: string;
+}> {
+  if (signInFlight) return signInFlight;
+
+  signInFlight = (async () => {
+    const { rawNonce, hashedNonce } = createAppleNonce();
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+    if (!credential.identityToken) {
+      throw new Error('Apple did not return a sign-in token. Try again.');
+    }
+    return { credential, rawNonce };
+  })().finally(() => {
+    signInFlight = null;
+  });
+
+  return signInFlight;
+}
 
 async function exchangeAppleToken(identityToken: string, rawNonce: string): Promise<Session> {
   const { data, error } = await supabase.auth.signInWithIdToken({
@@ -33,48 +66,13 @@ async function exchangeAppleToken(identityToken: string, rawNonce: string): Prom
   return data.session;
 }
 
-/**
- * Apple Sign In must run on the main thread from a user gesture — not inside runNativeOperation
- * (TurboModule exception conversion can SIGSEGV when queued with other native work).
- */
-async function signInWithAppleNativeImpl(): Promise<Session | null> {
-  markNativeQuiet(2500);
-  await waitUntilNativeIdle();
-
-  const AppleAuthentication = await import('expo-apple-authentication');
-  const Crypto = await import('expo-crypto');
-  const { Platform } = await import('react-native');
-
-  if (Platform.OS !== 'ios') {
-    throw new Error('Sign in with Apple is only available on iOS.');
-  }
-
-  let available = false;
-  try {
-    available = await AppleAuthentication.isAvailableAsync();
-  } catch {
-    available = false;
-  }
-  if (!available) {
-    throw new Error('Sign in with Apple is not available on this device.');
-  }
-
-  const rawNonce = Crypto.randomUUID();
-  const hashedNonce = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    rawNonce,
-  );
-
-  const credential = await AppleAuthentication.signInAsync({
-    requestedScopes: [
-      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-      AppleAuthentication.AppleAuthenticationScope.EMAIL,
-    ],
-    nonce: hashedNonce,
-  });
-
+/** Exchange Apple credential for Supabase session (network only — after sheet closes). */
+export async function sessionFromAppleCredential(
+  credential: AppleCredential,
+  rawNonce: string,
+): Promise<Session> {
   if (!credential.identityToken) {
-    throw new Error('Apple did not return a sign-in token. Try again.');
+    throw new Error('Apple did not return a sign-in token.');
   }
 
   let session = await exchangeAppleToken(credential.identityToken, rawNonce);
@@ -100,21 +98,14 @@ async function signInWithAppleNativeImpl(): Promise<Session | null> {
   return session;
 }
 
+/** Full native + Supabase flow (used from subscription sign-in). */
 export async function signInWithAppleNative(): Promise<Session | null> {
-  if (signInFlight) return signInFlight;
-  signInFlight = signInWithAppleNativeImpl().finally(() => {
-    signInFlight = null;
-  });
-  return signInFlight;
-}
-
-export async function isNativeAppleSignInAvailable(): Promise<boolean> {
-  const { Platform } = await import('react-native');
-  if (Platform.OS !== 'ios') return false;
-  const AppleAuthentication = await import('expo-apple-authentication');
   try {
-    return await AppleAuthentication.isAvailableAsync();
-  } catch {
-    return false;
+    const { credential, rawNonce } = await presentAppleSignInSheet();
+    return sessionFromAppleCredential(credential, rawNonce);
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    if (code === 'ERR_REQUEST_CANCELED') return null;
+    throw e;
   }
 }

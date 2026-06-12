@@ -200,13 +200,7 @@ export async function reconnectGoogleWithGmailScopes() {
 
 export async function signInWithApple() {
   if (Platform.OS === 'ios') {
-    const { isNativeAppleSignInAvailable, signInWithAppleNative } = await import('../_lib/appleAuthNative');
-    const nativeAvailable = await isNativeAppleSignInAvailable();
-    if (!nativeAvailable) {
-      throw new Error(
-        'Sign in with Apple requires the latest photodumps build from TestFlight. Update the app and try again.',
-      );
-    }
+    const { signInWithAppleNative } = await import('../_lib/appleAuthNative');
     try {
       const session = await signInWithAppleNative();
       if (!session) return null;

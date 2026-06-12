@@ -42,9 +42,9 @@ export async function signInWithAppleAccount(
   setUser: (u: UserProfile | null) => void | Promise<void>,
 ): Promise<UserProfile | null> {
   try {
-    const { signInWithAppleNative } = await import('./appleAuthNative');
-    const session = await signInWithAppleNative();
-    if (!session) return null;
+    const { presentAppleSignInSheet, sessionFromAppleCredential } = await import('./appleAuthNative');
+    const { credential, rawNonce } = await presentAppleSignInSheet();
+    const session = await sessionFromAppleCredential(credential, rawNonce);
     await AsyncStorage.setItem('@dumpit_signed_once', '1');
     return persistSessionUser(session, setUser);
   } catch (e: unknown) {
