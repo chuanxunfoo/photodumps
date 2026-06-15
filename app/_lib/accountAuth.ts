@@ -100,8 +100,13 @@ export function formatAuthError(err: unknown): string {
   if (/Network request failed|Failed to fetch|invalid\.supabase\.co/i.test(msg)) {
     return 'Cannot reach Supabase. Check your network and try again.';
   }
-  if (/not available on ios|UnavailabilityError|native module is missing|Expo Go/i.test(msg)) {
-    return 'Apple Sign In needs the latest TestFlight build — not Expo Go. Install build 41+ from TestFlight.';
+  if (/Expo Go|storeClient/i.test(msg)) {
+    return 'Sign in with Apple is not available in Expo Go. Install photodumps from TestFlight.';
+  }
+  if (/not available|UnavailabilityError|native module is missing|unavailable in this build/i.test(msg)) {
+    return msg.includes('TestFlight') || msg.includes('build')
+      ? msg
+      : 'Apple Sign In failed on this device. Force-quit photodumps, reopen it, and try again.';
   }
   return msg;
 }

@@ -1,6 +1,10 @@
 import type { Session } from '@supabase/supabase-js';
 
-import { appleAuthUnavailableReason, isNativeAppleAuthLinked } from './appleAuthAvailability';
+import {
+  appleAuthUnavailableReason,
+  isNativeAppleAuthAvailable,
+  isNativeAppleAuthLinked,
+} from './appleAuthAvailability';
 import { IOS_APP_BUNDLE_ID } from './appleAuthConstants';
 import { createAppleNonce } from './appleNonce';
 import { supabase } from '../(tabs)/supabase';
@@ -121,12 +125,14 @@ export async function sessionFromAppleCredential(
 
 /** Native iOS Apple sheet only — no browser/OAuth (that flow breaks on device). */
 export async function signInWithAppleNative(): Promise<Session | null> {
-  if (!isNativeAppleAuthLinked()) {
-    const { isExpoGo } = await import('./stripe/nativeAvailable');
-    if (isExpoGo()) {
-      const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
-      return signInWithAppleOAuth();
-    }
+  const { isExpoGo } = await import('./stripe/nativeAvailable');
+  if (isExpoGo()) {
+    const { signInWithAppleOAuth } = await import('../(tabs)/authOAuth');
+    return signInWithAppleOAuth();
+  }
+
+  const available = await isNativeAppleAuthAvailable();
+  if (!available) {
     throw new Error(appleAuthUnavailableReason() ?? 'Apple Sign In is not available on this device.');
   }
 
@@ -136,6 +142,10 @@ export async function signInWithAppleNative(): Promise<Session | null> {
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;
     if (code === 'ERR_REQUEST_CANCELED') return null;
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/not available|UnavailabilityError|native module is missing/i.test(msg)) {
+      throw new Error(appleAuthUnavailableReason() ?? msg);
+    }
     throw e;
   }
 }

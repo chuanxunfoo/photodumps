@@ -13,14 +13,29 @@ export function isNativeAppleAuthLinked(): boolean {
   return typeof mod?.requestAsync === 'function';
 }
 
+/** Async probe — more reliable than sync requireOptionalNativeModule on some builds. */
+export async function isNativeAppleAuthAvailable(): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+  if (isNativeAppleAuthLinked()) return true;
+  try {
+    const AppleAuthentication = await import('expo-apple-authentication');
+    return await AppleAuthentication.isAvailableAsync();
+  } catch {
+    return false;
+  }
+}
+
 export function appleAuthUnavailableReason(): string | null {
   if (Platform.OS !== 'ios') return 'Sign in with Apple is iOS-only.';
   if (isExpoGo()) {
-    return 'Native Apple Sign In needs a TestFlight or App Store build — not Expo Go. Install the latest TestFlight build.';
+    return 'Sign in with Apple is not available in Expo Go. Install photodumps from TestFlight.';
   }
   if (!isNativeAppleAuthLinked()) {
-    const env = Constants.executionEnvironment ?? 'unknown';
-    return `Apple Sign In native module is missing (runtime: ${env}). Reinstall the latest TestFlight build.`;
+    const build =
+      Constants.expoConfig?.ios?.buildNumber ??
+      Constants.nativeAppVersion ??
+      'unknown';
+    return `Apple Sign In is unavailable in this build (${build}). Install the latest TestFlight build and try again.`;
   }
   return null;
 }
