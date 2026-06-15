@@ -1,10 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
 
-import {
-  appleAuthUnavailableReason,
-  isNativeAppleAuthAvailable,
-  isNativeAppleAuthLinked,
-} from './appleAuthAvailability';
 import { IOS_APP_BUNDLE_ID } from './appleAuthConstants';
 import { createAppleNonce } from './appleNonce';
 import { supabase } from '../(tabs)/supabase';
@@ -26,10 +21,6 @@ export async function presentAppleSignInSheet(): Promise<{
   credential: AppleCredential;
   rawNonce: string;
 }> {
-  if (!isNativeAppleAuthLinked()) {
-    throw new Error(appleAuthUnavailableReason() ?? 'Apple Sign In is not available on this device.');
-  }
-
   if (signInFlight) return signInFlight;
 
   signInFlight = (async () => {
@@ -131,11 +122,6 @@ export async function signInWithAppleNative(): Promise<Session | null> {
     return signInWithAppleOAuth();
   }
 
-  const available = await isNativeAppleAuthAvailable();
-  if (!available) {
-    throw new Error(appleAuthUnavailableReason() ?? 'Apple Sign In is not available on this device.');
-  }
-
   try {
     const { credential, rawNonce } = await presentAppleSignInSheet();
     return await sessionFromAppleCredential(credential, rawNonce);
@@ -143,8 +129,10 @@ export async function signInWithAppleNative(): Promise<Session | null> {
     const code = (e as { code?: string })?.code;
     if (code === 'ERR_REQUEST_CANCELED') return null;
     const msg = e instanceof Error ? e.message : String(e);
-    if (/not available|UnavailabilityError|native module is missing/i.test(msg)) {
-      throw new Error(appleAuthUnavailableReason() ?? msg);
+    if (/UnavailabilityError|not available|native module is missing/i.test(msg)) {
+      throw new Error(
+        'Apple Sign In is not available in this build. Install the latest TestFlight update and try again.',
+      );
     }
     throw e;
   }
