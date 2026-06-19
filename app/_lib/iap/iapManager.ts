@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { AppState, InteractionManager, Platform } from 'react-native';
 
 import { markNativeQuiet, runNativeOperation, waitUntilNativeIdle } from '../launchStability';
-import { periodEndMsFromPurchase, planIdFromProductId } from '../subscriptionPeriod';
+import { periodEndMsFromPurchase, planIdFromProductId, purchaseStartMs } from '../subscriptionPeriod';
 import { isExpoGo } from '../stripe/nativeAvailable';
 import type { StripePlanId } from '../stripe/plans';
 
@@ -15,10 +15,23 @@ export type IapPurchaseResult =
 type PendingPurchase = {
   productId: string;
   planId: StripePlanId;
+  startedAtMs: number;
+  requestSent: boolean;
   settle: (result: IapPurchaseResult) => void;
   timer: ReturnType<typeof setTimeout>;
   pollTimer: ReturnType<typeof setInterval> | null;
 };
+
+/** Ignore StoreKit receipts queued before the user tapped Subscribe on this screen. */
+function purchaseBelongsToAttempt(
+  purchase: { transactionDate?: number | string | null },
+  attempt: PendingPurchase,
+): boolean {
+  if (!attempt.requestSent) return false;
+  const txMs = purchaseStartMs(purchase);
+  if (txMs <= 0) return true;
+  return txMs >= attempt.startedAtMs - 15_000;
+}
 
 let iapMod: typeof import('react-native-iap') | null = null;
 let bootPromise: Promise<void> | null = null;
@@ -85,15 +98,19 @@ function attachListeners(iap: typeof import('react-native-iap')) {
   iap.purchaseUpdatedListener(async (purchase) => {
     if (!pending) return;
     const purchasedId = String(purchase.productId ?? purchase.currentPlanId ?? '').trim();
-    const expectedId = pending.productId;
-    const skus = allConfiguredIapSkus();
-    const matchesPending = purchasedId === expectedId;
-    const matchesSku = skus.includes(purchasedId);
-    if (!matchesPending && !matchesSku) return;
+    if (purchasedId !== pending.productId) return;
     if (purchase.purchaseState === 'pending') return;
+    if (!purchaseBelongsToAttempt(purchase, pending)) {
+      try {
+        await iap.finishTransaction({ purchase, isConsumable: false });
+      } catch {
+        /* stale sandbox receipt */
+      }
+      return;
+    }
 
-    const productId = matchesPending ? expectedId : purchasedId;
-    const planId = pending.planId ?? planIdFromProductId(productId) ?? 'monthly';
+    const productId = pending.productId;
+    const planId = pending.planId;
     try {
       await iap.finishTransaction({ purchase, isConsumable: false });
     } catch (e) {
@@ -114,13 +131,13 @@ function attachListeners(iap: typeof import('react-native-iap')) {
 }
 
 async function pollForCompletedPurchase(iap: typeof import('react-native-iap'), planId: StripePlanId) {
-  if (!pending) return;
+  if (!pending?.requestSent) return;
   try {
     const purchases = await iap.getAvailablePurchases();
-    const skus = allConfiguredIapSkus();
     const hit = purchases.find((p) => {
       const id = String(p.productId ?? '').trim();
-      return skus.includes(id);
+      if (id !== pending!.productId) return false;
+      return purchaseBelongsToAttempt(p, pending!);
     });
     if (hit) {
       const productId = String(hit.productId ?? pending!.productId).trim();
@@ -268,6 +285,8 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
     pending = {
       productId,
       planId,
+      startedAtMs: Date.now(),
+      requestSent: false,
       settle: resolve,
       timer,
       pollTimer,
@@ -290,6 +309,8 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
 
     void waitUntilNativeIdle().then(() => {
       InteractionManager.runAfterInteractions(() => {
+        if (!pending) return;
+        pending.requestSent = true;
         void iap.requestPurchase({
           type: 'subs',
           request: { apple: { sku: productId } },
@@ -300,12 +321,9 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
             clearPending({ ok: false, error: 'Purchase cancelled.', cancelled: true });
             return;
           }
-          void pollForCompletedPurchase(iap, planId).finally(() => {
-            if (!pending) return;
-            clearPending({
-              ok: false,
-              error: msg || 'App Store purchase could not start. Confirm sandbox account is signed in under Settings → App Store.',
-            });
+          clearPending({
+            ok: false,
+            error: msg || 'App Store purchase could not start. Confirm sandbox account is signed in under Settings → App Store.',
           });
         });
       });

@@ -22,7 +22,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { initMobileAds, showRewardedAd } from '../_lib/ads/admob';
+import { initMobileAds, preloadRewardedAd, showRewardedAdDetailed } from '../_lib/ads/admob';
 import { recordSpinPurchase } from '../_lib/billingSupabase';
 import { useTheme } from './ThemeContext';
 
@@ -77,12 +77,16 @@ const TIERS = [
   },
 ] as const;
 
-async function watchRewardedAds(count: number): Promise<boolean> {
+async function watchRewardedAds(count: number): Promise<{ ok: true } | { ok: false; error: string }> {
   for (let i = 0; i < count; i += 1) {
-    const ok = await showRewardedAd(() => undefined);
-    if (!ok) return false;
+    const result = await showRewardedAdDetailed(() => undefined);
+    if (!result.ok) {
+      return count > 1 && i > 0
+        ? { ok: false, error: `Ad ${i + 1} of ${count} did not finish. ${result.error}` }
+        : result;
+    }
   }
-  return true;
+  return { ok: true };
 }
 
 function rollPrize(prizes: readonly Prize[]): Prize {
@@ -415,7 +419,7 @@ export default function SpinWheelScreen() {
   const tier = TIERS[tierIdx];
 
   useEffect(() => {
-    void initMobileAds();
+    void initMobileAds().then(() => preloadRewardedAd());
   }, []);
 
   useEffect(() => {
@@ -483,13 +487,8 @@ export default function SpinWheelScreen() {
     setAdBusy(true);
     try {
       const watched = await watchRewardedAds(tier.adCount);
-      if (!watched) {
-        Alert.alert(
-          'Ad not finished',
-          tier.adCount === 1
-            ? 'Watch the full ad to spin the wheel.'
-            : `Watch all ${tier.adCount} ads to spin the wheel.`,
-        );
+      if (!watched.ok) {
+        Alert.alert('Ad not available', watched.error);
         return;
       }
       startSpinAnimation();

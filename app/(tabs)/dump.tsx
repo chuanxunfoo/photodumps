@@ -15,7 +15,7 @@ import { takeDuplicateSwiperPayload } from './duplicateNavPayload';
 import { useTheme } from './ThemeContext';
 import { AppHeader } from '../components/AppHeader';
 import { addBookmark } from '../_lib/bookmarks';
-import { initMobileAds, showInterstitialAd, showRewardedAd } from '../_lib/ads/admob';
+import { initMobileAds, showInterstitialAd, showRewardedAdDetailed } from '../_lib/ads/admob';
 import {
   fetchAssetsPaged,
   fetchDeepCleanCandidates,
@@ -125,13 +125,13 @@ export default function SwiperScreen() {
     if (rewardBusy) return;
     setRewardBusy(true);
     try {
-      const rewarded = await showRewardedAd(async () => {
+      const rewarded = await showRewardedAdDetailed(async () => {
         await addBonusSwipes(REWARDED_SWIPE_BONUS);
       });
-      if (rewarded) {
+      if (rewarded.ok) {
         Alert.alert('Bonus unlocked', `+${REWARDED_SWIPE_BONUS} swipes added.`);
       } else {
-        Alert.alert('Ad not ready', 'No reward was granted. Please try again in a moment.');
+        Alert.alert('Ad not available', rewarded.error);
       }
     } finally {
       setRewardBusy(false);
