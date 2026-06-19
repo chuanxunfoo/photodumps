@@ -9,8 +9,8 @@ export type PayResult =
   | { ok: false; error: string; needsAuth?: boolean };
 
 /**
- * iOS dev/production build → native Apple Pay sheet.
- * Windows / Expo Go / Android → Stripe Checkout in browser (no Mac required).
+ * iOS App Store build → In-App Purchase (subscriptions).
+ * Android / web → Stripe Checkout in browser.
  */
 export async function completePayment(req: CheckoutRequest): Promise<PayResult> {
   if (req.mode === 'subscription' && Platform.OS === 'ios') {
@@ -36,9 +36,9 @@ export async function completePayment(req: CheckoutRequest): Promise<PayResult> 
   return { ok: true };
 }
 
-export function paymentButtonLabel(): string {
+export function paymentButtonLabel(mode: CheckoutRequest['mode'] = 'subscription'): string {
   if (Platform.OS === 'ios') {
-    return 'Subscribe';
+    return mode === 'payment' ? 'Buy spin pack' : 'Subscribe with App Store';
   }
-  return 'Continue to secure checkout';
+  return mode === 'payment' ? 'Continue to checkout' : 'Continue to secure checkout';
 }

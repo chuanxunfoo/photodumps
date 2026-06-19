@@ -65,7 +65,11 @@ function clearPending(result: IapPurchaseResult) {
 }
 
 function settleSuccess(
-  purchase: { expirationDateIOS?: number | null; productId?: string | null },
+  purchase: {
+    expirationDateIOS?: number | null;
+    productId?: string | null;
+    transactionDate?: number | null;
+  },
   productId: string,
   planId: StripePlanId,
 ) {
@@ -162,6 +166,36 @@ export async function warmIosIapConnection(): Promise<void> {
   await bootIapManager();
 }
 
+/** Returns StoreKit products for configured SKUs — empty if ASC products are missing/misconfigured. */
+export async function fetchIosSubscriptionProducts(): Promise<
+  { ok: true; productIds: string[] } | { ok: false; error: string }
+> {
+  if (!isIosIapAvailable()) {
+    return { ok: false, error: 'App Store subscriptions need a TestFlight or App Store build.' };
+  }
+  const skus = allConfiguredIapSkus();
+  if (skus.length === 0) {
+    return { ok: false, error: 'No subscription product IDs are configured in this build.' };
+  }
+  try {
+    await bootIapManager();
+    const products = await iapMod!.fetchProducts({ skus, type: 'subs' });
+    const found = (products ?? [])
+      .map((p) => String((p as { id?: string; productId?: string }).id ?? (p as { productId?: string }).productId ?? '').trim())
+      .filter(Boolean);
+    if (found.length === 0) {
+      return {
+        ok: false,
+        error:
+          'Subscription plans are not available from the App Store yet. In App Store Connect, ensure photodumps Pro weekly/monthly/yearly subscriptions are Ready to Submit, Cleared for Sale, and linked to this app version.',
+      };
+    }
+    return { ok: true, productIds: found };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not load App Store subscription products.' };
+  }
+}
+
 export async function restoreIosPurchases(): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isIosIapAvailable()) {
     return { ok: false, error: 'Restore is available on iOS builds only.' };
@@ -205,6 +239,15 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
   }
 
   const iap = iapMod!;
+
+  const catalog = await fetchIosSubscriptionProducts();
+  if (!catalog.ok) return { ok: false, error: catalog.error };
+  if (!catalog.productIds.includes(productId)) {
+    return {
+      ok: false,
+      error: `The ${planId} plan (${productId}) is not available from the App Store. Check subscription setup in App Store Connect.`,
+    };
+  }
 
   await runNativeOperation(async () => {
     await Promise.race([
@@ -257,7 +300,13 @@ export async function purchaseIosSubscription(planId: StripePlanId): Promise<Iap
             clearPending({ ok: false, error: 'Purchase cancelled.', cancelled: true });
             return;
           }
-          void pollForCompletedPurchase(iap, planId);
+          void pollForCompletedPurchase(iap, planId).finally(() => {
+            if (!pending) return;
+            clearPending({
+              ok: false,
+              error: msg || 'App Store purchase could not start. Confirm sandbox account is signed in under Settings → App Store.',
+            });
+          });
         });
       });
     });

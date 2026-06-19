@@ -6,8 +6,8 @@ import {
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, Dimensions, Easing, ScrollView, StyleSheet,
-  Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, Animated, Dimensions, Easing, ScrollView, StyleSheet,
+  Text, TouchableOpacity, View, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openPrivacyDocument, openTermsDocument } from '../_lib/openLegalDocument';
@@ -70,7 +70,7 @@ const PLANS: PlanDef[] = [
 ];
 
 export default function SubscribePage() {
-  const { theme, themeId, refreshPlanFromSupabase } = useTheme();
+  const { theme, themeId, refreshPlanFromSupabase, setIsPro, setPlan } = useTheme();
   const heroStyle = subscriptionHeroStyle(themeId, theme);
   const callout = calloutTextStyle(theme);
   const [selected, setSelected] = useState<PlanType>('monthly');
@@ -98,6 +98,18 @@ export default function SubscribePage() {
   };
 
   const plan = PLANS.find(p => p.id === selected)!;
+
+  const handleRestore = async () => {
+    const res = await restoreIosPurchases();
+    if (res.ok) {
+      await setIsPro(true);
+      await setPlan('pro', { skipRemote: true });
+      await refreshPlanFromSupabase();
+      Alert.alert('Restored', 'Your photodumps Pro subscription is active on this Apple ID.');
+      return;
+    }
+    Alert.alert('Restore purchases', res.error);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -224,7 +236,7 @@ export default function SubscribePage() {
                   <>
               <Zap size={20} color={ctaInk} />
               <Text style={[s.ctaText, { color: ctaInk }]}>
-                SUBSCRIBE WITH APPLE PAY
+                SUBSCRIBE PHOTODUMPS PRO
               </Text>
                   </>
                 );
@@ -232,7 +244,7 @@ export default function SubscribePage() {
             </LinearGradient>
           </TouchableOpacity>
           <Text style={[s.ctaNote, { color: theme.textMuted }]}>
-            {plan.myr} · Apple Pay · cancel anytime
+            {plan.myr} · App Store · cancel anytime
           </Text>
 
           {/* LEGAL */}
@@ -243,7 +255,7 @@ export default function SubscribePage() {
             <TouchableOpacity onPress={() => openPrivacyDocument()}>
               <Text style={[s.legalLink, { color: theme.textMuted }]}>Privacy Policy</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { void restoreIosPurchases(); }}>
+            <TouchableOpacity onPress={() => { void handleRestore(); }}>
               <Text style={[s.legalLink, { color: theme.textMuted }]}>Restore Purchase</Text>
             </TouchableOpacity>
           </View>
@@ -256,7 +268,7 @@ export default function SubscribePage() {
         visible={showPayment}
         item={{
           title: `photodumps Pro · ${plan.label}`,
-          subtitle: `${plan.sub} · Apple Pay`,
+          subtitle: `${plan.sub} · App Store`,
           amount: plan.myr,
           usd: plan.usd,
           planId: selected === 'free' ? undefined : selected,

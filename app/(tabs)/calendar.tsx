@@ -142,7 +142,8 @@ function MonthRow({ item, count, onPress, delay, year, colors, isRandom = false 
   const isCurrentYear = year === cy;
   const isPast        = isCurrentYear && item.num < cm;
   const isCurrent     = isCurrentYear && item.num === cm;
-  const tone = contrastOnGradient(colors);
+  const titleColor = '#FFFFFF';
+  const subtitleColor = 'rgba(255,255,255,0.88)';
 
   return (
     <Animated.View style={{
@@ -175,14 +176,14 @@ function MonthRow({ item, count, onPress, delay, year, colors, isRandom = false 
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.85}
-                  style={[mr.monthName, { color: tone.titleColor }]}
+                  style={[mr.monthName, { color: titleColor }]}
                 >
                   {isRandom ? item.name : `${item.short} '${String(year).slice(2)}`}
                 </Text>
                 {isRandom ? (
-                  <Text numberOfLines={2} style={[mr.countLabel, { color: tone.subtitleColor }]}>{RANDOM_VAULT.tagline}</Text>
+                  <Text numberOfLines={2} style={[mr.countLabel, { color: subtitleColor }]}>{RANDOM_VAULT.tagline}</Text>
                 ) : count > 0 ? (
-                  <Text style={[mr.countLabel, { color: tone.subtitleColor }]}>{count} items</Text>
+                  <Text style={[mr.countLabel, { color: subtitleColor }]}>{count} items</Text>
                 ) : null}
               </View>
 
@@ -200,7 +201,7 @@ function MonthRow({ item, count, onPress, delay, year, colors, isRandom = false 
                     <Text style={mr.photoBadgeText}>{count}</Text>
                   </View>
                 ) : (
-                  <Text style={{ color: tone.subtitleColor, fontSize: 18, opacity: 0.45 }}>·</Text>
+                  <Text style={{ color: subtitleColor, fontSize: 18, opacity: 0.45 }}>·</Text>
                 )}
               </View>
             </LinearGradient>

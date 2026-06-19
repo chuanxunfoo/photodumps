@@ -119,6 +119,7 @@ export type LocaleUi = {
   accountContinueApple: string;
   accountSignedInTitle: string;
   accountSignedInMsg: string;
+  accountSignedInAppleMsg: string;
   accountSignInFailed: string;
   permissionsSetupEyebrow: string;
   permissionsSetupTitle: string;
@@ -252,6 +253,7 @@ const EN: LocaleUi = {
   accountContinueApple: 'Continue with Apple',
   accountSignedInTitle: 'Signed in',
   accountSignedInMsg: 'Welcome back. You are signed in as {email}.',
+  accountSignedInAppleMsg: "Welcome back. You're signed in with your Apple ID.",
   accountSignInFailed: 'Sign-in failed',
   permissionsSetupEyebrow: 'ALMOST THERE',
   permissionsSetupTitle: 'Allow access to get started',

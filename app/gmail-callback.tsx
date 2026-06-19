@@ -6,7 +6,7 @@ import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import {
   consumeGmailOAuthResume,
   exchangeGmailOAuthCode,
-  getDefaultGmailOAuthRedirectUri,
+  getGmailRedirectUri,
 } from './_lib/gmailConnect';
 import { stashGmailOAuthReturn, wasOAuthCodeExchanged, type GmailPendingAction } from './_lib/gmailDetoxSetup';
 
@@ -75,7 +75,7 @@ export default function GmailCallbackScreen() {
 
     void (async () => {
       let code: string | null = null;
-      let redirectUri = getDefaultGmailOAuthRedirectUri();
+      let redirectUri = getGmailRedirectUri();
 
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const search = new URLSearchParams(window.location.search);
@@ -110,7 +110,7 @@ export default function GmailCallbackScreen() {
 
     const sub = Linking.addEventListener('url', (event) => {
       const code = codeFromUrl(event.url);
-      if (code) void runOAuth(code, getDefaultGmailOAuthRedirectUri());
+      if (code) void runOAuth(code, getGmailRedirectUri());
     });
 
     return () => sub.remove();

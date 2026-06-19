@@ -30,7 +30,7 @@ const EWALLETS = [
 
 const OTHER_METHODS = [
   { id: 'fpx',    label: 'Online Banking (FPX)', emoji: '🏦', color: '#0055A4' },
-  { id: 'apple',  label: 'Apple Pay',            emoji: '🍎', color: '#999' },
+  { id: 'apple',  label: 'App Store',            emoji: '🍎', color: '#999' },
   { id: 'google', label: 'Google Pay',            emoji: '🔷', color: '#4285F4' },
 ];
 

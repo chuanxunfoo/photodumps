@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatAuthError, signInWithAppleAccount } from '../_lib/accountAuth';
+import { formatAuthError, formatSignedInMessage, signInWithAppleAccount } from '../_lib/accountAuth';
 import { getLocaleUi } from '../_lib/localeUi';
 import { AppHeader } from '../components/AppHeader';
 import { useExploreAwareBack } from '../_lib/exploreBack';
@@ -34,7 +34,10 @@ export default function AccountSignInScreen() {
       if (!profile) return;
       Alert.alert(
         u.accountSignedInTitle,
-        u.accountSignedInMsg.replace('{email}', profile.email || 'your Apple ID'),
+        formatSignedInMessage(profile.email, {
+          withEmail: u.accountSignedInMsg,
+          withAppleId: u.accountSignedInAppleMsg,
+        }),
       );
       goBack();
     } catch (e) {

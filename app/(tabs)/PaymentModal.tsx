@@ -49,6 +49,8 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
   const isSubscription = item.checkoutMode !== 'payment' && !!item.planId;
   const planId = item.planId as StripePlanId | undefined;
   const useIap = Platform.OS === 'ios' && isSubscription;
+  const payMode = isSubscription ? 'subscription' as const : 'payment' as const;
+  const iosSpinPackBlocked = Platform.OS === 'ios' && !isSubscription;
 
   React.useEffect(() => {
     if (visible) {
@@ -57,15 +59,23 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
       setProcessing(false);
       startedRef.current = false;
       Animated.spring(slideAnim, { toValue: 0, friction: 12, tension: 80, useNativeDriver: true }).start();
+      if (useIap) {
+        void import('../_lib/iap/iosIap').then((m) => m.warmIosIapConnection());
+      }
     } else {
       Animated.timing(slideAnim, { toValue: SCREEN_H, duration: 280, useNativeDriver: true }).start();
     }
-  }, [visible, slideAnim]);
+  }, [visible, slideAnim, useIap]);
 
   const runPurchase = useCallback(async () => {
     setError('');
-    if (!user?.isLoggedIn) {
-      setError('Sign in to subscribe.');
+    if (!user?.isLoggedIn && !useIap) {
+      setError(isSubscription ? 'Sign in to subscribe.' : 'Sign in to purchase a spin pack.');
+      return;
+    }
+
+    if (iosSpinPackBlocked) {
+      setError('Spin pack purchases are not available on iOS yet. Subscribe to Pro for unlimited swipes, or use free spins from ads.');
       return;
     }
 
@@ -92,7 +102,7 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
       }
 
       if (isSubscription) {
-        await setPlan('pro');
+        await setPlan('pro', { skipRemote: !user?.uid });
         await refreshPlanFromSupabase();
         if (user?.uid && planId) {
           await recordSubscriptionActivation({
@@ -118,13 +128,13 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
       setProcessing(false);
     }
   }, [
-    addBonusSwipes, isSubscription, item, onClose, onSuccess, planId,
-    refreshPlanFromSupabase, router, setPlan, user?.isLoggedIn, user?.uid,
+    addBonusSwipes, iosSpinPackBlocked, isSubscription, item, onClose, onSuccess, planId,
+    refreshPlanFromSupabase, router, setPlan, useIap, user?.isLoggedIn, user?.uid,
   ]);
 
   React.useEffect(() => {
     if (!visible || done || processing || startedRef.current) return;
-    if (!user?.isLoggedIn) return;
+    if (!user?.isLoggedIn && !useIap) return;
     if (!(useIap || isStripeNativeAvailable())) return;
     startedRef.current = true;
     const t = setTimeout(() => void runPurchase(), 400);
@@ -146,7 +156,15 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
           <View style={s.header}>
             <View style={{ flex: 1 }}>
               <Text style={[s.headerTitle, { color: theme.text }]}>
-                {done ? 'Subscribed' : useIap ? 'photodumps Pro' : 'Checkout'}
+                {done
+                  ? isSubscription
+                    ? 'Subscribed'
+                    : 'Purchase complete'
+                  : useIap
+                    ? 'photodumps Pro'
+                    : isSubscription
+                      ? 'Subscribe'
+                      : 'Buy spin pack'}
               </Text>
               {!done && useIap && (
                 <Text style={[s.headerSub, { color: theme.textSub }]}>
@@ -163,7 +181,9 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
             <View style={s.successWrap}>
               <Animated.View style={{ transform: [{ scale: successScale }], alignItems: 'center', gap: 14 }}>
                 <CheckCircle2 size={56} color={theme.success} />
-                <Text style={[s.successTitle, { color: theme.text }]}>You&apos;re on Pro</Text>
+                <Text style={[s.successTitle, { color: theme.text }]}>
+                  {isSubscription ? "You're on Pro" : 'Spin pack unlocked'}
+                </Text>
                 <Text style={[s.successNote, { color: theme.textMuted }]}>{item.title}</Text>
               </Animated.View>
             </View>
@@ -205,9 +225,16 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
                 </View>
               )}
 
-              {!useIap && !isStripeNativeAvailable() && (
+              {!useIap && !isStripeNativeAvailable() && !iosSpinPackBlocked && (
                 <Text style={[s.expoGoWarn, { color: theme.textSub }]}>
                   Opens secure Stripe checkout in your browser.
+                </Text>
+              )}
+
+              {iosSpinPackBlocked && (
+                <Text style={[s.expoGoWarn, { color: theme.textSub }]}>
+                  One-time spin packs are not sold on iOS yet. Pro subscriptions use In-App Purchase; spin packs will
+                  follow when consumable IAP is added.
                 </Text>
               )}
 
@@ -223,13 +250,22 @@ export function PaymentModal({ visible, item, onClose, onSuccess }: Props) {
                     </Text>
                   )}
                 </View>
+              ) : iosSpinPackBlocked ? (
+                <TouchableOpacity onPress={onClose} activeOpacity={0.88}>
+                  <LinearGradient
+                    colors={[theme.accent, theme.accent2 ?? theme.accent]}
+                    style={s.subscribeBtn}
+                  >
+                    <Text style={s.subscribeBtnText}>Close</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               ) : (
                 <TouchableOpacity onPress={() => void runPurchase()} activeOpacity={0.88}>
                   <LinearGradient
                     colors={[theme.accent, theme.accent2 ?? theme.accent]}
                     style={s.subscribeBtn}
                   >
-                    <Text style={s.subscribeBtnText}>{paymentButtonLabel()}</Text>
+                    <Text style={s.subscribeBtnText}>{paymentButtonLabel(payMode)}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               )}

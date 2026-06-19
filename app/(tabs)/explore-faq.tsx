@@ -49,28 +49,40 @@ function FaqRow({
 
   return (
     <TouchableOpacity activeOpacity={0.92} onPress={onToggle} style={[s.rowWrap, { borderColor: theme.border }]}>
-      <LinearGradient
-        colors={open ? [accent + '22', theme.bg2] : [theme.bg2, theme.card]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={s.rowInner}
-      >
-        <View style={s.rowTop}>
-          <View style={[s.qBadge, { backgroundColor: accent + '33' }]}>
-            <Text style={[s.qBadgeTxt, { color: accent }]}>{String(index + 1).padStart(2, '0')}</Text>
+      {open ? (
+        <View style={[s.rowInner, { backgroundColor: theme.card }]}>
+          <View style={s.rowTop}>
+            <View style={[s.qBadge, { backgroundColor: accent + '33' }]}>
+              <Text style={[s.qBadgeTxt, { color: accent }]}>{String(index + 1).padStart(2, '0')}</Text>
+            </View>
+            <Text style={[s.q, { color: theme.text, flex: 1 }]}>{item.q}</Text>
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <ChevronDown size={22} color={theme.textSub} />
+            </Animated.View>
           </View>
-          <Text style={[s.q, { color: theme.text, flex: 1 }]}>{item.q}</Text>
-          <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <ChevronDown size={22} color={theme.textSub} />
-          </Animated.View>
-        </View>
-        {open ? (
           <View style={s.aWrap}>
             <View style={[s.aRule, { backgroundColor: theme.border }]} />
-            <Text style={[s.a, { color: theme.textSub }]}>{item.a}</Text>
+            <Text style={[s.a, { color: theme.text }]}>{item.a}</Text>
           </View>
-        ) : null}
-      </LinearGradient>
+        </View>
+      ) : (
+        <LinearGradient
+          colors={[theme.bg2, theme.card]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.rowInner}
+        >
+          <View style={s.rowTop}>
+            <View style={[s.qBadge, { backgroundColor: accent + '33' }]}>
+              <Text style={[s.qBadgeTxt, { color: accent }]}>{String(index + 1).padStart(2, '0')}</Text>
+            </View>
+            <Text style={[s.q, { color: theme.text, flex: 1 }]}>{item.q}</Text>
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <ChevronDown size={22} color={theme.textSub} />
+            </Animated.View>
+          </View>
+        </LinearGradient>
+      )}
     </TouchableOpacity>
   );
 }
@@ -149,5 +161,5 @@ const s = StyleSheet.create({
   q: { fontSize: 15, fontWeight: '900', lineHeight: 21 },
   aWrap: { marginTop: 12 },
   aRule: { height: StyleSheet.hairlineWidth, marginBottom: 12 },
-  a: { fontSize: 14, lineHeight: 22, fontWeight: '600' },
+  a: { fontSize: 14, lineHeight: 24, fontWeight: '600' },
 });

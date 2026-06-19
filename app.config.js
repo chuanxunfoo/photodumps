@@ -31,7 +31,7 @@ module.exports = ({ config }) => ({
   },
   assetBundlePatterns: ['**/*'],
   ios: {
-    buildNumber: '47',
+    buildNumber: '58',
     appleTeamId: '75356Q29L5',
     supportsTablet: false,
     bundleIdentifier: 'com.yourname.dumpitapp',

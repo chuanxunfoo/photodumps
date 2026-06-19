@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import {
   AlertCircle, CheckCircle2, Crown, MailWarning, ShieldAlert, Sparkles, Trash2, Wind,
 } from 'lucide-react-native';
@@ -37,7 +37,6 @@ import {
   type GmailPendingAction,
 } from '../_lib/gmailDetoxSetup';
 import { useExploreAwareBack } from '../_lib/exploreBack';
-import { useRequireProFeature } from '../_lib/useRequireProFeature';
 import { dangerButtonColors, primaryButtonColors, secondaryButtonColors } from '../_lib/buttonContrast';
 import { DetoxPermissionModal } from '../components/DetoxPermissionModal';
 import { DetoxSuccessModal, type DetoxSuccessKind } from '../components/DetoxSuccessModal';
@@ -137,9 +136,7 @@ function handleScopeFailure(
   setters.setNeedsDeleteSetup(true);
   setters.setGmailReady(false);
   if (uid) void clearGmailDetoxReady(uid);
-  setters.setInfoText(
-    'On Google, allow “Read, compose, and send emails” (includes trash). Tap Finish Google setup and check every box.',
-  );
+  setters.setInfoText(null);
 }
 
 function formatCount(count: number, capped: boolean): string {
@@ -357,8 +354,6 @@ function ConfirmCleanupModal({
 }
 
 export default function EmailCleanScreen() {
-  const proAllowed = useRequireProFeature();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const goBack = useExploreAwareBack('features');
   const { theme, isPro, isAdmin, openSubscription, user } = useTheme();
@@ -401,6 +396,7 @@ export default function EmailCleanScreen() {
   const scanTicker = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
   const pendingAfterOAuth = useRef<GmailPendingAction>('scan');
+  const startGoogleOAuthRef = useRef<(action?: GmailPendingAction) => void>(() => {});
 
   const animatedOffset = progress.interpolate({
     inputRange: [0, 1],
@@ -541,10 +537,23 @@ export default function EmailCleanScreen() {
         setGmailReady(false);
         setNeedsDeleteSetup(false);
         setNeedsConnect(true);
-        setInfoText('Your Google connection expired. Tap Start scan to sign in to Gmail again.');
+        setInfoText(null);
+        setErrorText('Your Google connection expired. Tap Grant Gmail access below.');
         allowPermissionPromptAgain();
         pendingAfterOAuth.current = 'scan';
-        setPermissionOpen(true);
+        startGoogleOAuthRef.current('scan');
+        return;
+      }
+      if (isScopeError(res.error)) {
+        handleScopeFailure(user?.uid ?? '', {
+          setErrorText,
+          setGmailReady,
+          setNeedsDeleteSetup,
+          setInfoText,
+        });
+        allowPermissionPromptAgain();
+        pendingAfterOAuth.current = 'clean';
+        startGoogleOAuthRef.current('clean');
         return;
       }
       setErrorText(res.error);
@@ -578,9 +587,15 @@ export default function EmailCleanScreen() {
     }
 
     if (!linked) {
-      await allowPermissionPromptAgain();
-      pendingAfterOAuth.current = 'scan';
-      setPermissionOpen(true);
+      startGoogleOAuthRef.current('scan');
+      return;
+    }
+
+    const modifyOk = await hasGmailModifyPermission();
+    if (!modifyOk) {
+      setNeedsDeleteSetup(true);
+      setGmailReady(false);
+      startGoogleOAuthRef.current('clean');
       return;
     }
 
@@ -589,9 +604,7 @@ export default function EmailCleanScreen() {
   }, [runScanOnly, user?.uid]);
 
   const openPermissionForClean = useCallback(async () => {
-    await allowPermissionPromptAgain();
-    pendingAfterOAuth.current = 'clean';
-    setPermissionOpen(true);
+    startGoogleOAuthRef.current('clean');
   }, []);
 
   const runCleanup = useCallback(async () => {
@@ -841,6 +854,7 @@ export default function EmailCleanScreen() {
     if (!linked) {
       setGmailReady(false);
       setNeedsDeleteSetup(false);
+      setNeedsConnect(true);
       return;
     }
     const modifyOk = await hasGmailModifyPermission();
@@ -856,16 +870,20 @@ export default function EmailCleanScreen() {
     await allowPermissionPromptAgain();
     setOauthConnecting(true);
     setErrorText(null);
+    setInfoText(null);
     const action = pendingAfterOAuth.current;
     await markGmailOAuthResume(action);
     await markGmailPendingAction(action);
 
-    const res = await connectGmailAccount();
+    const res = await connectGmailAccount({
+      promptConsent: action === 'clean' || needsDeleteSetup || !(await hasGmailConnection()),
+    });
     setOauthConnecting(false);
 
     if (!res.ok) {
       if (res.error === 'Redirecting to Google…') {
         setPermissionOpen(false);
+        setNeedsConnect(true);
         return;
       }
       const payload = await consumeGmailOAuthReturn();
@@ -884,7 +902,8 @@ export default function EmailCleanScreen() {
       }
       if (/cancelled|did not complete/i.test(res.error)) {
         setPermissionOpen(false);
-        setInfoText('If Google opened in the browser, tap Open photodumps there, then return to email clean.');
+        setNeedsConnect(true);
+        setErrorText('Google sign-in was cancelled. Tap Grant Gmail access to try again.');
         return;
       }
       setErrorText(res.error);
@@ -921,7 +940,13 @@ export default function EmailCleanScreen() {
     }
     if (totalMessages > 0 && phase === 'result') return;
     await runScanOnly();
-  }, [gmailRedirectUri, handleOAuthReturn, phase, requestCleanupConfirmationInternal, runScanOnly, showSuccess, totalMessages, user?.uid]);
+  }, [gmailRedirectUri, handleOAuthReturn, needsDeleteSetup, phase, requestCleanupConfirmationInternal, runScanOnly, showSuccess, totalMessages, user?.uid]);
+
+  startGoogleOAuthRef.current = (action: GmailPendingAction = 'scan') => {
+    pendingAfterOAuth.current = action;
+    setPermissionOpen(false);
+    void handlePermissionConnect();
+  };
 
   useEffect(() => {
     void syncGmailAccessState();
@@ -973,16 +998,45 @@ export default function EmailCleanScreen() {
             ? 'Scan again'
             : 'Done';
 
-  if (!proAllowed) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <ActivityIndicator size="large" color={theme.accent} />
-        <Text style={{ color: theme.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>
-          OPENING SUBSCRIPTION...
-        </Text>
+  const ctaOnPress =
+    phase === 'idle' || phase === 'done'
+      ? beginScan
+      : phase === 'result'
+        ? needsDeleteSetup
+          ? () => startGoogleOAuthRef.current('clean')
+          : batchPreviewCount > 0
+            ? requestCleanupConfirmation
+            : beginScan
+        : undefined;
+
+  const showGoogleAction =
+    needsConnect || needsDeleteSetup;
+
+  const stickyLabel = showGoogleAction
+    ? oauthConnecting
+      ? 'Opening Google…'
+      : 'Grant Gmail access'
+    : ctaLabel;
+
+  const stickyOnPress = showGoogleAction
+    ? () => startGoogleOAuthRef.current(needsDeleteSetup ? 'clean' : 'scan')
+    : ctaOnPress ?? beginScan;
+
+  const stickyDisabled =
+    oauthConnecting || phase === 'scanning' || phase === 'cleaning' || (!showGoogleAction && !stickyOnPress);
+
+  const renderPrimaryCta = (marginTop = 20) => (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={ctaOnPress}
+      disabled={phase === 'scanning' || phase === 'cleaning' || !ctaOnPress}
+      style={{ marginHorizontal: 20, marginTop }}
+    >
+      <View style={[s.cta, { backgroundColor: primaryBtn.bg }, (phase === 'scanning' || phase === 'cleaning') && { opacity: 0.7 }]}>
+        <Text style={[s.ctaText, { color: primaryBtn.text, fontFamily: fonts.titleFont }]}>{ctaLabel}</Text>
       </View>
-    );
-  }
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -994,7 +1048,7 @@ export default function EmailCleanScreen() {
           <View style={{ width: 36 }} />
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 28 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 108 }} showsVerticalScrollIndicator={false}>
           <View style={s.hero}>
             <LinearGradient colors={[theme.bg2, theme.bg3]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.kickerPill}>
               <Sparkles size={11} color={theme.textSub} />
@@ -1107,36 +1161,30 @@ export default function EmailCleanScreen() {
               </View>
             ) : (
               <>
-                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>Ready to scan</Text>
+                <Text style={[s.scanText, { color: theme.text, fontFamily: fonts.titleFont }]}>
+                  {showGoogleAction ? 'Gmail access needed' : 'Ready to scan'}
+                </Text>
                 <Text style={[s.scanSub, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                  Tap Scan emails · connect Gmail once · delete in small batches you confirm
+                  {showGoogleAction
+                    ? 'Tap Grant Gmail access below — Google will ask you to allow email cleanup (one time).'
+                    : 'Scan your inbox, then delete small batches you confirm.'}
                 </Text>
               </>
             )}
           </View>
 
           {needsDeleteSetup && phase === 'result' && (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => {
-                allowPermissionPromptAgain();
-                pendingAfterOAuth.current = 'clean';
-                setPermissionOpen(true);
-              }}
-              style={{ marginHorizontal: 20, marginTop: 14 }}
-            >
-              <View style={[s.setupCard, { borderColor: theme.border, backgroundColor: theme.bg2 }]}>
-                <MailWarning size={18} color="#D4A853" />
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.setupTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
-                    Allow Gmail cleanup access
-                  </Text>
-                  <Text style={[s.setupBody, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
-                    On Google, turn on “Read, compose, and send emails” (look for trash / labels). That is how delete works — Google never says “delete” by name.
-                  </Text>
-                </View>
+            <View style={[s.setupCard, { marginHorizontal: 20, marginTop: 14, borderColor: theme.border, backgroundColor: theme.bg2, flexDirection: 'row' }]}>
+              <MailWarning size={18} color="#D4A853" />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.setupTitle, { color: theme.text, fontFamily: fonts.titleFont }]}>
+                  Gmail delete access required
+                </Text>
+                <Text style={[s.setupBody, { color: theme.textSub, fontFamily: fonts.bodyFont }]}>
+                  Tap Grant Gmail access below. On Google’s screen, allow “Read, compose, and send emails”.
+                </Text>
               </View>
-            </TouchableOpacity>
+            </View>
           )}
 
           {!!errorText && !isScopeError(errorText) && (
@@ -1175,48 +1223,7 @@ export default function EmailCleanScreen() {
             ))}
           </View>
 
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={
-              phase === 'idle' || phase === 'done'
-                ? beginScan
-                : phase === 'result'
-                  ? needsDeleteSetup
-                    ? () => {
-                        allowPermissionPromptAgain();
-                        pendingAfterOAuth.current = 'clean';
-                        setPermissionOpen(true);
-                      }
-                  : batchPreviewCount > 0
-                    ? requestCleanupConfirmation
-                    : beginScan
-                  : undefined
-            }
-            disabled={phase === 'scanning' || phase === 'cleaning'}
-            style={{ marginHorizontal: 20, marginTop: 20 }}
-          >
-            <View style={[s.cta, { backgroundColor: primaryBtn.bg }, (phase === 'scanning' || phase === 'cleaning') && { opacity: 0.7 }]}>
-              <Text style={[s.ctaText, { color: primaryBtn.text, fontFamily: fonts.titleFont }]}>{ctaLabel}</Text>
-            </View>
-          </TouchableOpacity>
-
-          {needsConnect && (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => {
-                allowPermissionPromptAgain();
-                pendingAfterOAuth.current = 'scan';
-                setPermissionOpen(true);
-              }}
-              style={{ marginHorizontal: 20, marginTop: 10 }}
-            >
-              <View style={[s.connectBtn, { backgroundColor: secondaryBtn.bg, borderColor: secondaryBtn.border }]}>
-                <Text style={[s.connectText, { color: secondaryBtn.text, fontFamily: fonts.titleFont }]}>
-                  Try Google sign-in again
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          {phase !== 'idle' && !showGoogleAction ? renderPrimaryCta(20) : null}
 
           {!isPaid && (
             <Text style={[s.lockNote, { color: theme.textMuted, fontFamily: fonts.bodyFont }]}>
@@ -1224,6 +1231,24 @@ export default function EmailCleanScreen() {
             </Text>
           )}
         </ScrollView>
+
+        <View style={[s.stickyFooter, { paddingBottom: insets.bottom + 10, borderTopColor: theme.border, backgroundColor: theme.bg }]}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={stickyOnPress}
+            disabled={stickyDisabled}
+          >
+            <View style={[s.cta, { backgroundColor: primaryBtn.bg }, stickyDisabled && { opacity: 0.65 }]}>
+              {oauthConnecting ? (
+                <ActivityIndicator color={primaryBtn.text} />
+              ) : (
+                <Text style={[s.ctaText, { color: primaryBtn.text, fontFamily: fonts.titleFont }]}>
+                  {stickyLabel}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
 
       <DetoxPermissionModal
@@ -1462,6 +1487,11 @@ const s = StyleSheet.create({
   },
   connectText: { fontSize: 13, fontWeight: '900' },
   connectTextSolid: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  stickyFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   scopeHint: { marginTop: 8, fontSize: 11, fontWeight: '600', textAlign: 'center', lineHeight: 16, paddingHorizontal: 8 },
   lockNote: { marginTop: 12, fontSize: 12, fontWeight: '600', textAlign: 'center', paddingHorizontal: 28, lineHeight: 18 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', justifyContent: 'flex-end' },

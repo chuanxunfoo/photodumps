@@ -13,6 +13,9 @@ const PAGE_SIZE = 280;
 /** Photos older than this are "lost & found" candidates. */
 const RANDOM_AGE_MS = 18 * 30 * 24 * 60 * 60 * 1000;
 
+/** Swipe deck loads photos only — videos show a black screen in the card UI. */
+export const SWIPE_MEDIA_TYPES = ['photo'] as const;
+
 export type SwiperMediaItem = Asset & {
   mediaType: 'photo' | 'video';
   sizeMB: number;
@@ -51,12 +54,16 @@ async function yieldUi(): Promise<void> {
   });
 }
 
-export async function countAssetsInRange(createdAfter: number, createdBefore: number): Promise<number> {
+export async function countAssetsInRange(
+  createdAfter: number,
+  createdBefore: number,
+  mediaType: AssetsOptions['mediaType'] = SWIPE_MEDIA_TYPES,
+): Promise<number> {
   return withMediaLibraryMutex(async () => {
     const MediaLibrary = await getMediaLibrary();
     const { totalCount } = await MediaLibrary.getAssetsAsync({
       first: 0,
-      mediaType: ['photo', 'video'],
+      mediaType,
       createdAfter,
       createdBefore,
       sortBy: 'creationTime',
@@ -80,7 +87,7 @@ export async function fetchAssetsPaged(
       ...options,
       first: PAGE_SIZE,
       after,
-      mediaType: options.mediaType ?? ['photo', 'video'],
+      mediaType: options.mediaType ?? SWIPE_MEDIA_TYPES,
     });
     if (total == null && page.totalCount != null) total = page.totalCount;
     collected = collected.concat(page.assets);
@@ -135,6 +142,7 @@ export async function fetchRandomVaultAssets(
     {
       createdBefore: cutoff,
       sortBy: 'creationTime',
+      mediaType: SWIPE_MEDIA_TYPES,
     },
     (loaded, total) => onProgress?.(byId.size + loaded, total),
   );
@@ -142,14 +150,14 @@ export async function fetchRandomVaultAssets(
 
   const album = await findScreenshotsAlbum();
   if (album) {
-    const shots = await fetchAssetsPaged({ album, sortBy: 'creationTime' });
+    const shots = await fetchAssetsPaged({ album, sortBy: 'creationTime', mediaType: SWIPE_MEDIA_TYPES });
     add(shots);
   }
 
   if (Platform.OS === 'ios') {
     try {
       const iosShots = await fetchAssetsPaged({
-        mediaType: ['photo'],
+        mediaType: SWIPE_MEDIA_TYPES,
         mediaSubtypes: ['screenshot'],
         sortBy: 'creationTime',
       });
@@ -194,7 +202,7 @@ export async function fetchDeepCleanCandidates(
     const page = await MediaLibrary.getAssetsAsync({
       first: pageSize,
       after,
-      mediaType: ['photo', 'video'],
+      mediaType: SWIPE_MEDIA_TYPES,
       sortBy: 'creationTime',
     });
     if (total == null && page.totalCount != null) total = page.totalCount;

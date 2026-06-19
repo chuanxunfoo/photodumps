@@ -1,15 +1,15 @@
 /**
  * spin-wheel.tsx — Cyber-casino 3-reel swipe pack machine (photodumps).
- * Tiers: Basic / Plus / Max — guaranteed prize every spin.
+ * Tiers: Basic / Plus / Max — watch rewarded ads, then spin for bonus swipes.
  */
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { MinimalBackButton } from '../components/MinimalBackButton';
 import { useExploreAwareBack } from '../_lib/exploreBack';
-import { ChevronLeft, Sparkles, Zap } from 'lucide-react-native';
+import { Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -22,8 +22,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PaymentModal } from './PaymentModal';
-import type { PaymentItem } from './PaymentModal';
+import { initMobileAds, showRewardedAd } from '../_lib/ads/admob';
 import { recordSpinPurchase } from '../_lib/billingSupabase';
 import { useTheme } from './ThemeContext';
 
@@ -43,37 +42,48 @@ const TIERS = [
   {
     id: 'basic',
     label: 'BASIC',
-    price: 'USD 0.99',
+    adCount: 1,
+    adLabel: '1 ad',
     accentColor: '#00C2FF',
     prizes: [
-      { swipes: 300,  label: '200 Swipes',  color: '#00C2FF', symbolLine1: '200',  symbolLine2: 'SWIPES', prob: 0.92 },
-      { swipes: 400, label: '300 Swipes', color: '#BF5AF2', symbolLine1: '300', symbolLine2: 'SWIPES', prob: 0.07 },
-      { swipes: 500, label: '500 Swipes', color: '#FFD600', symbolLine1: '500', symbolLine2: 'SWIPES', prob: 0.01 },
+      { swipes: 30, label: '30 Swipes', color: '#00C2FF', symbolLine1: '30', symbolLine2: 'SWIPES', prob: 0.97 },
+      { swipes: 50, label: '50 Swipes', color: '#BF5AF2', symbolLine1: '50', symbolLine2: 'SWIPES', prob: 0.02 },
+      { swipes: 80, label: '80 Swipes', color: '#FFD600', symbolLine1: '80', symbolLine2: 'SWIPES', prob: 0.01 },
     ] as Prize[],
   },
   {
     id: 'plus',
     label: 'PLUS',
-    price: 'USD 1.99',
+    adCount: 3,
+    adLabel: '3 ads',
     accentColor: '#BF5AF2',
     prizes: [
-      { swipes: 800, label: '800 Swipes', color: '#BF5AF2', symbolLine1: '800', symbolLine2: 'SWIPES', prob: 0.92  },
-      { swipes: 1000, label: '1000 Swipes', color: '#FF8C00', symbolLine1: '1000', symbolLine2: 'SWIPES', prob: 0.07 },
-      { swipes: 1500, label: '1400 Swipes', color: '#FFD600', symbolLine1: '1400', symbolLine2: 'SWIPES', prob: 0.01 },
+      { swipes: 90, label: '90 Swipes', color: '#BF5AF2', symbolLine1: '90', symbolLine2: 'SWIPES', prob: 0.98 },
+      { swipes: 120, label: '120 Swipes', color: '#FF8C00', symbolLine1: '120', symbolLine2: 'SWIPES', prob: 0.01 },
+      { swipes: 150, label: '150 Swipes', color: '#FFD600', symbolLine1: '150', symbolLine2: 'SWIPES', prob: 0.01 },
     ] as Prize[],
   },
   {
     id: 'max',
     label: 'MAX',
-    price: 'USD 2.99',
+    adCount: 7,
+    adLabel: '7 ads',
     accentColor: '#FFD600',
     prizes: [
-      { swipes: 2000,  label: '2000 Swipes',  color: '#FFD600', symbolLine1: '2000',  symbolLine2: 'SWIPES', prob: 0.92  },
-      { swipes: 2500,  label: '2500 Swipes',  color: '#FF8C00', symbolLine1: '2500',  symbolLine2: 'SWIPES', prob: 0.075   },
-      { swipes: 5000, label: '5000 Swipes', color: '#FF0055', symbolLine1: '5000', symbolLine2: 'SWIPES', prob: 0.005  },
+      { swipes: 260, label: '260 Swipes', color: '#FFD600', symbolLine1: '260', symbolLine2: 'SWIPES', prob: 0.99 },
+      { swipes: 380, label: '380 Swipes', color: '#FF8C00', symbolLine1: '380', symbolLine2: 'SWIPES', prob: 0.005 },
+      { swipes: 500, label: '500 Swipes', color: '#FF0055', symbolLine1: '500', symbolLine2: 'SWIPES', prob: 0.005 },
     ] as Prize[],
   },
 ] as const;
+
+async function watchRewardedAds(count: number): Promise<boolean> {
+  for (let i = 0; i < count; i += 1) {
+    const ok = await showRewardedAd(() => undefined);
+    if (!ok) return false;
+  }
+  return true;
+}
 
 function rollPrize(prizes: readonly Prize[]): Prize {
   const r = Math.random(); let cum = 0;
@@ -392,8 +402,7 @@ export default function SpinWheelScreen() {
   const [wonPrize, setWonPrize] = useState<Prize | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationKey, setCelebrationKey] = useState(0);
-  const [showPayment, setShowPayment] = useState(false);
-  const [payItem, setPayItem] = useState<PaymentItem | null>(null);
+  const [adBusy, setAdBusy] = useState(false);
 
   const doneCounts = useRef(0);
   const pendingPrize = useRef<Prize | null>(null);
@@ -404,6 +413,10 @@ export default function SpinWheelScreen() {
   const floorSheen = useRef(new Animated.Value(0)).current;
 
   const tier = TIERS[tierIdx];
+
+  useEffect(() => {
+    void initMobileAds();
+  }, []);
 
   useEffect(() => {
     Animated.loop(Animated.sequence([
@@ -448,21 +461,7 @@ export default function SpinWheelScreen() {
     return () => { winPulse.stopAnimation(); };
   }, [wonPrize, winPulse]);
 
-  const handleSpin = () => {
-    if (spinning) return;
-    setPayItem({
-      title: `${tier.label} Spin Pack`,
-      subtitle: 'Guaranteed prize every spin!',
-      amount: tier.price,
-      usd: '',
-      checkoutMode: 'payment',
-      productKey: tier.id,
-    });
-    setShowPayment(true);
-  };
-
-  const onPaymentSuccess = () => {
-    setShowPayment(false);
+  const startSpinAnimation = () => {
     setShowCelebration(false);
     const prize = rollPrize(tier.prizes);
     pendingPrize.current = prize;
@@ -473,6 +472,30 @@ export default function SpinWheelScreen() {
     const prizeIdx = rawIdx >= 0 ? rawIdx : 0;
     setTargetIdxs([prizeIdx, prizeIdx, prizeIdx]);
     setSpinning(true);
+  };
+
+  const handleSpin = async () => {
+    if (spinning || adBusy) return;
+    if (Platform.OS !== 'ios') {
+      Alert.alert('Ads unavailable', 'Rewarded ads are available on the iOS app.');
+      return;
+    }
+    setAdBusy(true);
+    try {
+      const watched = await watchRewardedAds(tier.adCount);
+      if (!watched) {
+        Alert.alert(
+          'Ad not finished',
+          tier.adCount === 1
+            ? 'Watch the full ad to spin the wheel.'
+            : `Watch all ${tier.adCount} ads to spin the wheel.`,
+        );
+        return;
+      }
+      startSpinAnimation();
+    } finally {
+      setAdBusy(false);
+    }
   };
 
   const addBonusSwipesRef = useRef(addBonusSwipes);
@@ -493,7 +516,7 @@ export default function SpinWheelScreen() {
           void recordSpinPurchase({
             userId: user.uid,
             tier: tier.id,
-            amountMyrDisplay: tier.price,
+            amountMyrDisplay: tier.adLabel,
             swipesWon: p.swipes,
           });
         }
@@ -501,7 +524,7 @@ export default function SpinWheelScreen() {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }
-  }, [tier.id, tier.price, user?.uid]);
+  }, [tier.adLabel, tier.id, user?.uid]);
 
   const floorOpacity = floorSheen.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.12] });
 
@@ -546,7 +569,7 @@ export default function SpinWheelScreen() {
               <Text style={[s.headerBadgeTxt, { color: glowColor }]}>GUARANTEED PRIZE EVERY SPIN</Text>
             </LinearGradient>
             <Text style={s.headerTitle}>Spin to Win</Text>
-            <Text style={s.headerSub}>Cyber-casino reels — every spin pays out.</Text>
+            <Text style={s.headerSub}>Watch ads to spin — every spin pays out.</Text>
           </View>
 
           <View style={s.tierRow}>
@@ -554,11 +577,11 @@ export default function SpinWheelScreen() {
               <TierArcadeButton
                 key={t.id}
                 label={t.label}
-                price={t.price}
+                adLabel={t.adLabel}
                 accent={t.accentColor}
                 selected={tierIdx === i}
-                disabled={spinning}
-                onPress={() => { if (!spinning) { setTierIdx(i); setWonPrize(null); setShowCelebration(false); } }}
+                disabled={spinning || adBusy}
+                onPress={() => { if (!spinning && !adBusy) { setTierIdx(i); setWonPrize(null); setShowCelebration(false); } }}
               />
             ))}
           </View>
@@ -636,32 +659,38 @@ export default function SpinWheelScreen() {
             </Animated.View>
           </View>
 
-          <TouchableOpacity onPress={handleSpin} disabled={spinning} activeOpacity={0.85} style={{ marginTop: wonPrize ? 8 : 12 }}>
+          <TouchableOpacity onPress={() => { void handleSpin(); }} disabled={spinning || adBusy} activeOpacity={0.85} style={{ marginTop: wonPrize ? 8 : 12 }}>
             <LinearGradient
-              colors={spinning ? ['#1A1A1A', '#111'] : [glowColor, glowColor + 'AA']}
+              colors={spinning || adBusy ? ['#1A1A1A', '#111'] : [glowColor, glowColor + 'AA']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={s.spinBtn}
             >
-              <Zap size={20} color={spinning ? '#555' : '#000'} />
-              <Text style={[s.spinBtnTxt, { color: spinning ? '#555' : '#000' }]}>
-                {spinning ? 'SPINNING…' : `SPIN FOR ${tier.price}`}
+              <Zap size={20} color={spinning || adBusy ? '#555' : '#000'} />
+              <Text style={[s.spinBtnTxt, { color: spinning || adBusy ? '#555' : '#000' }]}>
+                {adBusy
+                  ? `WATCHING AD${tier.adCount > 1 ? 'S' : ''}…`
+                  : spinning
+                    ? 'SPINNING…'
+                    : `WATCH ${tier.adCount} AD${tier.adCount > 1 ? 'S' : ''} & SPIN`}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={s.spinNote}>Every spin wins a prize</Text>
+          <Text style={s.spinNote}>Every spin wins · {tier.adLabel} required</Text>
 
           <View style={[s.compareCard, { borderColor: 'rgba(255,255,255,0.08)' }]}>
             <Text style={s.compareHead}>COMPARE TIERS</Text>
             {TIERS.map((t, i) => (
               <TouchableOpacity
                 key={t.id}
-                onPress={() => { if (!spinning) { setTierIdx(i); setWonPrize(null); setShowCelebration(false); } }}
+                onPress={() => { if (!spinning && !adBusy) { setTierIdx(i); setWonPrize(null); setShowCelebration(false); } }}
                 style={[s.compareRow, { borderColor: tierIdx === i ? t.accentColor + '55' : 'transparent', backgroundColor: tierIdx === i ? t.accentColor + '10' : 'transparent' }]}
               >
                 <View style={[s.compareDot, { backgroundColor: t.accentColor }]} />
                 <Text style={[s.compareLabel, { color: t.accentColor }]}>{t.label}</Text>
-                <Text style={s.compareDesc}>Guaranteed win every spin</Text>
-                <Text style={[s.comparePrice, { color: tierIdx === i ? '#FFF' : 'rgba(255,255,255,0.45)' }]}>{t.price}</Text>
+                <Text style={s.compareDesc}>
+                  {t.prizes.map((p) => p.swipes).join(' / ')} swipes
+                </Text>
+                <Text style={[s.comparePrice, { color: tierIdx === i ? '#FFF' : 'rgba(255,255,255,0.45)' }]}>{t.adLabel}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -669,18 +698,14 @@ export default function SpinWheelScreen() {
           <View style={{ height: 12 }} />
         </ScrollView>
       </SafeAreaView>
-
-      {payItem && (
-        <PaymentModal visible={showPayment} item={payItem} onClose={() => setShowPayment(false)} onSuccess={onPaymentSuccess} />
-      )}
     </View>
   );
 }
 
 function TierArcadeButton({
-  label, price, accent, selected, disabled, onPress,
+  label, adLabel, accent, selected, disabled, onPress,
 }: {
-  label: string; price: string; accent: string; selected: boolean; disabled: boolean; onPress: () => void;
+  label: string; adLabel: string; accent: string; selected: boolean; disabled: boolean; onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const pressIn = () => Animated.spring(scale, { toValue: 0.94, useNativeDriver: true, friction: 6 }).start();
@@ -700,7 +725,7 @@ function TierArcadeButton({
         },
       ]}>
         <Text style={[tb.label, { color: selected ? accent : 'rgba(255,255,255,0.35)' }]}>{label}</Text>
-        <Text style={[tb.price, { color: selected ? '#FFF' : 'rgba(255,255,255,0.28)' }]}>{price}</Text>
+        <Text style={[tb.price, { color: selected ? '#FFF' : 'rgba(255,255,255,0.28)' }]}>{adLabel}</Text>
       </Animated.View>
     </Pressable>
   );

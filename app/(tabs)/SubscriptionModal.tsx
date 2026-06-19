@@ -207,7 +207,6 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     onSuccess: () => void;
   }> | null>(null);
   const [iapBusy, setIapBusy] = useState(false);
-  const [signInBusy, setSignInBusy] = useState(false);
   const enterOpacity = useRef(new Animated.Value(1)).current;
   const enterY = useRef(new Animated.Value(0)).current;
   const closingRef = useRef(false);
@@ -252,6 +251,7 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
   useEffect(() => {
     if (Platform.OS === 'ios') {
       void import('../_lib/appleAuthNative');
+      void import('../_lib/iap/iosIap').then((m) => m.warmIosIapConnection());
     }
   }, []);
 
@@ -343,6 +343,8 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     const { restoreIosPurchases } = await import('../_lib/iap/iosIap');
     const res = await restoreIosPurchases();
     if (res.ok) {
+      await setIsPro(true);
+      await setPlan('pro', { skipRemote: true });
       await refreshPlanFromSupabase();
       Alert.alert('Restored', 'Your photodumps Pro subscription is active on this Apple ID.');
       return;
@@ -368,11 +370,13 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     await goToCalendarHub();
   };
 
-  const ensureSignedInWithApple = async (): Promise<string | null> => {
-    if (user?.isLoggedIn && user.uid) return user.uid;
-    const { signInWithAppleAccount } = await import('../_lib/accountAuth');
-    const profile = await signInWithAppleAccount(setUser);
-    return profile?.uid ?? null;
+  const grantLocalProWithoutAccount = async (planId: StripePlanId, periodEndMs: number) => {
+    await setIsPro(true);
+    await setSubscriptionMeta(planId, periodEndMs);
+    void setPlan('pro', { skipRemote: true });
+    void markPaywallComplete();
+    if (postOnboarding) safeReplaceAfterPaywall('/hub?page=calendar');
+    else requestClose();
   };
 
   const finishProPurchase = async (planId: StripePlanId, periodEndMs: number, uid: string) => {
@@ -422,23 +426,7 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
     const { isIosIapAvailable, purchaseIosSubscription } = await import('../_lib/iap/iosIap');
 
     if (Platform.OS === 'ios' && isIosIapAvailable()) {
-      if (iapBusy || signInBusy) return;
-
-      setSignInBusy(true);
-      let uid: string | null = null;
-      try {
-        uid = await ensureSignedInWithApple();
-      } catch (e) {
-        const code = (e as { code?: string })?.code;
-        if (code !== 'ERR_REQUEST_CANCELED') {
-          const { formatAuthError } = await import('../_lib/accountAuth');
-          Alert.alert('Sign in required', formatAuthError(e));
-        }
-        return;
-      } finally {
-        setSignInBusy(false);
-      }
-      if (!uid) return;
+      if (iapBusy) return;
 
       setIapBusy(true);
       try {
@@ -447,7 +435,18 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
           if (!result.cancelled) Alert.alert('Subscription', result.error);
           return;
         }
-        await finishProPurchase(result.planId, result.periodEndMs, uid);
+
+        const uid = user?.uid ?? null;
+        if (uid) {
+          await finishProPurchase(result.planId, result.periodEndMs, uid);
+          return;
+        }
+
+        // Guest purchase: unlock Pro locally, enter app, then optionally nudge sign-in.
+        await grantLocalProWithoutAccount(result.planId, result.periodEndMs);
+        setTimeout(() => {
+          void import('../_lib/accountAuth').then((m) => m.showOptionalSignInAfterProPurchase());
+        }, 1500);
       } finally {
         setIapBusy(false);
       }
@@ -630,11 +629,11 @@ export default function SubscriptionScreen({ onClose, postOnboarding = false }: 
         <PaymentModalComp visible={showPay} item={payItem} onClose={() => setShowPay(false)} onSuccess={handleSuccess} />
       )}
 
-      <Modal visible={iapBusy || signInBusy} transparent animationType="fade">
+      <Modal visible={iapBusy} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color="#FFD600" />
           <Text style={{ color: '#FFF', marginTop: 14, fontWeight: '700' }}>
-            {signInBusy ? 'Signing in with Apple…' : 'Opening App Store…'}
+            Opening App Store…
           </Text>
         </View>
       </Modal>

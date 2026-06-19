@@ -1,5 +1,6 @@
 export {
   bootIapManager,
+  fetchIosSubscriptionProducts,
   isIosIapAvailable,
   purchaseIosSubscription,
   restoreIosPurchases,

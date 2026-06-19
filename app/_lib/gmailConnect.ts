@@ -246,15 +246,20 @@ export async function connectGmailAccount(
 
   const appReturnUrl = Linking.createURL('gmail-callback');
 
+  const alreadyLinked = await hasGmailConnection();
+  const forceConsent = opts?.promptConsent ?? !alreadyLinked;
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: GMAIL_SCOPES,
     access_type: 'offline',
-    prompt: 'consent',
     include_granted_scopes: 'true',
   });
+  if (forceConsent) {
+    params.set('prompt', 'consent');
+  }
 
   if (Platform.OS !== 'web') {
     params.set('state', appReturnUrl);
@@ -273,14 +278,29 @@ export async function connectGmailAccount(
 
   void markOAuthRedirectStarted();
 
-  const returnUrl = redirectUri.startsWith('https://')
+  const appCallbackUrl = Linking.createURL('gmail-callback');
+  // Listen for the app deep link — Supabase / Google bounce back via dumpit://gmail-callback?code=…
+  const returnUrl = redirectUri.startsWith('com.googleusercontent.apps.')
     ? redirectUri
-    : Linking.createURL('gmail-callback');
+    : appCallbackUrl;
 
-  const result = await WebBrowser.openAuthSessionAsync(authUrl, returnUrl, {
-    preferEphemeralSession: false,
-    showInRecents: false,
-  });
+  let result: WebBrowser.WebBrowserAuthSessionResult;
+  try {
+    result = await WebBrowser.openAuthSessionAsync(authUrl, returnUrl, {
+      preferEphemeralSession: false,
+      showInRecents: true,
+    });
+  } catch {
+    try {
+      await Linking.openURL(authUrl);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : 'Could not open Google sign-in.',
+      };
+    }
+    return { ok: false, error: 'Redirecting to Google…' };
+  }
 
   if (result.type === 'cancel' || result.type === 'dismiss') {
     return { ok: false, error: 'Gmail connection was cancelled.' };

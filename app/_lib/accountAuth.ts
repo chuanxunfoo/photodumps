@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
+import { router } from 'expo-router';
+import { Alert } from 'react-native';
 
 import type { UserProfile } from '../(tabs)/ThemeContext';
 import { SUPABASE_APPLE_SETUP_HINT } from './appleAuthConstants';
@@ -48,6 +50,11 @@ export async function persistSessionUser(
 
   await setUser(profile);
   await AsyncStorage.setItem('@dumpit_signed_once', '1');
+  try {
+    await syncPendingAppleSubscriptionOnSignIn(u.id);
+  } catch (e) {
+    console.warn('[auth] pending subscription sync failed', e);
+  }
   return profile;
 }
 
@@ -83,8 +90,74 @@ export async function signOutAccount(
   await setUser(null);
 }
 
+const APPLE_PRIVATE_RELAY = '@privaterelay.appleid.com';
+
+/** Signed-in alert body — hides confusing Apple Hide My Email relay addresses. */
+export function formatSignedInMessage(
+  email: string | undefined | null,
+  labels: { withEmail: string; withAppleId: string },
+): string {
+  if (!email || email.includes(APPLE_PRIVATE_RELAY)) {
+    return labels.withAppleId;
+  }
+  return labels.withEmail.replace('{email}', email);
+}
+
+/** Hub account sign-in — Generals → account, or direct route from paywall. */
+export function navigateToAccountSignIn(): void {
+  router.push({ pathname: '/account-sign-in', params: { from: 'generals' } });
+}
+
+/** User-friendly auth prompt with a one-tap path to the account screen. */
+export function showGoToAccountAlert(
+  title: string,
+  message: string,
+  options?: { cancelText?: string },
+): void {
+  Alert.alert(title, message, [
+    { text: options?.cancelText ?? 'Not now', style: 'cancel' },
+    { text: 'Go to Account', onPress: navigateToAccountSignIn },
+  ]);
+}
+
+/** After a successful App Store purchase when optional sign-in fails. */
+export function showPostPurchaseSignInAlert(err: unknown): void {
+  showGoToAccountAlert(
+    'Sign in to save Pro',
+    `${formatAuthError(err)}\n\nYour App Store purchase succeeded. Sign in with Apple to sync Pro across devices.`,
+  );
+}
+
+/** Optional nudge after guest IAP — never blocks Pro access. */
+export function showOptionalSignInAfterProPurchase(): void {
+  showGoToAccountAlert(
+    "You're on Pro!",
+    'Sign in with Apple to sync Pro across devices and back up your settings. You can also do this anytime under Account.',
+    { cancelText: 'Later' },
+  );
+}
+
+/** Push locally stored Apple subscription to Supabase after the user signs in. */
+export async function syncPendingAppleSubscriptionOnSignIn(userId: string): Promise<void> {
+  const { readLocalSubscriptionMeta } = await import('./subscriptionLocal');
+  const local = await readLocalSubscriptionMeta();
+  if (!local.planId) return;
+
+  const { recordSubscriptionActivation } = await import('./billingSupabase');
+  await recordSubscriptionActivation({
+    userId,
+    planId: local.planId,
+    provider: 'apple',
+    status: 'active',
+    periodEndMs: local.periodEndMs ?? undefined,
+  });
+}
+
 export function formatAuthError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
+  if (/Property '.*' doesn't exist|is not defined|undefined is not an object/i.test(msg)) {
+    return 'Something went wrong. Open Account and tap Sign in with Apple to try again.';
+  }
   if (/unable to exchange external code|exchange.*code|invalid flow state|code verifier/i.test(msg)) {
     return 'Sign-in was interrupted. Close photodumps completely, reopen it, and try again.';
   }
@@ -99,6 +172,9 @@ export function formatAuthError(err: unknown): string {
   }
   if (/Network request failed|Failed to fetch|invalid\.supabase\.co/i.test(msg)) {
     return 'Cannot reach Supabase. Check your network and try again.';
+  }
+  if (/database error saving new user|error saving new user/i.test(msg)) {
+    return 'Could not create your account on the server. Try again in a minute — if it keeps failing, contact support.';
   }
   if (/Expo Go|storeClient/i.test(msg)) {
     return 'Sign in with Apple is not available in Expo Go. Install photodumps from TestFlight.';

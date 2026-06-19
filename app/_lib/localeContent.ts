@@ -201,7 +201,7 @@ const EN: Bundle = {
     planHead: 'CHOOSE YOUR PLAN',
     freeSub: `${HOBBY_WEEKLY_SWIPES} swipes/week · Dark & Light themes · Notifications included`,
     ctaFree: 'CONTINUE WITH HOBBY',
-    ctaSubscribe: 'SUBSCRIBE WITH APPLE PAY',
+    ctaSubscribe: 'SUBSCRIBE PHOTODUMPS PRO',
     trustSecure: 'Secure & Encrypted',
     trustCancel: 'Cancel Anytime',
     trustFees: 'No Hidden Fees',

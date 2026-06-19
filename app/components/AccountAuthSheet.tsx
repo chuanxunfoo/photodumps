@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   formatAuthError,
+  formatSignedInMessage,
   signInWithAppleAccount,
   signOutAccount,
 } from '../_lib/accountAuth';
@@ -103,7 +104,10 @@ export function AccountAuthSheet({ visible, onClose }: Props) {
       onClose();
       Alert.alert(
         u.accountSignedInTitle,
-        u.accountSignedInMsg.replace('{email}', profile.email || 'your Apple ID'),
+        formatSignedInMessage(profile.email, {
+          withEmail: u.accountSignedInMsg,
+          withAppleId: u.accountSignedInAppleMsg,
+        }),
       );
     } catch (e) {
       const code = (e as { code?: string })?.code;

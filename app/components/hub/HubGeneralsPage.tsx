@@ -4,7 +4,7 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -27,7 +27,7 @@ const PALM_KL = require('../../assets/explore/palm-kl.png');
 type Props = { active?: boolean };
 export default function HubGeneralsPage({ active = false }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, isPro, isAdmin, openSubscription, themeId, setThemeId, language, user, setUser } = useTheme();
+  const { theme, isPro, isAdmin, openSubscription, themeId, setThemeId, language, user, setUser, setIsPro, setPlan, refreshPlanFromSupabase } = useTheme();
   const ex = getExploreCopy(language);
   const u = getLocaleUi(language);
   const fonts = resolveTypeface(theme);
@@ -47,6 +47,23 @@ export default function HubGeneralsPage({ active = false }: Props) {
     }
   }, []);
   const go = (pathname: Parameters<typeof hubPush>[0]) => () => hubPush(pathname, 'generals');
+
+  const handleRestorePurchases = useCallback(async () => {
+    if (Platform.OS !== 'ios') {
+      openSubscription();
+      return;
+    }
+    const { restoreIosPurchases } = await import('../../_lib/iap/iosIap');
+    const res = await restoreIosPurchases();
+    if (res.ok) {
+      await setIsPro(true);
+      await setPlan('pro', { skipRemote: true });
+      await refreshPlanFromSupabase();
+      Alert.alert('Restored', 'Your photodumps Pro subscription is active on this Apple ID.');
+      return;
+    }
+    Alert.alert('Restore purchases', res.error);
+  }, [openSubscription, refreshPlanFromSupabase, setIsPro, setPlan]);
 
   useEffect(() => {
     if (!active) return;
@@ -229,7 +246,7 @@ export default function HubGeneralsPage({ active = false }: Props) {
                 <Text style={es.klFooterTitle}>{ex.footerMadeIn}</Text>
                 <Text style={es.klFooterSub}>{ex.footerSub}</Text>
                 <View style={{ flexDirection: 'row', gap: 16, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <TouchableOpacity onPress={() => { if (isPro || isAdmin) openSubPage(); else openSubscription(); }}>
+                  <TouchableOpacity onPress={() => { void handleRestorePurchases(); }}>
                     <Text style={es.klLink}>{ex.footerRestore}</Text>
                   </TouchableOpacity>
                   <Text style={es.klLink}>v3.0</Text>

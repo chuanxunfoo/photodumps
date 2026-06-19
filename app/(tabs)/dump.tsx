@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Video, ResizeMode } from 'expo-av';
 import { takeDuplicateSwiperPayload } from './duplicateNavPayload';
 import { useTheme } from './ThemeContext';
 import { AppHeader } from '../components/AppHeader';
@@ -23,6 +22,7 @@ import {
   fetchRandomVaultAssets,
   mapAssetToSwiper,
   monthRange,
+  SWIPE_MEDIA_TYPES,
 } from '../_lib/mediaArchive';
 import { recordUserStatsDeletion } from '../_lib/userStatsSupabase';
 
@@ -30,24 +30,10 @@ const { width, height } = Dimensions.get('window');
 const SWIPES_PER_INTERSTITIAL = 30;
 const REWARDED_SWIPE_BONUS = 20;
 
-function MediaCard({ card, isActive, cardW, cardH }: { card: any; isActive: boolean; cardW: number; cardH: number }) {
-  const isVideo = card.mediaType === 'video';
+function MediaCard({ card, cardW, cardH }: { card: any; cardW: number; cardH: number }) {
   return (
     <View style={{ width: cardW, height: cardH, borderRadius: 22, overflow: 'hidden', backgroundColor: '#111' }}>
-      {isVideo ? (
-        <Video
-          key={card.id}
-          source={{ uri: card.uri }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={isActive}
-          isMuted
-          isLooping
-          useNativeControls={false}
-        />
-      ) : (
-        <Image source={{ uri: card.uri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-      )}
+      <Image source={{ uri: card.uri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
       <View
         pointerEvents="none"
         style={{ ...StyleSheet.absoluteFillObject, borderRadius: 22, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}
@@ -205,7 +191,8 @@ export default function SwiperScreen() {
         const preset = takeDuplicateSwiperPayload();
         if (!mounted) return;
         if (preset?.length) {
-          setPhotos(preset as any[]);
+          const photoOnly = preset.filter((p) => p.mediaType !== 'video');
+          setPhotos(photoOnly as any[]);
           setLoading(false);
           return;
         }
@@ -234,7 +221,10 @@ export default function SwiperScreen() {
             if (mounted) setLoadProgress({ loaded, total });
           });
         } else {
-          const rangeOpts: Parameters<typeof fetchAssetsPaged>[0] = { sortBy: 'creationTime' };
+          const rangeOpts: Parameters<typeof fetchAssetsPaged>[0] = {
+            sortBy: 'creationTime',
+            mediaType: SWIPE_MEDIA_TYPES,
+          };
 
           if (params.month && params.year) {
             const monthNames = [
@@ -257,7 +247,11 @@ export default function SwiperScreen() {
 
         if (!mounted) return;
 
-        setPhotos(assets.map(mapAssetToSwiper));
+        setPhotos(
+          assets
+            .filter((a) => a.mediaType !== 'video')
+            .map(mapAssetToSwiper),
+        );
       } catch {
         if (mounted) setPhotos([]);
       } finally {
@@ -312,7 +306,7 @@ export default function SwiperScreen() {
         uri: p.uri,
         width: p.width,
         height: p.height,
-        mediaType: p.mediaType === 'video' ? 'video' : 'photo',
+        mediaType: 'photo',
         creationTime: p.creationTime,
         dateStr: p.dateStr,
         sizeMB: p.sizeMB,
@@ -422,8 +416,7 @@ export default function SwiperScreen() {
 
   const renderCard = (card: any) => {
     if (!card) return null;
-    const isActive = photos[currentIndex]?.id === card.id;
-    return <MediaCard card={card} isActive={isActive} cardW={CARD_W} cardH={CARD_H} />;
+    return <MediaCard card={card} cardW={CARD_W} cardH={CARD_H} />;
   };
 
   const deleteFlashBg = deleteFlash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', theme.accentSoft] });
@@ -606,14 +599,11 @@ export default function SwiperScreen() {
           {photos[currentIndex] && (
             <>
               {[
-                { l: 'TYPE', v: photos[currentIndex].mediaType === 'video' ? 'VIDEO' : 'PHOTO', c: '#00E5FF' },
+                { l: 'TYPE', v: 'PHOTO', c: '#00E5FF' },
                 { l: 'SIZE', v: `${photos[currentIndex].sizeMB} MB`, c: '#FFD600' },
                 { l: 'DATE', v: photos[currentIndex].dateStr, c: '#BF5AF2' },
                 { l: 'DEVICE', v: photos[currentIndex].device, c: '#00E5FF' },
                 { l: 'DIMENSIONS', v: `${photos[currentIndex].width} × ${photos[currentIndex].height}`, c: theme.accent },
-                ...(photos[currentIndex].mediaType === 'video' && photos[currentIndex].duration
-                  ? [{ l: 'DURATION', v: `${Math.round(photos[currentIndex].duration)} sec`, c: '#00FFA3' }]
-                  : []),
               ].map(({ l, v, c }) => (
                 <View key={l} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 14 }}>
                   <View style={{ width: 3, height: 18, borderRadius: 2, backgroundColor: c }} />
