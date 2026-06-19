@@ -33,7 +33,7 @@
           "group.com.yourname.dumpitapp.widgets"
         ]
       },
-      "buildNumber": "58"
+      "buildNumber": "62"
     },
     "android": {
       "permissions": [
@@ -48,7 +48,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "1bd830d4-8001-4703-a60a-99538ef79f6b"
+        "projectId": "f1d3e77d-7a7e-4eab-aaf3-696b2acc42c8"
       }
     }
   }

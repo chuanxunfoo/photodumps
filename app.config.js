@@ -18,7 +18,7 @@ module.exports = ({ config }) => ({
   ...config,
   name: 'photodumps',
   slug: 'Dumplt',
-  owner: 'cx-photodumps',
+  owner: 'photodumps-final',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './app/assets/brand-icon.png',
@@ -139,7 +139,7 @@ module.exports = ({ config }) => ({
     EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     EXPO_PUBLIC_GMAIL_OAUTH_REDIRECT_URI: process.env.EXPO_PUBLIC_GMAIL_OAUTH_REDIRECT_URI,
     eas: {
-      projectId: '7040f5e6-7bd3-4e72-bb6f-fad2afa4f34d',
+      projectId: 'f1d3e77d-7a7e-4eab-aaf3-696b2acc42c8',
     },
   },
   experiments: {
